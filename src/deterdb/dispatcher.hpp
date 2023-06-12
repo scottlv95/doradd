@@ -22,7 +22,9 @@ private:
   char* read_top;
   uint64_t tx_count;
   std::chrono::time_point<std::chrono::system_clock> last_print;
+#if 0
   SecondDispatchers* dispatchers_2nd[DISPATCHER_2ND_COUNT];
+#endif
   uint8_t rnd_count;
 
 public:
@@ -40,14 +42,13 @@ public:
     content += sizeof(uint32_t);
     read_head = content;
     read_top = content;
-
+#if 0
     for (int i = 0; i < DISPATCHER_2ND_COUNT; i++)
       dispatchers_2nd[i] = new (alloc) SecondDispatchers;
-
+#endif
     rnd_count = 0;
   }
 
-#if 0
   int dispatch_one()
   {
     T tx;
@@ -96,7 +97,8 @@ public:
     // Schedule itself again
     // schedule_lambda(this, [=]() { this->run(); });
   }
-#endif
+
+#if 0
   std::tuple<int, verona::rt::MultiMessage::MultiMessageBody*> dispatch_one()
   {
     T tx;
@@ -212,4 +214,5 @@ public:
     // cowns[1] = dispatchers_2nd[rnd_count++ % 4];
     // schedule_lambda(2, cowns, [=]() { this->run(); });
   }
+#endif
 };

@@ -41,8 +41,10 @@ public:
     for (int i = 0; i < ROWS_PER_TX; i++) 
     {
       tx.rows[i] = index->get_row(txm->indices[i]);
+#if 0
       auto disp_idx = ((((unsigned long)tx.rows[i]) & 0xff000) >> 12) % DISPATCHER_2ND_COUNT;
       tx.dispatcher_set |= (1 << disp_idx);
+#endif
     }
 
     return sizeof(YCSBTransactionMarshalled);
@@ -50,7 +52,6 @@ public:
 
   void process() const
   {
-#if 0
     // Implement the transaction logic
     uint8_t sum = 0;
     uint16_t write_set_l = write_set;
@@ -70,7 +71,6 @@ public:
     
     // Count the transaction
     //schedule_lambda(tx_terminator, [](){ tx_terminator->count_tx(); });
-#endif
   }
 };
 
