@@ -1,4 +1,4 @@
-build/
+src/bench/build/
 
 *.swp
 *.txt
