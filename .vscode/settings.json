@@ -1,0 +1,13 @@
+{
+  "files.associations": {
+    "atomic": "cpp",
+    "*.ipp": "cpp",
+    "*.tcc": "cpp",
+    "future": "cpp",
+    "istream": "cpp",
+    "ostream": "cpp",
+    "stop_token": "cpp",
+    "typeinfo": "cpp",
+    "mutex": "cpp"
+  }
+}

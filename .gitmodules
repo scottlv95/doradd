@@ -1,0 +1,3 @@
+[submodule "src/external/verona"]
+	path = src/external/verona
+	url = git@github.com:microsoft/verona.git
