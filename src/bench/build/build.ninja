@@ -47,8 +47,8 @@ build cmake_object_order_depends_target_ycsb: phony || CMakeFiles/ycsb.dir
 build CMakeFiles/ycsb.dir/ycsb.cc.o: CXX_COMPILER__ycsb_ /home/nuc/deterdb/src/bench/ycsb.cc || cmake_object_order_depends_target_ycsb
   DEFINES = -DACQUIRE_ALL -DSNMALLOC_CHEAP_CHECKS
   DEP_FILE = CMakeFiles/ycsb.dir/ycsb.cc.o.d
-  FLAGS = -O3 -mcx16 -march=native
-  INCLUDES = -I/home/nuc/deterdb/src/bench/../deterdb -I/home/nuc/official-repos/verona-rt/src/rt -I/home/nuc/monza-private/external/snmalloc/src
+  FLAGS = -g -mcx16 -march=native
+  INCLUDES = -I/home/nuc/deterdb/src/bench/../deterdb -I/home/nuc/official-repos/verona-rt/src/rt -I/home/nuc/official-repos/verona-rt/build_ninja/_deps/snmalloc-src/src
   OBJECT_DIR = CMakeFiles/ycsb.dir
   OBJECT_FILE_DIR = CMakeFiles/ycsb.dir
 
@@ -61,7 +61,7 @@ build CMakeFiles/ycsb.dir/ycsb.cc.o: CXX_COMPILER__ycsb_ /home/nuc/deterdb/src/b
 # Link the executable ycsb
 
 build ycsb: CXX_EXECUTABLE_LINKER__ycsb_ CMakeFiles/ycsb.dir/ycsb.cc.o
-  FLAGS = -O3
+  FLAGS = -g
   LINK_LIBRARIES = -latomic
   OBJECT_DIR = CMakeFiles/ycsb.dir
   POST_BUILD = :

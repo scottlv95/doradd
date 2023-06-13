@@ -12,7 +12,7 @@ import argparse
 TX_COUNT = 100000
 ROWS_PER_TX = 10
 ROW_COUNT = 1000000
-ZIPF_S = 4 
+ZIPF_S = 1.02 
 
 class Generator(object):
 
@@ -25,7 +25,7 @@ class Generator(object):
         if self.distribution == "uniform":
             return np.random.permutation(range(ROW_COUNT))
         elif self.distribution == "zipfian":
-            return np.random.zipf(a=ZIPF_S, size=ROW_COUNT)
+            return np.random.zipf(a=ZIPF_S, size=ROW_COUNT) % ROW_COUNT
         else:
             raise ValueError("Invalid distribution: choose either 'uniform' or 'zipfian'")
 
@@ -34,7 +34,7 @@ class Generator(object):
             self.ps = self.generate_distribution()
             self.idx = 0
         indices = self.ps[self.idx:(self.idx+ROWS_PER_TX)]
-        #print(indices)
+        print(indices)
         ws = int("".join(map(str, np.random.permutation([0,0,0,0,0,0,0,0,1,1]))), base=2)
         padding = 46  
         tx = pack('QQQQQQQQQQH'+ 'x' * padding, *indices, ws)
