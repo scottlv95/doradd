@@ -8,6 +8,7 @@ set(VERONA_PATH "/home/nuc/official-repos/verona-rt")
 set(MONZA_PATH "/home/nuc/monza-private")
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
 
 find_package(Threads REQUIRED)
 add_executable(ycsb ycsb.cc)
