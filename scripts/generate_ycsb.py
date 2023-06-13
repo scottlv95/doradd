@@ -53,7 +53,7 @@ def main():
     count = pack('I', TX_COUNT)
 
     g = Generator(distribution)
-    with open("ycsb.txt", 'wb') as f:
+    with open("ycsb_%s.txt"%distribution, 'wb') as f:
         f.write(count)
         for i in range(TX_COUNT):
             f.write(g.generate_ycsb_tx())

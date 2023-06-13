@@ -16,7 +16,9 @@ struct __attribute__((packed)) YCSBTransactionMarshalled
 {
   uint64_t indices[ROWS_PER_TX];
   uint16_t write_set;
+  uint8_t  pad[46];
 };
+static_assert(sizeof(YCSBTransactionMarshalled) == 128);
 
 struct YCSBTransaction
 {
