@@ -66,6 +66,8 @@ private:
   uint64_t cnt = 0;
 
 public:
+  Index() : map(std::make_shared<std::array<cown_ptr<Row<T>>, DB_SIZE>>()) {}
+
   cown_ptr<Row<T>> get_row(uint64_t key)
   {
     return (*map)[key];
@@ -84,6 +86,3 @@ public:
     }
   }
 };
-
-
-
