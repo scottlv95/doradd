@@ -12,7 +12,10 @@ struct SecondDispatchers : public VCown<SecondDispatchers>
 };
 
 template<typename T>
+#if 0
 struct FileDispatcher : public VCown<FileDispatcher<T>>
+#endif
+struct FileDispatcher
 {
 private:
   uint32_t idx;
@@ -57,11 +60,13 @@ public:
     assert(ret > 0);
 
     // Dispatch the transaction
+    tx.process();
+#if 0
     schedule_lambda(
       tx.row_count, reinterpret_cast<verona::rt::Cown**>(tx.rows), [=]() {
         tx.process();
       });
-
+#endif
     return ret;
   }
 
