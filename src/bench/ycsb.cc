@@ -6,7 +6,7 @@ constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 1000;
 constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 1000000;
-
+const uint64_t PENDING_THRESHOLD = 100000;
 struct YCSBRow
 {
   char payload[ROW_SIZE];
@@ -23,16 +23,13 @@ static_assert(sizeof(YCSBTransactionMarshalled) == 128);
 struct YCSBTransaction
 {
 public:
-#if 0
-  Row<YCSBRow>* rows[ROWS_PER_TX];
-#endif
   cown_ptr<Row<YCSBRow>> rows[ROWS_PER_TX];
   // Bit field. Assume less than 16 concurrent rows per transaction
   uint16_t write_set;
   uint16_t dispatcher_set;
   uint32_t row_count;
   static std::shared_ptr<Index<YCSBRow>> index;
-  static TxTerminator * tx_terminator;
+  static cown_ptr<TxExecCounter> tx_exec_counter;
 
   static int parse(const char* input, YCSBTransaction& tx)
   {
@@ -91,7 +88,13 @@ public:
           sum += acq_row1->val.payload[j];
       }
       write_set_l >>= 1;
-
+      
+      // perf accounting: throughput
+      when(tx_exec_counter) << [](acquired_cown<TxExecCounter> acq_tx_exec_counter) 
+      { 
+        acq_tx_exec_counter->count_tx();
+        acq_tx_exec_counter->decr_pending();
+      };
     };
   }
 #if 0
@@ -114,13 +117,13 @@ public:
       write_set_l >>= 1;
     }
      // Count the transaction
-    //schedule_lambda(tx_terminator, [](){ tx_terminator->count_tx(); });
+    //schedule_lambda(tx_exec_counter, [](){ tx_exec_counter->count_tx(); });
   }
 #endif 
 };
 
 std::shared_ptr<Index<YCSBRow>> YCSBTransaction::index;
-TxTerminator* YCSBTransaction::tx_terminator;
+cown_ptr<TxExecCounter> YCSBTransaction::tx_exec_counter;
 
 int main(int argc, char** argv)
 {
@@ -140,25 +143,16 @@ int main(int argc, char** argv)
   // Create rows and populate index
   YCSBTransaction::index = std::make_shared<Index<YCSBRow>>();
   auto& alloc = ThreadAlloc::get();
-#if 0
-  for (int i = 0; i < ROW_COUNT; i++)
-  {
-    auto* r = new (alloc) Row<YCSBRow>;
-    Cown::acquire(r);
-    YCSBTransaction::index->insert_row(r);
-  }
-#endif
+
   for (int i = 0; i < ROW_COUNT; i++)
   {
     cown_ptr<Row<YCSBRow>> cown_r = make_cown<Row<YCSBRow>>();
     YCSBTransaction::index->insert_row(cown_r);
   }
 
-  // Create tx terminator for accounting
-  YCSBTransaction::tx_terminator = new (alloc) TxTerminator;
+  // Create tx terminator for counting dispatching throughput
+  YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>(PENDING_THRESHOLD);
 
-  //auto* dispatcher = new (alloc) FileDispatcher<YCSBTransaction>(argv[1], 1000);
-  //schedule_lambda(dispatcher, [=]() { dispatcher->run(); });
   auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[1], 1000);
   when(dispatcher_cown) << [=]
     (acquired_cown<FileDispatcher<YCSBTransaction>> acq_dispatcher) 

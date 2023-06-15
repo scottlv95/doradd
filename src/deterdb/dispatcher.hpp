@@ -4,17 +4,17 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <verona.h>
+#include <perf.hpp>
 
+#if 0
 struct SecondDispatchers : public VCown<SecondDispatchers>
 {
   uint64_t tx_count;
   std::chrono::time_point<std::chrono::system_clock> last_print;
 };
+#endif
 
 template<typename T>
-#if 0
-struct FileDispatcher : public VCown<FileDispatcher<T>>
-#endif
 struct FileDispatcher
 {
 private:
@@ -23,12 +23,13 @@ private:
   uint32_t count;
   char* read_head;
   char* read_top;
-  uint64_t tx_count;
+  uint64_t tx_count; // spawning trxn counts
   std::chrono::time_point<std::chrono::system_clock> last_print;
 #if 0
   SecondDispatchers* dispatchers_2nd[DISPATCHER_2ND_COUNT];
 #endif
   uint8_t rnd_count;
+  bool should_send;
 
 public:
   FileDispatcher(char* file_name, int batch_) : batch(batch_)
@@ -50,6 +51,7 @@ public:
       dispatchers_2nd[i] = new (alloc) SecondDispatchers;
 #endif
     rnd_count = 0;
+    should_send = true;
   }
 
   int dispatch_one()
@@ -61,20 +63,24 @@ public:
 
     // Dispatch the transaction
     tx.process();
-#if 0
-    schedule_lambda(
-      tx.row_count, reinterpret_cast<verona::rt::Cown**>(tx.rows), [=]() {
-        tx.process();
-      });
-#endif
+
     return ret;
   }
 
   void run()
   {
+#if 0
     std::chrono::milliseconds interval(1000);
-
+#endif
     while (1) {
+      if (!should_send)
+        continue;
+
+      when(T::tx_exec_counter) <<[&](acquired_cown<TxExecCounter> acq_tx_exec_counter)
+      {
+        should_send = acq_tx_exec_counter->incr_pending(static_cast<uint64_t>(batch)); 
+      };
+      
       for (int i = 0; i < batch; i++)
       {
         if (idx >= count)
@@ -89,7 +95,8 @@ public:
         tx_count++;
       }
 
-      // announce dispatch throughput
+#if 0 
+      // announce spawning throughput
       auto time_now = std::chrono::system_clock::now();
       if ((time_now - last_print) > interval) {
         std::chrono::duration<double> duration = time_now - last_print;
@@ -97,6 +104,7 @@ public:
         tx_count = 0;
         last_print = time_now;
       }
+#endif
     }
 
     // Schedule itself again
