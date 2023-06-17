@@ -6,7 +6,8 @@ constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 1000;
 constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 1000000;
-const uint64_t PENDING_THRESHOLD = 100000;
+const uint64_t PENDING_THRESHOLD = 200000;
+
 struct YCSBRow
 {
   char payload[ROW_SIZE];
@@ -29,8 +30,8 @@ public:
   uint16_t dispatcher_set;
   uint32_t row_count;
   static std::shared_ptr<Index<YCSBRow>> index;
-  static cown_ptr<TxPendingCounter> tx_pending_counter;
   static cown_ptr<TxExecCounter> tx_exec_counter;
+  static thread_local uint64_t tx_cnt;
 
   static int parse(const char* input, YCSBTransaction& tx)
   {
@@ -44,10 +45,6 @@ public:
     for (int i = 0; i < ROWS_PER_TX; i++) 
     {
       tx.rows[i] = index->get_row(txm->indices[i]);
-#if 0
-      auto disp_idx = ((((unsigned long)tx.rows[i]) & 0xff000) >> 12) % DISPATCHER_2ND_COUNT;
-      tx.dispatcher_set |= (1 << disp_idx);
-#endif
     }
 
     return sizeof(YCSBTransactionMarshalled);
@@ -89,12 +86,9 @@ public:
           sum += acq_row1->val.payload[j];
       }
       write_set_l >>= 1;
+     
+      tx_cnt++;
       
-      when(tx_pending_counter) << [](acquired_cown<TxPendingCounter> acq_tx_pending_counter) 
-      { 
-        acq_tx_pending_counter->decr_pending();
-      };
-
       // perf accounting: throughput
       when(tx_exec_counter) <<[](acquired_cown<TxExecCounter> acq_tx_exec_counter)
       {
@@ -102,33 +96,10 @@ public:
       };
     };
   }
-#if 0
-  void process() const
-  {
-    // Implement the transaction logic
-    uint8_t sum = 0;
-    uint16_t write_set_l = write_set;
-    for (int i = 0; i < ROWS_PER_TX; i++)
-    {
-      if (write_set_l & 0x1)
-      {
-        memset(&rows[i]->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (int j = 0; j < ROW_SIZE; j++)
-          sum += rows[i]->val.payload[j];
-      }
-      write_set_l >>= 1;
-    }
-     // Count the transaction
-    //schedule_lambda(tx_exec_counter, [](){ tx_exec_counter->count_tx(); });
-  }
-#endif 
 };
 
 std::shared_ptr<Index<YCSBRow>> YCSBTransaction::index;
-cown_ptr<TxPendingCounter> YCSBTransaction::tx_pending_counter;
+thread_local uint64_t YCSBTransaction::tx_cnt;
 cown_ptr<TxExecCounter> YCSBTransaction::tx_exec_counter;
 
 int main(int argc, char** argv)
@@ -148,7 +119,6 @@ int main(int argc, char** argv)
 
   // Create rows and populate index
   YCSBTransaction::index = std::make_shared<Index<YCSBRow>>();
-  auto& alloc = ThreadAlloc::get();
 
   for (int i = 0; i < ROW_COUNT; i++)
   {
@@ -156,8 +126,6 @@ int main(int argc, char** argv)
     YCSBTransaction::index->insert_row(cown_r);
   }
 
-  YCSBTransaction::tx_pending_counter = make_cown<TxPendingCounter>(PENDING_THRESHOLD);
-  // Create tx terminator for counting dispatching throughput
   YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>();
 
   auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[1], 1000);

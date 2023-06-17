@@ -3,6 +3,31 @@
 #include <chrono>
 #include <assert.h>
 
+struct TxPendingCounter
+{
+  uint64_t tx_cnt;
+  uint64_t threshold;
+
+  TxPendingCounter(uint64_t threshold_) : threshold(threshold_) {}
+
+  bool incr_pending(uint64_t cnt)
+  {
+    if (tx_cnt > threshold) 
+      return false;  
+    
+    tx_cnt += cnt;
+    //printf("incr to %lu\n", tx_cnt);
+    return true; 
+  }
+
+  void decr_pending()
+  {
+    assert(1 <= tx_cnt);
+    tx_cnt--;
+    //printf("decr to %lu\n", tx_cnt);
+  }
+};
+
 struct TxExecCounter
 {
   uint64_t tx_cnt; 
@@ -21,30 +46,5 @@ struct TxExecCounter
       tx_cnt = 0;
       last_print = time_now;
     }
-  }
-};
-
-struct TxPendingCounter
-{
-  uint64_t tx_cnt;
-  uint64_t threshold;
-
-  TxPendingCounter(uint64_t threshold_) : threshold(threshold_) {}
-
-  bool incr_pending(uint64_t cnt)
-  {
-    tx_cnt += cnt;
-    //printf("incr to %lu\n", pending_tx_cnt);
-    if (tx_cnt < threshold) 
-      return true;  
-
-    return false; 
-  }
-
-  void decr_pending()
-  {
-    //printf("decr to %lu\n", pending_tx_cnt);
-    assert(1 <= tx_cnt);
-    tx_cnt--;
   }
 };
