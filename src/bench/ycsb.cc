@@ -29,6 +29,7 @@ public:
   uint16_t dispatcher_set;
   uint32_t row_count;
   static std::shared_ptr<Index<YCSBRow>> index;
+  static cown_ptr<TxPendingCounter> tx_pending_counter;
   static cown_ptr<TxExecCounter> tx_exec_counter;
 
   static int parse(const char* input, YCSBTransaction& tx)
@@ -89,11 +90,15 @@ public:
       }
       write_set_l >>= 1;
       
-      // perf accounting: throughput
-      when(tx_exec_counter) << [](acquired_cown<TxExecCounter> acq_tx_exec_counter) 
+      when(tx_pending_counter) << [](acquired_cown<TxPendingCounter> acq_tx_pending_counter) 
       { 
+        acq_tx_pending_counter->decr_pending();
+      };
+
+      // perf accounting: throughput
+      when(tx_exec_counter) <<[](acquired_cown<TxExecCounter> acq_tx_exec_counter)
+      {
         acq_tx_exec_counter->count_tx();
-        acq_tx_exec_counter->decr_pending();
       };
     };
   }
@@ -123,6 +128,7 @@ public:
 };
 
 std::shared_ptr<Index<YCSBRow>> YCSBTransaction::index;
+cown_ptr<TxPendingCounter> YCSBTransaction::tx_pending_counter;
 cown_ptr<TxExecCounter> YCSBTransaction::tx_exec_counter;
 
 int main(int argc, char** argv)
@@ -150,8 +156,9 @@ int main(int argc, char** argv)
     YCSBTransaction::index->insert_row(cown_r);
   }
 
+  YCSBTransaction::tx_pending_counter = make_cown<TxPendingCounter>(PENDING_THRESHOLD);
   // Create tx terminator for counting dispatching throughput
-  YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>(PENDING_THRESHOLD);
+  YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>();
 
   auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[1], 1000);
   when(dispatcher_cown) << [=]

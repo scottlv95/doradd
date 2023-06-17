@@ -76,9 +76,9 @@ public:
       if (!should_send)
         continue;
 
-      when(T::tx_exec_counter) <<[&](acquired_cown<TxExecCounter> acq_tx_exec_counter)
+      when(T::tx_pending_counter) <<[&](acquired_cown<TxPendingCounter> acq_tx_pending_counter)
       {
-        should_send = acq_tx_exec_counter->incr_pending(static_cast<uint64_t>(batch)); 
+        should_send = acq_tx_pending_counter->incr_pending(static_cast<uint64_t>(batch)); 
       };
       
       for (int i = 0; i < batch; i++)
