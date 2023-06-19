@@ -95,18 +95,19 @@ public:
      
       // FIXME: Contention? thread-local perf
       // perf accounting: throughput
+#if 0
       when(tx_exec_counter) <<[](acquired_cown<TxExecCounter> acq_tx_exec_counter)
       {
         acq_tx_exec_counter->count_tx();
       };
+#endif
     };
   }
 };
 
 std::shared_ptr<Index<YCSBRow>> YCSBTransaction::index;
-//thread_local uint64_t YCSBTransaction::tx_cnt = 0;
 cown_ptr<TxExecCounter> YCSBTransaction::tx_exec_counter;
-std::unordered_map<std::thread::id, int*>* counter_map;
+std::unordered_map<std::thread::id, std::atomic<uint64_t*>>* counter_map;
 
 int main(int argc, char** argv)
 {
@@ -132,12 +133,7 @@ int main(int argc, char** argv)
     YCSBTransaction::index->insert_row(cown_r);
   }
  
-#if 0
-  std::mutex mtx;
-  std::unordered_map<std::thread::id, int*> counter_map;
-#endif
-  auto mtx = new std::mutex();
-  auto* counter_map = new std::unordered_map<std::thread::id, int*>();
+  counter_map = new std::unordered_map<std::thread::id, std::atomic<uint64_t*>>();
   
   YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>();
 
