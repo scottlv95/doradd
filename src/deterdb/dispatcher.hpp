@@ -7,6 +7,8 @@
 #include <perf.hpp>
 #include <thread>
 
+extern const uint64_t PENDING_THRESHOLD;
+
 template<typename T>
 struct FileDispatcher
 {
@@ -20,9 +22,13 @@ private:
   std::chrono::time_point<std::chrono::system_clock> last_print;
   uint8_t rnd_count;
   bool should_send;
+  std::unordered_map<std::thread::id, int*>* counter_map;
 
 public:
-  FileDispatcher(char* file_name, int batch_) : batch(batch_)
+  FileDispatcher(char* file_name
+      , int batch_
+      , std::unordered_map<std::thread::id, int*>* counter_map_
+      ) : batch(batch_), counter_map(counter_map_)
   {
     int fd = open(file_name, O_RDONLY);
     assert(fd > 0);
@@ -52,12 +58,30 @@ public:
     return ret;
   }
 
+  bool over_pending()
+  {
+    uint64_t tx_exec_sum, tx_pending;
+    std::thread::id dispatcher_id = std::this_thread::get_id();        
+    for (const auto& counter_pair : *counter_map)
+    {
+      if (counter_pair.first != dispatcher_id)
+        tx_exec_sum += *(counter_pair.second);
+    }
+    assert(tx_count >= tx_exec_sum);
+    tx_pending = tx_count - tx_exec_sum;
+    return tx_pending > PENDING_THRESHOLD? true : false;
+      
+  }
+
   void run()
   {
     std::cout << "Thread ID: " << std::this_thread::get_id() << std::endl;
     std::chrono::milliseconds interval(1000);
 
     while (1) {
+      if(over_pending())
+        continue;
+
       for (int i = 0; i < batch; i++)
       {
         if (idx >= count)

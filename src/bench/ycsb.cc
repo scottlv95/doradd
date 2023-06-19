@@ -1,6 +1,10 @@
 #include <deterdb.hpp>
 #include <dispatcher.hpp>
+#include <txcounter.hpp>
 #include <perf.hpp>
+#include <thread>
+#include <unordered_map>
+#include <mutex>
 
 constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 1000;
@@ -31,7 +35,8 @@ public:
   uint32_t row_count;
   static std::shared_ptr<Index<YCSBRow>> index;
   static cown_ptr<TxExecCounter> tx_exec_counter;
-  static thread_local uint64_t tx_cnt;
+  //thread_local static uint64_t tx_cnt;
+  static TxCounter tx_counter;
 
   static int parse(const char* input, YCSBTransaction& tx)
   {
@@ -43,9 +48,7 @@ public:
     tx.dispatcher_set = 0;
 
     for (int i = 0; i < ROWS_PER_TX; i++) 
-    {
       tx.rows[i] = index->get_row(txm->indices[i]);
-    }
 
     return sizeof(YCSBTransactionMarshalled);
   }
@@ -87,8 +90,10 @@ public:
       }
       write_set_l >>= 1;
      
-      tx_cnt++;
-      
+      //tx_cnt++;
+      TxCounter::instance().incr();
+     
+      // FIXME: Contention? thread-local perf
       // perf accounting: throughput
       when(tx_exec_counter) <<[](acquired_cown<TxExecCounter> acq_tx_exec_counter)
       {
@@ -99,8 +104,9 @@ public:
 };
 
 std::shared_ptr<Index<YCSBRow>> YCSBTransaction::index;
-thread_local uint64_t YCSBTransaction::tx_cnt;
+//thread_local uint64_t YCSBTransaction::tx_cnt = 0;
 cown_ptr<TxExecCounter> YCSBTransaction::tx_exec_counter;
+std::unordered_map<std::thread::id, int*>* counter_map;
 
 int main(int argc, char** argv)
 {
@@ -111,7 +117,7 @@ int main(int argc, char** argv)
 
   if (argc != 2)
   {
-    fprintf(stderr, "Usage ./ycsb <dispather_input_file>\n");
+    fprintf(stderr, "Usage ./ycsb <dispatcher_input_file>\n");
     return -1;
   }
 
@@ -125,10 +131,17 @@ int main(int argc, char** argv)
     cown_ptr<Row<YCSBRow>> cown_r = make_cown<Row<YCSBRow>>();
     YCSBTransaction::index->insert_row(cown_r);
   }
-
+ 
+#if 0
+  std::mutex mtx;
+  std::unordered_map<std::thread::id, int*> counter_map;
+#endif
+  auto mtx = new std::mutex();
+  auto* counter_map = new std::unordered_map<std::thread::id, int*>();
+  
   YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>();
 
-  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[1], 1000);
+  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[1], 1000, counter_map);
   when(dispatcher_cown) << [=]
     (acquired_cown<FileDispatcher<YCSBTransaction>> acq_dispatcher) 
     { acq_dispatcher->run(); };
