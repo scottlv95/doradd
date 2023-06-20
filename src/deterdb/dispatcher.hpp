@@ -44,10 +44,14 @@ public:
 
     char* content = reinterpret_cast<char*>(
       mmap(nullptr, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
+    idx = 0;
     count = *(reinterpret_cast<uint32_t*>(content));
     content += sizeof(uint32_t);
     read_head = content;
     read_top = content;
+    tx_count = 0;
+    tx_spawn_sum = 0;
+    tx_exec_sum = 0;
     last_tx_exec_sum = 0;
     counter_registered = false;
   }
@@ -83,7 +87,7 @@ public:
     }
 
     tx_exec_sum = std::accumulate(counter_arr.begin(), counter_arr.end(), 0ULL, 
-      [](uint64_t acc, uint64_t* val) { return acc + *val; });
+      [](uint64_t acc, const uint64_t* val) { return acc + *val; });
 
     //printf("tx_spawn_sum is %lu, tx_exec_sum is %lu\n", tx_spawn_sum, tx_exec_sum);
     assert(tx_spawn_sum >= tx_exec_sum);
