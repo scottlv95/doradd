@@ -4,7 +4,6 @@
 #include <perf.hpp>
 #include <thread>
 #include <unordered_map>
-#include <mutex>
 
 constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 1000;
@@ -36,7 +35,7 @@ public:
   static std::shared_ptr<Index<YCSBRow>> index;
   static cown_ptr<TxExecCounter> tx_exec_counter;
   //thread_local static uint64_t tx_cnt;
-  static TxCounter tx_counter;
+  //static TxCounter tx_counter;
 
   static int parse(const char* input, YCSBTransaction& tx)
   {
@@ -107,7 +106,7 @@ public:
 
 std::shared_ptr<Index<YCSBRow>> YCSBTransaction::index;
 cown_ptr<TxExecCounter> YCSBTransaction::tx_exec_counter;
-std::unordered_map<std::thread::id, std::atomic<uint64_t*>>* counter_map;
+std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 
 int main(int argc, char** argv)
 {
@@ -133,7 +132,7 @@ int main(int argc, char** argv)
     YCSBTransaction::index->insert_row(cown_r);
   }
  
-  counter_map = new std::unordered_map<std::thread::id, std::atomic<uint64_t*>>();
+  counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
   
   YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>();
 

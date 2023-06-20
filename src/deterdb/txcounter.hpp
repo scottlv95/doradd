@@ -3,10 +3,8 @@
 #include <iostream>
 #include <thread>
 #include <unordered_map>
-#include <mutex>
-#include <atomic>
 
-extern std::unordered_map<std::thread::id, std::atomic<uint64_t*>>* counter_map;
+extern std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 
 /* Thread-local singleton TxCounter */
 struct TxCounter {
@@ -26,8 +24,8 @@ private:
 
   TxCounter()  {
     tx_cnt = 0;
-    std::cout << "TxCounter(" << tx_cnt << ")\n"; 
-    (*counter_map)[std::this_thread::get_id()].store(&tx_cnt);
+    //std::cout << "TxCounter(" << tx_cnt << ")\n"; 
+    (*counter_map)[std::this_thread::get_id()] = &tx_cnt;
   }
 
   ~TxCounter() noexcept { 

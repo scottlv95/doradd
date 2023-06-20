@@ -18,16 +18,17 @@ private:
   uint32_t count;
   char* read_head;
   char* read_top;
-  uint64_t tx_count; // spawning trxn counts
+  uint64_t tx_count;
+  uint64_t tx_spawn_sum; // spawning trxn counts
   std::chrono::time_point<std::chrono::system_clock> last_print;
   uint8_t rnd_count;
   bool should_send;
-  std::unordered_map<std::thread::id, std::atomic<uint64_t*>>* counter_map;
+  std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 
 public:
   FileDispatcher(char* file_name
       , int batch_
-      , std::unordered_map<std::thread::id, std::atomic<uint64_t*>>* counter_map_
+      , std::unordered_map<std::thread::id, uint64_t*>* counter_map_
       ) : batch(batch_), counter_map(counter_map_)
   {
     int fd = open(file_name, O_RDONLY);
@@ -63,16 +64,17 @@ public:
     if (counter_map->bucket_count() < 7)
       return false;
   
-    uint64_t tx_exec_sum, tx_pending;
+    uint64_t tx_exec_sum = 0, tx_pending = 0;
     std::thread::id dispatcher_id = std::this_thread::get_id();        
     for (const auto& counter_pair : *counter_map)
     {
-      if (counter_pair.first != dispatcher_id)
-        tx_exec_sum += *(counter_pair.second.load());
+      if (counter_pair.first != dispatcher_id) {
+        tx_exec_sum += *(counter_pair.second);
+      }
     }
-    printf("tx_cnt is %lu, tx_exec_sum is %lu\n", tx_count, tx_exec_sum);
-    assert(tx_count >= tx_exec_sum);
-    tx_pending = tx_count - tx_exec_sum;
+    //printf("tx_spawn_sum is %lu, tx_exec_sum is %lu\n", tx_spawn_sum, tx_exec_sum);
+    assert(tx_spawn_sum >= tx_exec_sum);
+    tx_pending = tx_spawn_sum - tx_exec_sum;
     return tx_pending > PENDING_THRESHOLD? true : false;
   }
 
@@ -84,7 +86,8 @@ public:
       if(over_pending())
         continue;
 
-      tx_count += batch;
+      tx_spawn_sum += batch;
+      //printf("tx_spawn_sum is %lu\n", tx_spawn_sum);
       for (int i = 0; i < batch; i++)
       {
         if (idx >= count)
@@ -96,7 +99,7 @@ public:
         int ret = dispatch_one();
         read_head += ret;
         idx++;
-        //tx_count++;
+        tx_count++;
       }
 
       // announce spawning throughput
