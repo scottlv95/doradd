@@ -13,9 +13,11 @@ struct TxCounter {
     return instance;
   }
 
+#if 0
   uint64_t get() const {
     return tx_cnt;
   }
+#endif
 
   void incr() { tx_cnt++; }
 
@@ -24,12 +26,10 @@ private:
 
   TxCounter()  {
     tx_cnt = 0;
-    //std::cout << "TxCounter(" << tx_cnt << ")\n"; 
     (*counter_map)[std::this_thread::get_id()] = &tx_cnt;
   }
 
   ~TxCounter() noexcept { 
-    std::cout << "~TxCounter(" << tx_cnt << ")\n"; 
     counter_map->erase(std::this_thread::get_id());
   }
 

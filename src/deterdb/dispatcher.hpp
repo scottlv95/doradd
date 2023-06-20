@@ -21,6 +21,9 @@ private:
   char* read_top;
   uint64_t tx_count;
   uint64_t tx_spawn_sum; // spawning trxn counts
+  uint64_t tx_exec_sum;
+  uint64_t last_tx_exec_sum; // perf
+
   std::chrono::time_point<std::chrono::system_clock> last_print;
   uint8_t rnd_count;
   bool should_send;
@@ -45,6 +48,7 @@ public:
     read_top = content;
     rnd_count = 0;
     should_send = true;
+    last_tx_exec_sum = 0;
   }
 
   int dispatch_one()
@@ -62,18 +66,17 @@ public:
 
   bool over_pending()
   {
+    // TODO: add a flag here to avoid hitting this branch repetitively later 
     if (counter_map->size() < (CORE_COUNT - 1)) // worker counts
       return false;
   
-    uint64_t tx_exec_sum = 0, tx_pending = 0;
-    std::thread::id dispatcher_id = std::this_thread::get_id();        
+    tx_exec_sum = 0;
     for (const auto& counter_pair : *counter_map)
-    {
       tx_exec_sum += *(counter_pair.second);
-    }
+   
     //printf("tx_spawn_sum is %lu, tx_exec_sum is %lu\n", tx_spawn_sum, tx_exec_sum);
     assert(tx_spawn_sum >= tx_exec_sum);
-    tx_pending = tx_spawn_sum - tx_exec_sum;
+    uint64_t tx_pending = tx_spawn_sum - tx_exec_sum;
     return tx_pending > PENDING_THRESHOLD? true : false;
   }
 
@@ -105,8 +108,11 @@ public:
       auto time_now = std::chrono::system_clock::now();
       if ((time_now - last_print) > interval) {
         std::chrono::duration<double> duration = time_now - last_print;
-        printf("spawn - (%lx) %lf tx/s dispatched\n", (unsigned long)this, tx_count / duration.count());
+        auto dur_cnt = duration.count();
+        printf("spawn - %lf tx/s\n", tx_count / dur_cnt);
+        printf("exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);
         tx_count = 0;
+        last_tx_exec_sum = tx_exec_sum;
         last_print = time_now;
       }
     }  
