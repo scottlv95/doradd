@@ -7,6 +7,7 @@
 #include <perf.hpp>
 #include <thread>
 
+extern const uint8_t CORE_COUNT;
 extern const uint64_t PENDING_THRESHOLD;
 
 template<typename T>
@@ -61,16 +62,14 @@ public:
 
   bool over_pending()
   {
-    if (counter_map->bucket_count() < 7)
+    if (counter_map->size() < (CORE_COUNT - 1)) // worker counts
       return false;
   
     uint64_t tx_exec_sum = 0, tx_pending = 0;
     std::thread::id dispatcher_id = std::this_thread::get_id();        
     for (const auto& counter_pair : *counter_map)
     {
-      if (counter_pair.first != dispatcher_id) {
-        tx_exec_sum += *(counter_pair.second);
-      }
+      tx_exec_sum += *(counter_pair.second);
     }
     //printf("tx_spawn_sum is %lu, tx_exec_sum is %lu\n", tx_spawn_sum, tx_exec_sum);
     assert(tx_spawn_sum >= tx_exec_sum);

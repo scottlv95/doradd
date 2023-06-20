@@ -10,6 +10,7 @@ constexpr uint32_t ROW_SIZE = 1000;
 constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 1000000;
 const uint64_t PENDING_THRESHOLD = 200000;
+const uint8_t  CORE_COUNT = 8;
 
 struct YCSBRow
 {
@@ -113,7 +114,7 @@ int main(int argc, char** argv)
   auto& sched = Scheduler::get();
   //Scheduler::set_detect_leaks(true);
   //sched.set_fair(true);
-  sched.init(8);
+  sched.init(CORE_COUNT);
 
   if (argc != 2)
   {
