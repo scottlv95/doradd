@@ -9,8 +9,8 @@ constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 1000;
 constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 1000000;
-const uint64_t PENDING_THRESHOLD = 200000;
-const uint8_t  CORE_COUNT = 8;
+const uint64_t PENDING_THRESHOLD = 100000000;
+constexpr uint8_t  CORE_COUNT = 8;
 
 struct YCSBRow
 {
@@ -35,8 +35,6 @@ public:
   uint32_t row_count;
   static std::shared_ptr<Index<YCSBRow>> index;
   static cown_ptr<TxExecCounter> tx_exec_counter;
-  //thread_local static uint64_t tx_cnt;
-  //static TxCounter tx_counter;
 
   static int parse(const char* input, YCSBTransaction& tx)
   {
@@ -57,12 +55,12 @@ public:
   {
     
     using type1 = acquired_cown<Row<YCSBRow>>;
-#if 0
-    when(tx.rows[0],tx.rows[1],tx.rows[2],tx.rows[3],tx.rows[4],tx.rows[5],tx.rows[6],tx.rows[7],tx.rows[8],tx.rows[9]) << [=]
+    when(rows[0],rows[1],rows[2],rows[3],rows[4],rows[5],rows[6],rows[7],rows[8],rows[9]) << [=]
       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
-#endif
+#if 0
     when (rows[0],rows[1]) << 
     [=](type1 acq_row0, type1 acq_row1)  
+#endif
     {
       uint8_t sum = 0;
       uint16_t write_set_l = write_set;
@@ -89,11 +87,102 @@ public:
           sum += acq_row1->val.payload[j];
       }
       write_set_l >>= 1;
-     
-      //tx_cnt++;
+ 
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row2->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row2->val.payload[j];
+      }
+      write_set_l >>= 1;
+
+
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row3->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row3->val.payload[j];
+      }
+      write_set_l >>= 1;
+
+
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row4->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row4->val.payload[j];
+      }
+      write_set_l >>= 1;
+
+
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row5->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row5->val.payload[j];
+      }
+      write_set_l >>= 1;
+
+
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row6->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row6->val.payload[j];
+      }
+      write_set_l >>= 1;
+
+
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row7->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row7->val.payload[j];
+      }
+      write_set_l >>= 1;
+
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row8->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row8->val.payload[j];
+      }
+      write_set_l >>= 1;
+
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row9->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row9->val.payload[j];
+      }
+      write_set_l >>= 1;
+    
       TxCounter::instance().incr();
      
-      // FIXME: Contention? thread-local perf
       // perf accounting: throughput
 #if 0
       when(tx_exec_counter) <<[](acquired_cown<TxExecCounter> acq_tx_exec_counter)

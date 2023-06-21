@@ -8,7 +8,6 @@
 #include <thread>
 #include <numeric>
 
-extern const uint8_t CORE_COUNT;
 extern const uint64_t PENDING_THRESHOLD;
 constexpr uint8_t WORKER_COUNT = 7;
 
@@ -73,7 +72,7 @@ public:
   {
     if (!counter_registered) 
     {
-      if (counter_map->size() < (CORE_COUNT - 1)) // worker counts
+      if (counter_map->size() < WORKER_COUNT) 
         return false;
       else
       {
@@ -82,17 +81,20 @@ public:
         size_t i = 0;
         for (const auto& counter_pair : *counter_map)
           counter_arr[i++] = counter_pair.second;
-        assert(i == (CORE_COUNT - 1));
+        assert(i == WORKER_COUNT);
       }
     }
 
     tx_exec_sum = std::accumulate(counter_arr.begin(), counter_arr.end(), 0ULL, 
       [](uint64_t acc, const uint64_t* val) { return acc + *val; });
 
+#if 0
     //printf("tx_spawn_sum is %lu, tx_exec_sum is %lu\n", tx_spawn_sum, tx_exec_sum);
     assert(tx_spawn_sum >= tx_exec_sum);
     uint64_t tx_pending = tx_spawn_sum - tx_exec_sum;
     return tx_pending > PENDING_THRESHOLD ? true : false;
+#endif
+    return false;
   }
 
   void run()
