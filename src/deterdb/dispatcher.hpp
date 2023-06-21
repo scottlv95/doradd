@@ -85,15 +85,15 @@ public:
       }
     }
 
+//#if 0
     tx_exec_sum = std::accumulate(counter_arr.begin(), counter_arr.end(), 0ULL, 
       [](uint64_t acc, const uint64_t* val) { return acc + *val; });
 
-#if 0
     //printf("tx_spawn_sum is %lu, tx_exec_sum is %lu\n", tx_spawn_sum, tx_exec_sum);
     assert(tx_spawn_sum >= tx_exec_sum);
     uint64_t tx_pending = tx_spawn_sum - tx_exec_sum;
     return tx_pending > PENDING_THRESHOLD ? true : false;
-#endif
+//#endif
     return false;
   }
 

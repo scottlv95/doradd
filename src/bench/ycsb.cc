@@ -9,7 +9,7 @@ constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 1000;
 constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 1000000;
-const uint64_t PENDING_THRESHOLD = 100000000;
+const uint64_t PENDING_THRESHOLD = 1000000;
 constexpr uint8_t  CORE_COUNT = 8;
 
 struct YCSBRow
@@ -99,7 +99,6 @@ public:
       }
       write_set_l >>= 1;
 
-
       if (write_set_l & 0x1)
       {
         memset(&acq_row3->val, sum, WRITE_SIZE);
@@ -110,7 +109,6 @@ public:
           sum += acq_row3->val.payload[j];
       }
       write_set_l >>= 1;
-
 
       if (write_set_l & 0x1)
       {
@@ -123,7 +121,6 @@ public:
       }
       write_set_l >>= 1;
 
-
       if (write_set_l & 0x1)
       {
         memset(&acq_row5->val, sum, WRITE_SIZE);
@@ -135,7 +132,6 @@ public:
       }
       write_set_l >>= 1;
 
-
       if (write_set_l & 0x1)
       {
         memset(&acq_row6->val, sum, WRITE_SIZE);
@@ -146,7 +142,6 @@ public:
           sum += acq_row6->val.payload[j];
       }
       write_set_l >>= 1;
-
 
       if (write_set_l & 0x1)
       {
