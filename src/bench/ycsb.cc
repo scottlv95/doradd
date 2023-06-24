@@ -10,7 +10,7 @@ constexpr uint32_t ROW_SIZE = 1000;
 constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 1000000;
 const uint64_t PENDING_THRESHOLD = 1000000;
-constexpr uint8_t  CORE_COUNT = 8;
+constexpr uint8_t DEFAULT_CORE_COUNT = 8;
 
 struct YCSBRow
 {
@@ -195,33 +195,35 @@ std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 
 int main(int argc, char** argv)
 {
+  if (argc != 4 || strcmp(argv[1], "-n") != 0)
+  {
+    fprintf(stderr, "Usage: ./program -n CORE_COUNT <dispatcher_input_file>\n");
+    return -1;
+  }
+
+  int CORE_COUNT = atoi(argv[2]);
+  int max_core = std::thread::hardware_concurrency();
+  assert(1 < CORE_COUNT && CORE_COUNT <= max_core);
+  
   auto& sched = Scheduler::get();
   //Scheduler::set_detect_leaks(true);
   //sched.set_fair(true);
   sched.init(CORE_COUNT);
-
-  if (argc != 2)
-  {
-    fprintf(stderr, "Usage ./ycsb <dispatcher_input_file>\n");
-    return -1;
-  }
-
+ 
   when() << []() { std::cout << "Hello deterministic world!\n"; };
 
   // Create rows and populate index
   YCSBTransaction::index = std::make_shared<Index<YCSBRow>>();
-
   for (int i = 0; i < ROW_COUNT; i++)
   {
     cown_ptr<Row<YCSBRow>> cown_r = make_cown<Row<YCSBRow>>();
     YCSBTransaction::index->insert_row(cown_r);
   }
- 
   counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
   
   YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>();
 
-  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[1], 1000, counter_map);
+  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 1000, counter_map);
   when(dispatcher_cown) << [=]
     (acquired_cown<FileDispatcher<YCSBTransaction>> acq_dispatcher) 
     { acq_dispatcher->run(); };

@@ -27,6 +27,7 @@ private:
   std::chrono::time_point<std::chrono::system_clock> last_print;
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
   bool counter_registered;
+  // FIXME: rm worker_cnt here, passed in from ycsb
   std::array<uint64_t*, WORKER_COUNT> counter_arr;
 
 public:
