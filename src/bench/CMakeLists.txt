@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 project(deterdb-bench CXX)
 
-set(VERONA_PATH "/home/nuc/official-repos/verona-rt")
-set(SNMALLOC_PATH "/home/nuc/official-repos/snmalloc/")
+set(VERONA_PATH "/home/$ENV{USER}/official-repos/verona-rt")
+set(SNMALLOC_PATH "/home/$ENV{USER}/official-repos/snmalloc/")
 
 set(CMAKE_CXX_STANDARD 17)
 
