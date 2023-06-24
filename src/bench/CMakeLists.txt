@@ -2,20 +2,30 @@ cmake_minimum_required(VERSION 3.8)
 project(deterdb-bench CXX)
 
 set(VERONA_PATH "/home/nuc/official-repos/verona-rt")
-
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
-endif()
+set(SNMALLOC_PATH "/home/nuc/official-repos/snmalloc/")
 
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
+
+# Release Build
+if(CMAKE_BUILD_TYPE MATCHES Release)
+  set(BRANCH "release")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+endif()
+
+# Debug Build
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  set(BRANCH "debug")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -static-libasan -fno-omit-frame-pointer")
+  set(CMAKE_LINKER_FLAGS_DEBUG "${CMAKE_LINKER_FLAGS_DEBUG} -fsanitize=address")
+endif()
 
 find_package(Threads REQUIRED)
 add_executable(ycsb ycsb.cc)
 target_include_directories(ycsb PRIVATE ../deterdb)
 target_include_directories(ycsb PRIVATE ${VERONA_PATH}/src/rt)
-target_include_directories(ycsb PRIVATE ${VERONA_PATH}/build_release/_deps/snmalloc-src/src)
+#target_include_directories(ycsb PRIVATE ${VERONA_PATH}/build_release/_deps/snmalloc-src/src)
+target_include_directories(ycsb PRIVATE ${SNMALLOC_PATH}/src)
 target_compile_options(ycsb PRIVATE -mcx16 -march=native)
 target_compile_definitions(ycsb PRIVATE -DSNMALLOC_CHEAP_CHECKS)
 target_compile_definitions(ycsb PRIVATE -DACQUIRE_ALL)

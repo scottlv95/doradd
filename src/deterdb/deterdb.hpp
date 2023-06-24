@@ -2,7 +2,6 @@
 
 #include <unordered_map>
 #include <optional>
-#include <verona.h>
 #include <cpp/when.h>
 
 using namespace verona::rt;
