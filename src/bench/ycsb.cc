@@ -5,11 +5,13 @@
 #include <thread>
 #include <unordered_map>
 
+// FIXME: express relationship
 constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 1000;
 constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 1000000;
-const uint64_t PENDING_THRESHOLD = 5000000;
+const uint64_t PENDING_THRESHOLD = 1000000;
+const uint64_t SPAWN_THRESHOLD = 10000000;
 
 struct YCSBRow
 {
@@ -222,7 +224,8 @@ int main(int argc, char** argv)
   
   YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>();
 
-  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 1000, core_cnt - 1, PENDING_THRESHOLD, counter_map);
+  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 
+    1000, core_cnt - 1, PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map);
   when(dispatcher_cown) << [=]
     (acquired_cown<FileDispatcher<YCSBTransaction>> acq_dispatcher) 
     { acq_dispatcher->run(); };

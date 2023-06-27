@@ -13,6 +13,7 @@ struct FileDispatcher
 {
 private:
   uint8_t worker_cnt;
+  uint16_t rnd;
   uint32_t idx;
   uint32_t batch;
   uint32_t count;
@@ -23,6 +24,7 @@ private:
   uint64_t tx_exec_sum;  // executed trxn counts 
   uint64_t last_tx_exec_sum; 
   uint64_t pending_threshold;
+  uint64_t spawn_threshold;
 
   std::chrono::time_point<std::chrono::system_clock> last_print;
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
@@ -34,8 +36,12 @@ public:
       , int batch_
       , uint8_t worker_cnt_
       , uint64_t pending_threshold_
+      , uint64_t spawn_threshold_
       , std::unordered_map<std::thread::id, uint64_t*>* counter_map_
-      ) : batch(batch_), worker_cnt(worker_cnt_), pending_threshold(pending_threshold_), counter_map(counter_map_)
+      ) : batch(batch_), worker_cnt(worker_cnt_), 
+          pending_threshold(pending_threshold_), 
+          spawn_threshold(spawn_threshold_), 
+          counter_map(counter_map_)
   {
     int fd = open(file_name, O_RDONLY);
     assert(fd > 0);
@@ -44,6 +50,7 @@ public:
 
     char* content = reinterpret_cast<char*>(
       mmap(nullptr, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
+    rnd = 1;
     idx = 0;
     count = *(reinterpret_cast<uint32_t*>(content));
     content += sizeof(uint32_t);
@@ -56,6 +63,24 @@ public:
     counter_registered = false;
   }
 
+  void track_worker_counter()
+  {
+    if (counter_map->size() == worker_cnt) 
+    {
+      counter_registered = true;
+      // prefetching all &tx_cnt into dispacher obj
+      for (const auto& counter_pair : *counter_map)
+        counter_vec.push_back(counter_pair.second);
+      assert(counter_vec.size() == worker_cnt);
+    }
+  }
+
+  uint64_t calc_tx_exec_sum()
+  {
+    return std::accumulate(counter_vec.begin(), counter_vec.end(), 0ULL, 
+      [](uint64_t acc, const uint64_t* val) { return acc + *val; });
+  }
+    
   int dispatch_one()
   {
     T tx;
@@ -71,27 +96,10 @@ public:
 
   bool over_pending()
   {
-    if (!counter_registered) [[unlikely]] 
-    {
-      if (counter_map->size() < worker_cnt) 
-        return false;
-      else
-      {
-        counter_registered = true;
-        // prefetching all &tx_cnt into dispacher obj
-        for (const auto& counter_pair : *counter_map)
-          counter_vec.push_back(counter_pair.second);
-        assert(counter_vec.size() == worker_cnt);
-      }
-    }
-
-    tx_exec_sum = std::accumulate(counter_vec.begin(), counter_vec.end(), 0ULL, 
-      [](uint64_t acc, const uint64_t* val) { return acc + *val; });
-
-    //printf("tx_spawn_sum is %lu, tx_exec_sum is %lu\n", tx_spawn_sum, tx_exec_sum);
+    tx_exec_sum = calc_tx_exec_sum();
     assert(tx_spawn_sum >= tx_exec_sum);
-    uint64_t tx_pending = tx_spawn_sum - tx_exec_sum;
-    return tx_pending > pending_threshold? true : false;
+    printf("spawn - %lu, exec - %lu\n", tx_spawn_sum, tx_exec_sum);
+    return (tx_spawn_sum - tx_exec_sum) > pending_threshold? true : false;
   }
 
   void run()
@@ -99,8 +107,17 @@ public:
     std::chrono::milliseconds interval(1000);
 
     while (1) {
-      if(over_pending())
-        continue;
+      if (!counter_registered) [[unlikely]]
+        track_worker_counter();
+
+      if (tx_spawn_sum >= spawn_threshold * rnd)
+      {
+        printf("flow control\n");
+        if (over_pending())
+          continue;
+        rnd++;
+        printf("new round\n");
+      }
 
       tx_spawn_sum += batch;
       for (int i = 0; i < batch; i++)
@@ -122,6 +139,8 @@ public:
       if ((time_now - last_print) > interval) {
         std::chrono::duration<double> duration = time_now - last_print;
         auto dur_cnt = duration.count();
+        if (counter_registered)
+          tx_exec_sum = calc_tx_exec_sum();
         printf("spawn - %lf tx/s\n", tx_count / dur_cnt);
         printf("exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);
         tx_count = 0;
