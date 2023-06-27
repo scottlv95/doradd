@@ -8,8 +8,6 @@
 #include <numeric>
 #include <vector>
 
-extern const uint64_t PENDING_THRESHOLD;
-
 template<typename T>
 struct FileDispatcher
 {
@@ -73,7 +71,7 @@ public:
 
   bool over_pending()
   {
-    if (!counter_registered) 
+    if (!counter_registered) [[unlikely]] 
     {
       if (counter_map->size() < worker_cnt) 
         return false;
@@ -81,10 +79,9 @@ public:
       {
         counter_registered = true;
         // prefetching all &tx_cnt into dispacher obj
-        size_t i = 0;
         for (const auto& counter_pair : *counter_map)
           counter_vec.push_back(counter_pair.second);
-        assert(i == worker_cnt);
+        assert(counter_vec.size() == worker_cnt);
       }
     }
 

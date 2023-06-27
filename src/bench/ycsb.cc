@@ -200,8 +200,8 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  int core_cnt = atoi(argv[2]);
-  int max_core = std::thread::hardware_concurrency();
+  uint8_t core_cnt = atoi(argv[2]);
+  uint8_t max_core = std::thread::hardware_concurrency();
   assert(1 < core_cnt && core_cnt <= max_core);
   
   auto& sched = Scheduler::get();
