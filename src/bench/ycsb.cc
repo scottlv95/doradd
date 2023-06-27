@@ -9,8 +9,7 @@ constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 1000;
 constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 1000000;
-const uint64_t PENDING_THRESHOLD = 1000000;
-constexpr uint8_t DEFAULT_CORE_COUNT = 8;
+const uint64_t PENDING_THRESHOLD = 5000000;
 
 struct YCSBRow
 {
@@ -197,18 +196,18 @@ int main(int argc, char** argv)
 {
   if (argc != 4 || strcmp(argv[1], "-n") != 0)
   {
-    fprintf(stderr, "Usage: ./program -n CORE_COUNT <dispatcher_input_file>\n");
+    fprintf(stderr, "Usage: ./program -n core_cnt <dispatcher_input_file>\n");
     return -1;
   }
 
-  int CORE_COUNT = atoi(argv[2]);
+  int core_cnt = atoi(argv[2]);
   int max_core = std::thread::hardware_concurrency();
-  assert(1 < CORE_COUNT && CORE_COUNT <= max_core);
+  assert(1 < core_cnt && core_cnt <= max_core);
   
   auto& sched = Scheduler::get();
   //Scheduler::set_detect_leaks(true);
   //sched.set_fair(true);
-  sched.init(CORE_COUNT);
+  sched.init(core_cnt);
  
   when() << []() { std::cout << "Hello deterministic world!\n"; };
 
@@ -223,7 +222,7 @@ int main(int argc, char** argv)
   
   YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>();
 
-  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 1000, counter_map);
+  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 1000, core_cnt - 1, PENDING_THRESHOLD, counter_map);
   when(dispatcher_cown) << [=]
     (acquired_cown<FileDispatcher<YCSBTransaction>> acq_dispatcher) 
     { acq_dispatcher->run(); };

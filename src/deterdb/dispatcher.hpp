@@ -6,14 +6,15 @@
 #include <perf.hpp>
 #include <thread>
 #include <numeric>
+#include <vector>
 
 extern const uint64_t PENDING_THRESHOLD;
-constexpr uint8_t WORKER_COUNT = 7;
 
 template<typename T>
 struct FileDispatcher
 {
 private:
+  uint8_t worker_cnt;
   uint32_t idx;
   uint32_t batch;
   uint32_t count;
@@ -23,18 +24,20 @@ private:
   uint64_t tx_spawn_sum; // spawned trxn counts
   uint64_t tx_exec_sum;  // executed trxn counts 
   uint64_t last_tx_exec_sum; 
+  uint64_t pending_threshold;
 
   std::chrono::time_point<std::chrono::system_clock> last_print;
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
   bool counter_registered;
-  // FIXME: rm worker_cnt here, passed in from ycsb
-  std::array<uint64_t*, WORKER_COUNT> counter_arr;
+  std::vector<uint64_t*> counter_vec;
 
 public:
   FileDispatcher(char* file_name
       , int batch_
+      , uint8_t worker_cnt_
+      , uint64_t pending_threshold_
       , std::unordered_map<std::thread::id, uint64_t*>* counter_map_
-      ) : batch(batch_), counter_map(counter_map_)
+      ) : batch(batch_), worker_cnt(worker_cnt_), pending_threshold(pending_threshold_), counter_map(counter_map_)
   {
     int fd = open(file_name, O_RDONLY);
     assert(fd > 0);
@@ -72,7 +75,7 @@ public:
   {
     if (!counter_registered) 
     {
-      if (counter_map->size() < WORKER_COUNT) 
+      if (counter_map->size() < worker_cnt) 
         return false;
       else
       {
@@ -80,18 +83,18 @@ public:
         // prefetching all &tx_cnt into dispacher obj
         size_t i = 0;
         for (const auto& counter_pair : *counter_map)
-          counter_arr[i++] = counter_pair.second;
-        assert(i == WORKER_COUNT);
+          counter_vec.push_back(counter_pair.second);
+        assert(i == worker_cnt);
       }
     }
 
-    tx_exec_sum = std::accumulate(counter_arr.begin(), counter_arr.end(), 0ULL, 
+    tx_exec_sum = std::accumulate(counter_vec.begin(), counter_vec.end(), 0ULL, 
       [](uint64_t acc, const uint64_t* val) { return acc + *val; });
 
     //printf("tx_spawn_sum is %lu, tx_exec_sum is %lu\n", tx_spawn_sum, tx_exec_sum);
     assert(tx_spawn_sum >= tx_exec_sum);
     uint64_t tx_pending = tx_spawn_sum - tx_exec_sum;
-    return tx_pending > PENDING_THRESHOLD ? true : false;
+    return tx_pending > pending_threshold? true : false;
   }
 
   void run()
