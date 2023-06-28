@@ -110,7 +110,7 @@ public:
       if (!counter_registered) [[unlikely]]
         track_worker_counter();
 
-      if (tx_spawn_sum >= spawn_threshold * rnd)
+      if (tx_spawn_sum >= spawn_threshold * rnd) [[unlikely]]
       {
         printf("flow control\n");
         if (over_pending())

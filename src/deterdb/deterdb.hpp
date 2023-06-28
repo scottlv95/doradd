@@ -7,7 +7,7 @@
 using namespace verona::rt;
 using namespace verona::cpp;
 
-const uint64_t DB_SIZE = 1000000;
+const uint64_t DB_SIZE = 10000000;
 
 template<typename T>
 struct Row

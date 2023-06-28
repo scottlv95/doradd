@@ -1,15 +1,15 @@
 #include <deterdb.hpp>
 #include <dispatcher.hpp>
 #include <txcounter.hpp>
-#include <perf.hpp>
 #include <thread>
 #include <unordered_map>
+#include <debug/harness.h>
 
 // FIXME: express relationship
 constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 1000;
 constexpr uint32_t WRITE_SIZE = 100;
-const uint64_t ROW_COUNT = 1000000;
+const uint64_t ROW_COUNT = 10000000;
 const uint64_t PENDING_THRESHOLD = 1000000;
 const uint64_t SPAWN_THRESHOLD = 10000000;
 
@@ -58,15 +58,11 @@ public:
     using type1 = acquired_cown<Row<YCSBRow>>;
     when(rows[0],rows[1],rows[2],rows[3],rows[4],rows[5],rows[6],rows[7],rows[8],rows[9]) << [=]
       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
-#if 0
-    when (rows[0],rows[1]) << 
-    [=](type1 acq_row0, type1 acq_row1)  
-#endif
     {
       uint8_t sum = 0;
       uint16_t write_set_l = write_set;
       int j;
-
+#if 1
       if (write_set_l & 0x1)
       {
         memset(&acq_row0->val, sum, WRITE_SIZE);
@@ -176,16 +172,16 @@ public:
           sum += acq_row9->val.payload[j];
       }
       write_set_l >>= 1;
-    
-      TxCounter::instance().incr();
-     
-      // perf accounting: throughput
-#if 0
-      when(tx_exec_counter) <<[](acquired_cown<TxExecCounter> acq_tx_exec_counter)
-      {
-        acq_tx_exec_counter->count_tx();
-      };
 #endif
+#if 0
+      auto time_now = std::chrono::system_clock::now();
+      std::chrono::duration<double> duration = time_now - time_prev;
+      printf("duration is %f\n", duration.count());
+
+      printf("sum is %u\n", sum);
+#endif 
+      //busy_loop(2);
+      TxCounter::instance().incr();
     };
   }
 };

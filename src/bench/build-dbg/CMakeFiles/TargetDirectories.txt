@@ -1,0 +1,3 @@
+/home/nuc/deterdb/src/bench/build-dbg/CMakeFiles/ycsb.dir
+/home/nuc/deterdb/src/bench/build-dbg/CMakeFiles/edit_cache.dir
+/home/nuc/deterdb/src/bench/build-dbg/CMakeFiles/rebuild_cache.dir
