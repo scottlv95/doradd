@@ -35,7 +35,6 @@ public:
   uint16_t dispatcher_set;
   uint32_t row_count;
   static std::shared_ptr<Index<YCSBRow>> index;
-  static cown_ptr<TxExecCounter> tx_exec_counter;
 
   static int parse(const char* input, YCSBTransaction& tx)
   {
@@ -187,7 +186,6 @@ public:
 };
 
 std::shared_ptr<Index<YCSBRow>> YCSBTransaction::index;
-cown_ptr<TxExecCounter> YCSBTransaction::tx_exec_counter;
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 
 int main(int argc, char** argv)
@@ -218,8 +216,6 @@ int main(int argc, char** argv)
   }
   counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
   
-  YCSBTransaction::tx_exec_counter = make_cown<TxExecCounter>();
-
   auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 
     1000, core_cnt - 1, PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map);
   when(dispatcher_cown) << [=]

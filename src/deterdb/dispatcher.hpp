@@ -3,7 +3,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <perf.hpp>
 #include <thread>
 #include <numeric>
 #include <vector>
