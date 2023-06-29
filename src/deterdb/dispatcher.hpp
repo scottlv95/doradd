@@ -6,6 +6,9 @@
 #include <thread>
 #include <numeric>
 #include <vector>
+#include <cassert>
+#include <stdlib.h>
+#include <stdio.h>
 
 template<typename T>
 struct FileDispatcher
@@ -43,7 +46,11 @@ public:
           counter_map(counter_map_)
   {
     int fd = open(file_name, O_RDONLY);
-    assert(fd > 0);
+    if (fd == -1) 
+    {
+      printf("File not existed\n");
+      exit(1);
+    }
     struct stat sb;
     fstat(fd, &sb);
 
