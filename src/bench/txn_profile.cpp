@@ -48,7 +48,6 @@ int main() {
       if (write_set_l & 0x1)
       {
         memset(&rows[i].val, sum, WRITE_SIZE);
-        //printf("sum is %u\n", sum);
       }
       else
       {

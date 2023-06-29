@@ -1,5 +1,6 @@
 src/bench/build/
 src/bench/build-dbg/
+scripts/*.txt
 
 *.swp
 *.txt

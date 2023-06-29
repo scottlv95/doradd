@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 project(deterdb-bench CXX)
 
-set(VERONA_PATH "/home/$ENV{USER}/official-repos/verona-rt")
-set(SNMALLOC_PATH "/home/$ENV{USER}/official-repos/snmalloc/")
+set(VERONA_PATH "../external/verona-rt") 
+set(SNMALLOC_PATH "../external/snmalloc/")
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -24,7 +24,6 @@ find_package(Threads REQUIRED)
 add_executable(ycsb ycsb.cc)
 target_include_directories(ycsb PRIVATE ../deterdb)
 target_include_directories(ycsb PRIVATE ${VERONA_PATH}/src/rt)
-#target_include_directories(ycsb PRIVATE ${VERONA_PATH}/build_release/_deps/snmalloc-src/src)
 target_include_directories(ycsb PRIVATE ${SNMALLOC_PATH}/src)
 target_compile_options(ycsb PRIVATE -mcx16 -march=native)
 target_compile_definitions(ycsb PRIVATE -DSNMALLOC_CHEAP_CHECKS)

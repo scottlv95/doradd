@@ -13,12 +13,6 @@ template<typename T>
 struct Row
 {
   T val;
-
-  ~Row()
-  {
-    printf("Destroying row\n");
-    assert(0);
-  }
 };
 
 template<typename T>
