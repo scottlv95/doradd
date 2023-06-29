@@ -9,9 +9,9 @@ from struct import *
 import numpy as np
 import argparse
 
-TX_COUNT = 1000000
+TX_COUNT = 1e6
 ROWS_PER_TX = 10
-ROW_COUNT = 10000000
+ROW_COUNT = 1e7
 ZIPF_S = 1.01 
 
 class Generator(object):

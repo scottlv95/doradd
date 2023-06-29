@@ -5,13 +5,12 @@
 #include <unordered_map>
 #include <debug/harness.h>
 
-// FIXME: express relationship
 constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 1000;
 constexpr uint32_t WRITE_SIZE = 100;
-const uint64_t ROW_COUNT = 10000000;
-const uint64_t PENDING_THRESHOLD = 1000000;
-const uint64_t SPAWN_THRESHOLD = 10000000;
+const uint64_t ROW_COUNT = 10'000'000;
+const uint64_t PENDING_THRESHOLD = 1'000'000;
+const uint64_t SPAWN_THRESHOLD = 10'000'000;
 
 struct YCSBRow
 {
@@ -32,7 +31,6 @@ public:
   cown_ptr<Row<YCSBRow>> rows[ROWS_PER_TX];
   // Bit field. Assume less than 16 concurrent rows per transaction
   uint16_t write_set;
-  uint16_t dispatcher_set;
   uint32_t row_count;
   static std::shared_ptr<Index<YCSBRow>> index;
 
@@ -43,7 +41,6 @@ public:
 
     tx.write_set = txm->write_set;
     tx.row_count = ROWS_PER_TX;
-    tx.dispatcher_set = 0;
 
     for (int i = 0; i < ROWS_PER_TX; i++) 
       tx.rows[i] = index->get_row(txm->indices[i]);
