@@ -3,6 +3,8 @@
 #include <numeric>
 #include <vector>
 
+/// https://stackoverflow.com/questions/7327994/prefetching-examples
+
 int binarySearch(int *array, int number_of_elements, int key) {
   int low = 0, high = number_of_elements-1, mid;
   while(low <= high) {
