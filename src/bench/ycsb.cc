@@ -32,7 +32,7 @@ public:
   // Bit field. Assume less than 16 concurrent rows per transaction
   uint16_t write_set;
   uint32_t row_count;
-  static std::shared_ptr<Index<YCSBRow>> index;
+  static Index<YCSBRow>* index;
 
   static int parse(const char* input, YCSBTransaction& tx)
   {
@@ -182,7 +182,7 @@ public:
   }
 };
 
-std::shared_ptr<Index<YCSBRow>> YCSBTransaction::index;
+Index<YCSBRow>* YCSBTransaction::index;
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 
 int main(int argc, char** argv)
@@ -205,7 +205,7 @@ int main(int argc, char** argv)
   when() << []() { std::cout << "Hello deterministic world!\n"; };
 
   // Create rows and populate index
-  YCSBTransaction::index = std::make_shared<Index<YCSBRow>>();
+  YCSBTransaction::index = new Index<YCSBRow>;
   for (int i = 0; i < ROW_COUNT; i++)
   {
     cown_ptr<Row<YCSBRow>> cown_r = make_cown<Row<YCSBRow>>();
