@@ -82,24 +82,29 @@ class fast_hash_map {
     }
 
     template <size_t look_ahead = 16>
-    std::vector<bool> find_multiple_alternate(const std::vector<T>& values) {
+    std::vector<bool> find_multiple_interleave(const std::vector<T>& values) {
         std::vector<bool> result(values.size(), false);
         std::array<size_t, look_ahead> hashes;
 
         for (size_t i = 0; i < hashes.size(); i++) {
             hashes[i] = get_entry(values[i]);
         }
-
+ 
+        // Interleaving - Search from 0, at meanwhile, prefetch from look_ahead
         for (size_t i = 0, j = look_ahead; i < values.size() - look_ahead;
              i++, j++) {
+            // access using prefetched items
             size_t entry = hashes[i % hashes.size()];
             result[i] = m_values[entry].find(values[i]);
 
+            // pre-compute the hashes for values from idx-look_ahead
+            // update the hash buffer and prefetch
             entry = get_entry(values[j]);
             hashes[j % hashes.size()] = entry;
             m_values[entry].prefetch();
         }
 
+        // complete all find operations
         for (size_t i = values.size() - look_ahead; i < values.size(); i++) {
             result[i] = find(values[i]);
         }
@@ -108,20 +113,23 @@ class fast_hash_map {
     }
 
     template <size_t look_ahead = 64>
-    std::vector<bool> find_multiple_nanothreads(const std::vector<T>& values) {
+    std::vector<bool> find_multiple_batch(const std::vector<T>& values) {
         std::vector<bool> result(values.size(), false);
+        // bounded-size lookahead buffer to store keys/hashes
         std::array<size_t, look_ahead> hashes;
         size_t entry, index;
 
         size_t len = (values.size() / look_ahead) * look_ahead;
 
         for (size_t i = 0; i < len; i += look_ahead) {
+            // batch prefetching
             for (size_t j = i, k = 0; k < look_ahead; j++, k++) {
                 entry = get_entry(values[j]);
                 hashes[k] = entry;
                 m_values[entry].prefetch();
             }
 
+            // then searching
             for (size_t j = i, k = 0; k < look_ahead; j++, k++) {
                 result[j] = m_values[hashes[k]].find(values[j]);
             }

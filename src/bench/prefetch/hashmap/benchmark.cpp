@@ -20,7 +20,7 @@ std::vector<int> create_random_array(int n, int min, int max) {
     return v;
 }
 
-static void BM_FindMultipleAlternate(benchmark::State& state) {
+static void BM_FindMultipleInterleave(benchmark::State& state) {
     int SIZE = state.range(0);
     int NUM_LOOKUPS = state.range(1);
     
@@ -31,14 +31,14 @@ static void BM_FindMultipleAlternate(benchmark::State& state) {
     }
 
       for (auto _ : state) {
-          auto result = hashmap.find_multiple_alternate(v);
+          auto result = hashmap.find_multiple_interleave(v);
           benchmark::DoNotOptimize(result);
       }
 
     state.SetItemsProcessed(NUM_LOOKUPS);
 }
 
-static void BM_FindMultipleNanothreads(benchmark::State& state) {
+static void BM_FindMultipleBatch(benchmark::State& state) {
     int SIZE = state.range(0);
     int NUM_LOOKUPS = state.range(1);
 
@@ -49,7 +49,7 @@ static void BM_FindMultipleNanothreads(benchmark::State& state) {
     }
 
       for (auto _ : state) {
-        auto result = hashmap.find_multiple_nanothreads(v);
+        auto result = hashmap.find_multiple_batch(v);
         benchmark::DoNotOptimize(result);
       }
 
@@ -74,16 +74,16 @@ static void BM_FindMultipleSimple(benchmark::State& state) {
     state.SetItemsProcessed(NUM_LOOKUPS);
 }
 
-BENCHMARK(BM_FindMultipleAlternate)
-  ->ArgsProduct({{1'000'000, 10'000'000}, {1000}})
-  ->Unit(benchmark::kMillisecond);
-
-BENCHMARK(BM_FindMultipleNanothreads)
-  ->ArgsProduct({{1'000'000, 10'000'000}, {1000}})
-  ->Unit(benchmark::kMillisecond);
-
 BENCHMARK(BM_FindMultipleSimple)
-  ->ArgsProduct({{1'000'000, 10'000'000}, {1000}})
+  ->ArgsProduct({{10'000'000}, {1000}})
+  ->Unit(benchmark::kMillisecond);
+
+BENCHMARK(BM_FindMultipleBatch)
+  ->ArgsProduct({{10'000'000}, {1000}})
+  ->Unit(benchmark::kMillisecond);
+
+BENCHMARK(BM_FindMultipleInterleave)
+  ->ArgsProduct({{10'000'000}, {1000}})
   ->Unit(benchmark::kMillisecond);
 
 BENCHMARK_MAIN();
