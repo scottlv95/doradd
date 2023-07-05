@@ -25,6 +25,11 @@ private:
 public:
   Index() : map(std::array<cown_ptr<Row<T>>, DB_SIZE>()) {}
 
+  cown_ptr<Row<T>>* get_row_addr(uint64_t key)
+  {
+    return &map[key];
+  }
+
   cown_ptr<Row<T>> get_row(uint64_t key)
   {
     return map[key];

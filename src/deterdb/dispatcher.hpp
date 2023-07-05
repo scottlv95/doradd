@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-template<typename T>
+template<typename T, size_t look_ahead = 20>
 struct FileDispatcher
 {
 private:
@@ -21,6 +21,7 @@ private:
   uint32_t count;
   char* read_head;
   char* read_top;
+  char* prepare_read_head;  // prepare_parse ptr
   uint64_t tx_count;
   uint64_t tx_spawn_sum; // spawned trxn counts
   uint64_t tx_exec_sum;  // executed trxn counts 
@@ -61,6 +62,7 @@ public:
     count = *(reinterpret_cast<uint32_t*>(content));
     content += sizeof(uint32_t);
     read_head = content;
+    prepare_read_head = content;
     read_top = content;
     tx_count = 0;
     tx_spawn_sum = 0;
@@ -86,7 +88,7 @@ public:
     return std::accumulate(counter_vec.begin(), counter_vec.end(), 0ULL, 
       [](uint64_t acc, const uint64_t* val) { return acc + *val; });
   }
-    
+
   int dispatch_one()
   {
     T tx;
@@ -99,6 +101,31 @@ public:
 
     return ret;
   }
+ 
+#ifdef PREFETCH
+  int dispatch_batch()
+  {
+    int ret;
+
+    // prefetch
+    for (int i = 0; i < look_ahead; i++)
+    {
+      int prefetch_ret = T::prepare_parse(prepare_read_head);
+      prepare_read_head += prefetch_ret;
+    }
+    // dispatch 
+    for (int j = 0; j < look_ahead; j++)
+    {
+      int dispatch_ret = dispatch_one();
+      read_head += dispatch_ret;
+      ret += dispatch_ret;
+      idx++;
+      tx_count++;
+    }
+
+    return ret;
+  }
+#endif 
 
   bool over_pending()
   {
@@ -126,6 +153,20 @@ public:
       }
 
       tx_spawn_sum += batch;
+
+#ifdef PREFETCH
+      for (int i = 0; i < batch; i += look_ahead)
+      {
+        if (idx >= count) 
+        {
+          idx = 0;
+          read_head = read_top;
+          prepare_read_head = read_top;
+        }
+
+        int ret = dispatch_batch();
+      }
+#else      
       for (int i = 0; i < batch; i++)
       {
         if (idx >= count)
@@ -139,7 +180,7 @@ public:
         idx++;
         tx_count++;
       }
-
+#endif
       // announce throughput
       auto time_now = std::chrono::system_clock::now();
       if ((time_now - last_print) > interval) {

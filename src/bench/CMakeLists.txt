@@ -22,6 +22,7 @@ endif()
 
 find_package(Threads REQUIRED)
 add_executable(ycsb ycsb.cc)
+add_compile_definitions(PREFETCH)
 target_include_directories(ycsb PRIVATE ../deterdb)
 target_include_directories(ycsb PRIVATE ${VERONA_PATH}/src/rt)
 target_include_directories(ycsb PRIVATE ${SNMALLOC_PATH}/src)

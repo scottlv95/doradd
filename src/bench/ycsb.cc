@@ -34,6 +34,21 @@ public:
   uint32_t row_count;
   static Index<YCSBRow>* index;
 
+  // prefetch row entry before accessing in parse()
+  static int prepare_parse(const char* input)
+  {
+    const YCSBTransactionMarshalled* txm =
+      reinterpret_cast<const YCSBTransactionMarshalled*>(input);
+    
+    for (int i = 0; i < ROWS_PER_TX; i++)
+    {
+      auto* entry = index->get_row_addr(txm->indices[i]);
+      __builtin_prefetch(entry);
+    }
+
+    return sizeof(YCSBTransactionMarshalled);
+  }
+
   static int parse(const char* input, YCSBTransaction& tx)
   {
     const YCSBTransactionMarshalled* txm =
@@ -44,13 +59,12 @@ public:
 
     for (int i = 0; i < ROWS_PER_TX; i++) 
       tx.rows[i] = index->get_row(txm->indices[i]);
-
+    
     return sizeof(YCSBTransactionMarshalled);
   }
 
   void process() const
   {
-    
     using type1 = acquired_cown<Row<YCSBRow>>;
     when(rows[0],rows[1],rows[2],rows[3],rows[4],rows[5],rows[6],rows[7],rows[8],rows[9]) << [=]
       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
