@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-template<typename T, size_t look_ahead = 20>
+template<typename T, size_t look_ahead = 200>
 struct FileDispatcher
 {
 private:
@@ -105,18 +105,20 @@ public:
 #ifdef PREFETCH
   int dispatch_batch()
   {
-    int ret;
+    int ret = 0;
+    int prefetch_ret, dispatch_ret;
 
     // prefetch
     for (int i = 0; i < look_ahead; i++)
     {
-      int prefetch_ret = T::prepare_parse(prepare_read_head);
+      prefetch_ret = T::prepare_parse(prepare_read_head);
       prepare_read_head += prefetch_ret;
     }
+
     // dispatch 
     for (int j = 0; j < look_ahead; j++)
     {
-      int dispatch_ret = dispatch_one();
+      dispatch_ret = dispatch_one();
       read_head += dispatch_ret;
       ret += dispatch_ret;
       idx++;
@@ -152,21 +154,18 @@ public:
         printf("new round\n");
       }
 
-      tx_spawn_sum += batch;
-
 #ifdef PREFETCH
-      for (int i = 0; i < batch; i += look_ahead)
+      tx_spawn_sum += look_ahead;
+      if (idx >= count) 
       {
-        if (idx >= count) 
-        {
-          idx = 0;
-          read_head = read_top;
-          prepare_read_head = read_top;
-        }
-
-        int ret = dispatch_batch();
+        idx = 0;
+        read_head = read_top;
+        prepare_read_head = read_top;
       }
+
+      int ret = dispatch_batch();
 #else      
+      tx_spawn_sum += batch;
       for (int i = 0; i < batch; i++)
       {
         if (idx >= count)
