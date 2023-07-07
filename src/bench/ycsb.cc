@@ -238,12 +238,21 @@ int main(int argc, char** argv)
     YCSBTransaction::index->insert_row(cown_r);
   }
   counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
-  
+
+#ifdef EXTERNAL_THREAD
+  FileDispatcher<YCSBTransaction> dispatcher(argv[3], 1000, core_cnt - 1, 
+      PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map);
+  std::thread extern_thrd([&]() {
+    dispatcher.run();
+  });
+  sched.run();
+  extern_thrd.join(); // FIXME: really before sched.run()
+#else
   auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 
     1000, core_cnt - 1, PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map);
   when(dispatcher_cown) << [=]
     (acquired_cown<FileDispatcher<YCSBTransaction>> acq_dispatcher) 
     { acq_dispatcher->run(); };
-
   sched.run();
+#endif
 }
