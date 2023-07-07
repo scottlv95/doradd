@@ -69,6 +69,18 @@ public:
     when(rows[0],rows[1],rows[2],rows[3],rows[4],rows[5],rows[6],rows[7],rows[8],rows[9]) << [=]
       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
     {
+#ifdef PREFETCH
+      __builtin_prefetch(&acq_row0.get_ref());
+      __builtin_prefetch(&acq_row1.get_ref());
+      __builtin_prefetch(&acq_row2.get_ref());
+      __builtin_prefetch(&acq_row3.get_ref());
+      __builtin_prefetch(&acq_row4.get_ref());
+      __builtin_prefetch(&acq_row5.get_ref());
+      __builtin_prefetch(&acq_row6.get_ref());
+      __builtin_prefetch(&acq_row7.get_ref());
+      __builtin_prefetch(&acq_row8.get_ref());
+      __builtin_prefetch(&acq_row9.get_ref());
+#endif
       uint8_t sum = 0;
       uint16_t write_set_l = write_set;
       int j;
