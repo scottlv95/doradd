@@ -43,7 +43,7 @@ public:
     for (int i = 0; i < ROWS_PER_TX; i++)
     {
       auto* entry = index->get_row_addr(txm->indices[i]);
-      __builtin_prefetch(entry);
+      __builtin_prefetch(entry, 0, 1); // 3rd arg -> LLC: 1, L1d: 3 (default)
     }
 
     return sizeof(YCSBTransactionMarshalled);
