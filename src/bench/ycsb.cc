@@ -225,7 +225,7 @@ int main(int argc, char** argv)
   
   auto& sched = Scheduler::get();
   //Scheduler::set_detect_leaks(true);
-  //sched.set_fair(true);
+  sched.set_fair(true);
   sched.init(core_cnt);
  
   when() << []() { std::cout << "Hello deterministic world!\n"; };
@@ -238,15 +238,19 @@ int main(int argc, char** argv)
     YCSBTransaction::index->insert_row(cown_r);
   }
   counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
-
-#ifdef EXTERNAL_THREAD
-  FileDispatcher<YCSBTransaction> dispatcher(argv[3], 1000, core_cnt - 1, 
+  
+#ifdef EXTERNAL_THREAD  
+  when() << [&]() {
+    sched.add_external_event_source();
+    FileDispatcher<YCSBTransaction> dispatcher(argv[3], 1000, core_cnt - 1, 
       PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map);
-  std::thread extern_thrd([&]() {
-    dispatcher.run();
-  });
+    std::thread extern_thrd([&]() mutable {
+        dispatcher.run();
+    });
+    extern_thrd.join();
+    sched.remove_external_event_source();
+  };
   sched.run();
-  extern_thrd.join(); // FIXME: really before sched.run()
 #else
   auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 
     1000, core_cnt - 1, PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map);
