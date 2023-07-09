@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project(deterdb-bench CXX)
 
-set(VERONA_PATH "../external/verona-rt") 
+set(VERONA_PATH "../external/verona-rt-scofield") 
 set(SNMALLOC_PATH "../external/snmalloc/")
 
 set(CMAKE_CXX_STANDARD 17)
