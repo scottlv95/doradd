@@ -30,7 +30,7 @@ public:
     return &map[key];
   }
 
-  cown_ptr<Row<T>> get_row(uint64_t key)
+  cown_ptr<Row<T>>& get_row(uint64_t key)
   {
     return map[key];
   }
