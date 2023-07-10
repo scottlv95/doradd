@@ -212,6 +212,7 @@ public:
 
 Index<YCSBRow>* YCSBTransaction::index;
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
+std::mutex* counter_map_mutex;
 
 int main(int argc, char** argv)
 {
@@ -240,12 +241,14 @@ int main(int argc, char** argv)
     YCSBTransaction::index->insert_row(cown_r);
   }
   counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
-  
+  counter_map->reserve(core_cnt-1);
+  counter_map_mutex = new std::mutex();
+
 #ifdef EXTERNAL_THREAD  
   when() << [&]() {
     sched.add_external_event_source();
     FileDispatcher<YCSBTransaction> dispatcher(argv[3], 1000, core_cnt - 1, 
-      PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map);
+      PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map, counter_map_mutex);
     std::thread extern_thrd([&]() mutable {
         dispatcher.run();
     });
@@ -255,7 +258,7 @@ int main(int argc, char** argv)
   sched.run();
 #else
   auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 
-    1000, core_cnt - 1, PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map);
+    1000, core_cnt - 1, PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map, counter_map_mutex);
   when(dispatcher_cown) << [=]
     (acquired_cown<FileDispatcher<YCSBTransaction>> acq_dispatcher) 
     { acq_dispatcher->run(); };

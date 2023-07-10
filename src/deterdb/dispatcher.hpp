@@ -31,6 +31,7 @@ private:
 
   std::chrono::time_point<std::chrono::system_clock> last_print;
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
+  std::mutex* counter_map_mutex;
   bool counter_registered;
   std::vector<uint64_t*> counter_vec;
 
@@ -41,10 +42,12 @@ public:
       , uint64_t pending_threshold_
       , uint64_t spawn_threshold_
       , std::unordered_map<std::thread::id, uint64_t*>* counter_map_
+      , std::mutex* counter_map_mutex_
       ) : batch(batch_), worker_cnt(worker_cnt_), 
           pending_threshold(pending_threshold_), 
           spawn_threshold(spawn_threshold_), 
-          counter_map(counter_map_)
+          counter_map(counter_map_),
+          counter_map_mutex(counter_map_mutex_)
   {
     int fd = open(file_name, O_RDONLY);
     if (fd == -1) 

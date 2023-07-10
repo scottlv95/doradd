@@ -1,10 +1,11 @@
 #pragma once
 
-#include <iostream>
 #include <thread>
 #include <unordered_map>
+#include <mutex>
 
 extern std::unordered_map<std::thread::id, uint64_t*>* counter_map;
+extern std::mutex* counter_map_mutex;
 
 /* Thread-local singleton TxCounter */
 struct TxCounter {
@@ -26,10 +27,12 @@ private:
 
   TxCounter()  {
     tx_cnt = 0;
+    std::lock_guard<std::mutex> lock(*counter_map_mutex);
     (*counter_map)[std::this_thread::get_id()] = &tx_cnt;
   }
 
   ~TxCounter() noexcept { 
+    std::lock_guard<std::mutex> lock(*counter_map_mutex);
     counter_map->erase(std::this_thread::get_id());
   }
 
