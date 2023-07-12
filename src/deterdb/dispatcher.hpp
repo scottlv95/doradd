@@ -95,14 +95,7 @@ public:
   int dispatch_one()
   {
     T tx;
-
-    int ret = T::parse(read_head, tx);
-    assert(ret > 0);
-
-    // Dispatch the transaction
-    tx.process();
-
-    return ret;
+    return T::parse_and_process(read_head, tx);
   }
  
 #ifdef PREFETCH

@@ -85,19 +85,15 @@ public:
      when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [=]
        (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
     {
-#ifdef PREFETCH_ROW 
-      for (int k = 0; k < ROW_SIZE; k++) {
-        __builtin_prefetch(acq_row0->val.payload+k);
-        __builtin_prefetch(acq_row1->val.payload+k);
-        __builtin_prefetch(acq_row2->val.payload+k);
-        __builtin_prefetch(acq_row3->val.payload+k);
-        __builtin_prefetch(acq_row4->val.payload+k);
-        __builtin_prefetch(acq_row5->val.payload+k);
-        __builtin_prefetch(acq_row6->val.payload+k);
-        __builtin_prefetch(acq_row7->val.payload+k);
-        __builtin_prefetch(acq_row8->val.payload+k);
-        __builtin_prefetch(acq_row9->val.payload+k);
-      }
+#ifdef PREFETCH_ROW
+#define p 0 // permission read-only or rw 
+#define l 3 // locality - llc or l1d
+    for (int k = 0; k < ROW_SIZE; k++) {
+      auto prefetch_rows_worker = [&k](auto&... acq_row) {
+        (__builtin_prefetch(acq_row->val.payload + k, p, l), ...); 
+      };
+      prefetch_rows_worker(acq_row0, acq_row1, acq_row2, acq_row3, acq_row4, acq_row5, acq_row6, acq_row7, acq_row8, acq_row9);
+    }
 #endif
       uint8_t sum = 0;
       uint16_t write_set_l = tx.write_set;
