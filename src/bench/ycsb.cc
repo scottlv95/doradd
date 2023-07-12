@@ -97,117 +97,22 @@ public:
 #endif
       uint8_t sum = 0;
       uint16_t write_set_l = tx.write_set;
-      int j;
 
-      if (write_set_l & 0x1)
-      {
-        memset(&acq_row0->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (j = 0; j < ROW_SIZE; j++)
-          sum += acq_row0->val.payload[j];
-      }
-      write_set_l >>= 1;
+      auto process_rows = [&](auto&... acq_row) {
+        if (write_set_l & 0x1)
+        {
+          ((memset(&acq_row->val, sum, WRITE_SIZE)), ...);
+        }
+        else
+        {
+          for (int j = 0; j < ROW_SIZE; j++)
+            ((sum += acq_row->val.payload[j]), ...);
+        }
+        write_set_l >>= 1; 
+      };
 
-      if (write_set_l & 0x1)
-      {
-        memset(&acq_row1->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (j = 0; j < ROW_SIZE; j++)
-          sum += acq_row1->val.payload[j];
-      }
-      write_set_l >>= 1;
- 
-      if (write_set_l & 0x1)
-      {
-        memset(&acq_row2->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (j = 0; j < ROW_SIZE; j++)
-          sum += acq_row2->val.payload[j];
-      }
-      write_set_l >>= 1;
-
-      if (write_set_l & 0x1)
-      {
-        memset(&acq_row3->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (j = 0; j < ROW_SIZE; j++)
-          sum += acq_row3->val.payload[j];
-      }
-      write_set_l >>= 1;
-
-      if (write_set_l & 0x1)
-      {
-        memset(&acq_row4->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (j = 0; j < ROW_SIZE; j++)
-          sum += acq_row4->val.payload[j];
-      }
-      write_set_l >>= 1;
-
-      if (write_set_l & 0x1)
-      {
-        memset(&acq_row5->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (j = 0; j < ROW_SIZE; j++)
-          sum += acq_row5->val.payload[j];
-      }
-      write_set_l >>= 1;
-
-      if (write_set_l & 0x1)
-      {
-        memset(&acq_row6->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (j = 0; j < ROW_SIZE; j++)
-          sum += acq_row6->val.payload[j];
-      }
-      write_set_l >>= 1;
-
-      if (write_set_l & 0x1)
-      {
-        memset(&acq_row7->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (j = 0; j < ROW_SIZE; j++)
-          sum += acq_row7->val.payload[j];
-      }
-      write_set_l >>= 1;
-
-      if (write_set_l & 0x1)
-      {
-        memset(&acq_row8->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (j = 0; j < ROW_SIZE; j++)
-          sum += acq_row8->val.payload[j];
-      }
-      write_set_l >>= 1;
-
-      if (write_set_l & 0x1)
-      {
-        memset(&acq_row9->val, sum, WRITE_SIZE);
-      }
-      else
-      {
-        for (j = 0; j < ROW_SIZE; j++)
-          sum += acq_row9->val.payload[j];
-      }
-      write_set_l >>= 1;
+      process_rows(acq_row0, acq_row1, acq_row2, acq_row3, acq_row4,
+          acq_row5, acq_row6, acq_row7, acq_row8, acq_row9);
 
       TxCounter::instance().incr();
     };
