@@ -49,29 +49,41 @@ public:
     return sizeof(YCSBTransactionMarshalled);
   }
 
-  static int parse(const char* input, YCSBTransaction& tx)
+  template <typename... Rows>
+  void prefetch_rows(const Rows&... rows) {
+    (rows.prefetch(), ...); // Prefetch each row using the fold expression
+  }
+
+  static int parse_and_process(const char* input, YCSBTransaction& tx)
   {
     const YCSBTransactionMarshalled* txm =
       reinterpret_cast<const YCSBTransactionMarshalled*>(input);
 
     tx.write_set = txm->write_set;
     tx.row_count = ROWS_PER_TX;
-
-    for (int i = 0; i < ROWS_PER_TX; i++) 
-      tx.rows[i] = index->get_row(txm->indices[i]);
     
-    return sizeof(YCSBTransactionMarshalled);
-  }
+    auto&& row0 = index->get_row(txm->indices[0]);
+    auto&& row1 = index->get_row(txm->indices[1]);
+    auto&& row2 = index->get_row(txm->indices[2]);
+    auto&& row3 = index->get_row(txm->indices[3]);
+    auto&& row4 = index->get_row(txm->indices[4]);
+    auto&& row5 = index->get_row(txm->indices[5]);
+    auto&& row6 = index->get_row(txm->indices[6]);
+    auto&& row7 = index->get_row(txm->indices[7]);
+    auto&& row8 = index->get_row(txm->indices[8]);
+    auto&& row9 = index->get_row(txm->indices[9]);
 
-  void process() const
-  {
-#ifdef PREFETCH_ROW
-    for (int i = 0; i < ROWS_PER_TX; i++)
-      rows[i].prefetch();
+#ifdef PREFETCH_ROW_DISP
+    auto prefetch_rows = [](auto&&... rows) {
+        (rows.prefetch(), ...);
+    };
+
+    prefetch_rows(row0, row1, row2, row3, row4, row5, row6, row7, row8, row9);
 #endif
+
     using type1 = acquired_cown<Row<YCSBRow>>;
-    when(rows[0],rows[1],rows[2],rows[3],rows[4],rows[5],rows[6],rows[7],rows[8],rows[9]) << [=]
-      (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
+     when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [=]
+       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
     {
 #ifdef PREFETCH_ROW 
       for (int k = 0; k < ROW_SIZE; k++) {
@@ -88,9 +100,9 @@ public:
       }
 #endif
       uint8_t sum = 0;
-      uint16_t write_set_l = write_set;
+      uint16_t write_set_l = tx.write_set;
       int j;
-#if 1
+
       if (write_set_l & 0x1)
       {
         memset(&acq_row0->val, sum, WRITE_SIZE);
@@ -200,17 +212,10 @@ public:
           sum += acq_row9->val.payload[j];
       }
       write_set_l >>= 1;
-#endif
-#if 0
-      auto time_now = std::chrono::system_clock::now();
-      std::chrono::duration<double> duration = time_now - time_prev;
-      printf("duration is %f\n", duration.count());
 
-      printf("sum is %u\n", sum);
-#endif 
-      //busy_loop(2);
       TxCounter::instance().incr();
     };
+    return sizeof(YCSBTransactionMarshalled);
   }
 };
 
