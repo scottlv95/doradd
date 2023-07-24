@@ -7,10 +7,10 @@
 #include <numeric>
 #include <vector>
 #include <cassert>
-#include <stdlib.h>
+#include <stdlib.h> 
 #include <stdio.h>
 
-template<typename T, size_t look_ahead = 200>
+template<typename T, size_t look_ahead = 64>
 struct FileDispatcher
 {
 private:
@@ -22,6 +22,7 @@ private:
   char* read_head;
   char* read_top;
   char* prepare_read_head;  // prepare_parse ptr
+  char* prepare_proc_read_head;                           
   uint64_t tx_count;
   uint64_t tx_spawn_sum; // spawned trxn counts
   uint64_t tx_exec_sum;  // executed trxn counts 
@@ -63,9 +64,11 @@ public:
     rnd = 1;
     idx = 0;
     count = *(reinterpret_cast<uint32_t*>(content));
+    printf("log count is %u\n", count);
     content += sizeof(uint32_t);
     read_head = content;
     prepare_read_head = content;
+    prepare_proc_read_head = content;
     read_top = content;
     tx_count = 0;
     tx_spawn_sum = 0;
@@ -104,12 +107,19 @@ public:
     int ret = 0;
     int prefetch_ret, dispatch_ret;
 
-    // prefetch
+#ifndef NO_IDX_LOOKUP 
     for (int i = 0; i < look_ahead; i++)
     {
       prefetch_ret = T::prepare_parse(prepare_read_head);
       prepare_read_head += prefetch_ret;
     }
+#else
+    for (int k = 0; k < look_ahead; k++)
+    {
+      prefetch_ret = T::prepare_process(prepare_proc_read_head);
+      prepare_proc_read_head += prefetch_ret;
+    }
+#endif
 
     // dispatch 
     for (int j = 0; j < look_ahead; j++)
@@ -123,6 +133,7 @@ public:
 
     return ret;
   }
+
 #endif 
 
   bool over_pending()
@@ -136,11 +147,11 @@ public:
   void run()
   {
     std::chrono::milliseconds interval(1000);
-
     while (1) {
       if (!counter_registered) [[unlikely]]
         track_worker_counter();
 
+#if 0
       if (tx_spawn_sum >= spawn_threshold * rnd) [[unlikely]]
       {
         printf("flow control\n");
@@ -149,6 +160,7 @@ public:
         rnd++;
         printf("new round\n");
       }
+#endif
 
 #ifdef PREFETCH
       tx_spawn_sum += look_ahead;
@@ -157,10 +169,10 @@ public:
         idx = 0;
         read_head = read_top;
         prepare_read_head = read_top;
+        prepare_proc_read_head = read_top;
       }
-
       int ret = dispatch_batch();
-#else      
+#else
       tx_spawn_sum += batch;
       for (int i = 0; i < batch; i++)
       {

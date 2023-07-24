@@ -6,7 +6,7 @@
 #include <debug/harness.h>
 
 constexpr uint32_t ROWS_PER_TX = 10;
-constexpr uint32_t ROW_SIZE = 1000;
+constexpr uint32_t ROW_SIZE = 900;
 constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 10'000'000;
 const uint64_t PENDING_THRESHOLD = 1'000'000;
@@ -28,12 +28,12 @@ static_assert(sizeof(YCSBTransactionMarshalled) == 128);
 struct YCSBTransaction
 {
 public:
-  cown_ptr<Row<YCSBRow>> rows[ROWS_PER_TX];
   // Bit field. Assume less than 16 concurrent rows per transaction
   uint16_t write_set;
-  uint32_t row_count;
   static Index<YCSBRow>* index;
+  static uint64_t cown_base_addr;
 
+#ifndef NO_IDX_LOOKUP
   // prefetch row entry before accessing in parse()
   static int prepare_parse(const char* input)
   {
@@ -43,7 +43,24 @@ public:
     for (int i = 0; i < ROWS_PER_TX; i++)
     {
       auto* entry = index->get_row_addr(txm->indices[i]);
-      __builtin_prefetch(entry, 0, 1); // 3rd arg -> LLC: 1, L1d: 3 (default)
+      __builtin_prefetch(entry, 0, 1);
+    }
+
+    return sizeof(YCSBTransactionMarshalled);
+  }
+
+  // prefetch cowns for when closure
+  static int prepare_process(const char* input)
+  {
+    const YCSBTransactionMarshalled* txm =
+      reinterpret_cast<const YCSBTransactionMarshalled*>(input);
+
+    for (int i = 0; i < ROWS_PER_TX; i++)
+    {
+      auto* entry = index->get_row_addr(txm->indices[i]);
+      auto&& cown = std::move(*entry);
+      //auto&& cown = index->get_row(txm->indices[i]);
+      cown.prefetch();
     }
 
     return sizeof(YCSBTransactionMarshalled);
@@ -54,14 +71,51 @@ public:
     (rows.prefetch(), ...); // Prefetch each row using the fold expression
   }
 
+#else
+  static int prepare_process(const char* input)
+  {
+    const YCSBTransactionMarshalled* txm =
+      reinterpret_cast<const YCSBTransactionMarshalled*>(input);
+
+    for (int i = 0; i < ROWS_PER_TX; i++)
+    {
+      __builtin_prefetch(reinterpret_cast<const void *>(
+          cown_base_addr + (uint64_t)(1024 * txm->indices[i]) + 32));
+    }
+
+    return sizeof(YCSBTransactionMarshalled);
+  }
+#endif
+
   static int parse_and_process(const char* input, YCSBTransaction& tx)
   {
     const YCSBTransactionMarshalled* txm =
       reinterpret_cast<const YCSBTransactionMarshalled*>(input);
 
     tx.write_set = txm->write_set;
-    tx.row_count = ROWS_PER_TX;
-    
+ 
+#ifdef NO_IDX_LOOKUP
+    auto&& row0 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[0])));
+    auto&& row1 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[1])));
+    auto&& row2 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[2])));
+    auto&& row3 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[3])));
+    auto&& row4 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[4])));
+    auto&& row5 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[5])));
+    auto&& row6 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[6])));
+    auto&& row7 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[7])));
+    auto&& row8 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[8])));
+    auto&& row9 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[9])));
+#else
     auto&& row0 = index->get_row(txm->indices[0]);
     auto&& row1 = index->get_row(txm->indices[1]);
     auto&& row2 = index->get_row(txm->indices[2]);
@@ -73,17 +127,15 @@ public:
     auto&& row8 = index->get_row(txm->indices[8]);
     auto&& row9 = index->get_row(txm->indices[9]);
 
-#ifdef PREFETCH_ROW_DISP
     auto prefetch_rows = [](auto&&... rows) {
         (rows.prefetch(), ...);
     };
-
     prefetch_rows(row0, row1, row2, row3, row4, row5, row6, row7, row8, row9);
 #endif
 
     using type1 = acquired_cown<Row<YCSBRow>>;
-     when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [=]
-       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
+    when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [=]
+      (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
     {
 #ifdef PREFETCH_ROW
 #define p 0 // permission read-only or rw 
@@ -113,7 +165,7 @@ public:
 
       process_rows(acq_row0, acq_row1, acq_row2, acq_row3, acq_row4,
           acq_row5, acq_row6, acq_row7, acq_row8, acq_row9);
-
+      
       TxCounter::instance().incr();
     };
     return sizeof(YCSBTransactionMarshalled);
@@ -121,6 +173,7 @@ public:
 };
 
 Index<YCSBRow>* YCSBTransaction::index;
+uint64_t YCSBTransaction::cown_base_addr;
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 std::mutex* counter_map_mutex;
 
@@ -137,24 +190,34 @@ int main(int argc, char** argv)
   assert(1 < core_cnt && core_cnt <= max_core);
   
   auto& sched = Scheduler::get();
-  //Scheduler::set_detect_leaks(true);
-  sched.set_fair(true);
+  // Scheduler::set_detect_leaks(true);
+  // sched.set_fair(true);
   sched.init(core_cnt);
  
   when() << []() { std::cout << "Hello deterministic world!\n"; };
 
   // Create rows and populate index
   YCSBTransaction::index = new Index<YCSBRow>;
+  uint64_t cown_prev_addr = 0;
+  uint8_t* cown_arr_addr = new uint8_t[1024 * ROW_COUNT];
+  YCSBTransaction::cown_base_addr = (uint64_t)cown_arr_addr;
   for (int i = 0; i < ROW_COUNT; i++)
   {
-    cown_ptr<Row<YCSBRow>> cown_r = make_cown<Row<YCSBRow>>();
+    cown_ptr<Row<YCSBRow>> cown_r = make_cown_custom<Row<YCSBRow>>(
+        reinterpret_cast<void *>(cown_arr_addr + (uint64_t)1024 * i));
+
+    if (i > 0)
+      assert((cown_r.get_base_addr() - cown_prev_addr) == 1024);
+    cown_prev_addr = cown_r.get_base_addr();
+    
     YCSBTransaction::index->insert_row(cown_r);
   }
+
   counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
-  counter_map->reserve(core_cnt-1);
+  counter_map->reserve(core_cnt - 1);
   counter_map_mutex = new std::mutex();
 
-#ifdef EXTERNAL_THREAD  
+#ifdef EXTERNAL_THREAD
   when() << [&]() {
     sched.add_external_event_source();
     FileDispatcher<YCSBTransaction> dispatcher(argv[3], 1000, core_cnt - 1, 
