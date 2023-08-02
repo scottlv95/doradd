@@ -80,7 +80,7 @@ public:
     for (int i = 0; i < ROWS_PER_TX; i++)
     {
       __builtin_prefetch(reinterpret_cast<const void *>(
-          cown_base_addr + (uint64_t)(1024 * txm->indices[i]) + 32));
+          cown_base_addr + (uint64_t)(1024 * txm->indices[i]) + 32), 1, 3);
     }
 
     return sizeof(YCSBTransactionMarshalled);
@@ -138,7 +138,7 @@ public:
       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
     {
 #ifdef PREFETCH_ROW
-#define p 0 // permission read-only or rw 
+#define p 1 // permission read-only or rw 
 #define l 3 // locality - llc or l1d
     for (int k = 0; k < ROW_SIZE; k++) {
       auto prefetch_rows_worker = [&k](auto&... acq_row) {
