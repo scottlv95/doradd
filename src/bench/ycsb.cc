@@ -30,6 +30,9 @@ struct YCSBTransaction
 public:
   // Bit field. Assume less than 16 concurrent rows per transaction
   uint16_t write_set;
+#ifdef LOG_LATENCY
+  std::chrono::time_point<std::chrono::system_clock> init_time;
+#endif
   static Index<YCSBRow>* index;
   static uint64_t cown_base_addr;
 
@@ -93,7 +96,10 @@ public:
       reinterpret_cast<const YCSBTransactionMarshalled*>(input);
 
     tx.write_set = txm->write_set;
- 
+#ifdef LOG_LATENCY
+    tx.init_time = std::chrono::system_clock::now(); 
+#endif
+
 #ifdef NO_IDX_LOOKUP
     auto&& row0 = get_cown_ptr_from_addr<Row<YCSBRow>>(
         reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[0])));
@@ -167,6 +173,12 @@ public:
           acq_row5, acq_row6, acq_row7, acq_row8, acq_row9);
       
       TxCounter::instance().incr();
+#ifdef LOG_LATENCY
+      auto time_now = std::chrono::system_clock::now();
+      std::chrono::duration<double> duration = time_now - tx.init_time;
+      uint16_t log_duration = static_cast<uint16_t>(duration.count()*1000000);
+      TxCounter::instance().log_latency(log_duration);
+#endif
     };
     return sizeof(YCSBTransactionMarshalled);
   }
@@ -175,6 +187,7 @@ public:
 Index<YCSBRow>* YCSBTransaction::index;
 uint64_t YCSBTransaction::cown_base_addr;
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
+std::unordered_map<std::thread::id, std::vector<uint16_t>*>* log_map;
 std::mutex* counter_map_mutex;
 
 int main(int argc, char** argv)
@@ -215,6 +228,8 @@ int main(int argc, char** argv)
 
   counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
   counter_map->reserve(core_cnt - 1);
+  log_map = new std::unordered_map<std::thread::id, std::vector<uint16_t>*>();
+  log_map->reserve(core_cnt - 1);
   counter_map_mutex = new std::mutex();
 
 #ifdef EXTERNAL_THREAD
@@ -225,16 +240,27 @@ int main(int argc, char** argv)
     std::thread extern_thrd([&]() mutable {
         dispatcher.run();
     });
+#ifdef LOG_LATENCY
+    std::this_thread::sleep_for(std::chrono::seconds(6));
+    FILE* fd = fopen("./latency.log", "w");
+    for (const auto& entry : *log_map) {
+      printf("flush entry --ing\n");
+      if (entry.second) {
+        for (auto value : *(entry.second)) 
+          fprintf(fd, "%u\n", value);                  
+      }
+    }
     extern_thrd.join();
+#endif  
     sched.remove_external_event_source();
   };
-  sched.run();
 #else
   auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 
     1000, core_cnt - 1, PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map, counter_map_mutex);
   when(dispatcher_cown) << [=]
     (acquired_cown<FileDispatcher<YCSBTransaction>> acq_dispatcher) 
     { acq_dispatcher->run(); };
-  sched.run();
 #endif
+  sched.run();
+
 }
