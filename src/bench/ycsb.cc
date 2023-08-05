@@ -176,6 +176,7 @@ public:
 #ifdef LOG_LATENCY
       auto time_now = std::chrono::system_clock::now();
       std::chrono::duration<double> duration = time_now - tx.init_time;
+      // record us/ might overflow uint16_t - 65535
       uint16_t log_duration = static_cast<uint16_t>(duration.count()*1000000);
       TxCounter::instance().log_latency(log_duration);
 #endif
@@ -242,16 +243,19 @@ int main(int argc, char** argv)
     });
 #ifdef LOG_LATENCY
     std::this_thread::sleep_for(std::chrono::seconds(6));
+    pthread_cancel(extern_thrd.native_handle());
     FILE* fd = fopen("./latency.log", "w");
     for (const auto& entry : *log_map) {
       printf("flush entry --ing\n");
+      fprintf(fd, "flush entry --ing\n");
       if (entry.second) {
         for (auto value : *(entry.second)) 
           fprintf(fd, "%u\n", value);                  
       }
     }
+#else
     extern_thrd.join();
-#endif  
+#endif
     sched.remove_external_event_source();
   };
 #else
