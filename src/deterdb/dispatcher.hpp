@@ -9,9 +9,9 @@
 #include <cassert>
 #include <stdlib.h> 
 #include <stdio.h>
-#include <libexplain/mmap.h>
+//#include <libexplain/mmap.h>
 
-template<typename T, size_t look_ahead = 64>
+template<typename T, size_t look_ahead = 80>
 struct FileDispatcher
 {
 private:
@@ -19,6 +19,7 @@ private:
   uint16_t rnd;
   uint32_t idx;
   uint32_t batch;
+  size_t log_marshall_sz;
   uint32_t count;
   char* read_head;
   char* read_top;
@@ -40,12 +41,15 @@ private:
 public:
   FileDispatcher(char* file_name
       , int batch_
+      , size_t log_marshall_sz_
       , uint8_t worker_cnt_
       , uint64_t pending_threshold_
       , uint64_t spawn_threshold_
       , std::unordered_map<std::thread::id, uint64_t*>* counter_map_
       , std::mutex* counter_map_mutex_
-      ) : batch(batch_), worker_cnt(worker_cnt_), 
+      ) : batch(batch_),
+          log_marshall_sz(log_marshall_sz_),
+          worker_cnt(worker_cnt_), 
           pending_threshold(pending_threshold_), 
           spawn_threshold(spawn_threshold_), 
           counter_map(counter_map_),
@@ -80,13 +84,22 @@ public:
 #endif
     char* content = reinterpret_cast<char*>(ret);
     rnd = 1;
+#ifdef INTERLEAVE
+    idx = 1 * look_ahead;
+#else
     idx = 0;
+#endif
     count = *(reinterpret_cast<uint32_t*>(content));
     printf("log count is %u\n", count);
     content += sizeof(uint32_t);
     read_head = content;
     prepare_read_head = content;
+#ifdef INTERLEAVE
+    assert(log_marshall_sz % 64 == 0);
+    prepare_proc_read_head = content + log_marshall_sz * look_ahead * 1;
+#else
     prepare_proc_read_head = content;
+#endif
     read_top = content;
     tx_count = 0;
     tx_spawn_sum = 0;
