@@ -193,9 +193,10 @@ std::mutex* counter_map_mutex;
 
 int main(int argc, char** argv)
 {
-  if (argc != 4 || strcmp(argv[1], "-n") != 0)
+  if (argc != 6 || strcmp(argv[1], "-n") != 0 || strcmp(argv[3], "-l") != 0)
   {
-    fprintf(stderr, "Usage: ./program -n core_cnt <dispatcher_input_file>\n");
+    fprintf(stderr, "Usage: ./program -n core_cnt -l look_ahead"  
+      "<dispatcher_input_file>\n");
     return -1;
   }
 
@@ -203,6 +204,9 @@ int main(int argc, char** argv)
   uint8_t max_core = std::thread::hardware_concurrency();
   assert(1 < core_cnt && core_cnt <= max_core);
   
+  size_t look_ahead = atoi(argv[4]);
+  assert(8 <= look_ahead && look_ahead <= 128);
+
   auto& sched = Scheduler::get();
   // Scheduler::set_detect_leaks(true);
   // sched.set_fair(true);
@@ -236,11 +240,23 @@ int main(int argc, char** argv)
 #ifdef EXTERNAL_THREAD
   when() << [&]() {
     sched.add_external_event_source();
-    FileDispatcher<YCSBTransaction> dispatcher(argv[3], 1000, core_cnt - 1, 
-      PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map, counter_map_mutex);
+    FileDispatcher<YCSBTransaction> dispatcher(argv[5], 1000, look_ahead, 
+        sizeof(YCSBTransactionMarshalled), core_cnt - 1, PENDING_THRESHOLD, 
+        SPAWN_THRESHOLD, counter_map, counter_map_mutex);
     std::thread extern_thrd([&]() mutable {
         dispatcher.run();
     });
+
+#if 0 
+    // dispatcher pinning
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(6, &cpuset);
+
+    if (pthread_setaffinity_np(extern_thrd.native_handle(), sizeof(cpu_set_t), 
+          &cpuset) != 0)
+      printf("failed to pin dispatcher\n");
+#endif
 #ifdef LOG_LATENCY
     std::this_thread::sleep_for(std::chrono::seconds(6));
     pthread_cancel(extern_thrd.native_handle());

@@ -11,7 +11,7 @@
 #include <stdio.h>
 //#include <libexplain/mmap.h>
 
-template<typename T, size_t look_ahead = 80>
+template<typename T>
 struct FileDispatcher
 {
 private:
@@ -20,6 +20,7 @@ private:
   uint32_t idx;
   uint32_t batch;
   size_t log_marshall_sz;
+  size_t look_ahead;
   uint32_t count;
   char* read_head;
   char* read_top;
@@ -41,6 +42,7 @@ private:
 public:
   FileDispatcher(char* file_name
       , int batch_
+      , size_t look_ahead_
       , size_t log_marshall_sz_
       , uint8_t worker_cnt_
       , uint64_t pending_threshold_
@@ -48,6 +50,7 @@ public:
       , std::unordered_map<std::thread::id, uint64_t*>* counter_map_
       , std::mutex* counter_map_mutex_
       ) : batch(batch_),
+          look_ahead(look_ahead_),
           log_marshall_sz(log_marshall_sz_),
           worker_cnt(worker_cnt_), 
           pending_threshold(pending_threshold_), 
@@ -82,6 +85,7 @@ public:
 #else
     void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
 #endif
+
     char* content = reinterpret_cast<char*>(ret);
     rnd = 1;
 #ifdef INTERLEAVE
