@@ -6,7 +6,7 @@
 #include <vector>
 
 extern std::unordered_map<std::thread::id, uint64_t*>* counter_map;
-extern std::unordered_map<std::thread::id, std::vector<uint16_t>*>* log_map;
+extern std::unordered_map<std::thread::id, std::vector<uint32_t>*>* log_map;
 extern std::mutex* counter_map_mutex;
 
 /* Thread-local singleton TxCounter */
@@ -25,7 +25,7 @@ struct TxCounter {
   void incr() { tx_cnt++; }
 
 #ifdef LOG_LATENCY
-  void log_latency(uint16_t exec_time) {
+  void log_latency(uint32_t exec_time) {
     log_arr->push_back(exec_time);  
   }
 #endif
@@ -33,7 +33,7 @@ struct TxCounter {
 private:
   uint64_t tx_cnt; 
 #ifdef LOG_LATENCY
-  std::vector<uint16_t>* log_arr; 
+  std::vector<uint32_t>* log_arr; 
 #endif
   
   TxCounter()  {
@@ -42,7 +42,7 @@ private:
     (*counter_map)[std::this_thread::get_id()] = &tx_cnt;
 #ifdef LOG_LATENCY
 #define LOG_SIZE 100000000
-    log_arr = new std::vector<uint16_t>();
+    log_arr = new std::vector<uint32_t>();
     log_arr->reserve(LOG_SIZE);
     (*log_map)[std::this_thread::get_id()] = log_arr;
 #endif

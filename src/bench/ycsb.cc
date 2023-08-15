@@ -97,7 +97,7 @@ public:
 
     tx.write_set = txm->write_set;
 #ifdef LOG_LATENCY
-    tx.init_time = std::chrono::system_clock::now(); 
+    //tx.init_time = std::chrono::system_clock::now(); 
 #endif
 
 #ifdef NO_IDX_LOOKUP
@@ -143,6 +143,10 @@ public:
     when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [=]
       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
     {
+#ifdef LOG_LATENCY
+      auto exec_init_time = std::chrono::system_clock::now(); 
+#endif
+
 #ifdef PREFETCH_ROW
 #define p 1 // permission read-only or rw 
 #define l 3 // locality - llc or l1d
@@ -172,12 +176,15 @@ public:
       process_rows(acq_row0, acq_row1, acq_row2, acq_row3, acq_row4,
           acq_row5, acq_row6, acq_row7, acq_row8, acq_row9);
       
+      //busy_loop(1);
+
       TxCounter::instance().incr();
 #ifdef LOG_LATENCY
       auto time_now = std::chrono::system_clock::now();
-      std::chrono::duration<double> duration = time_now - tx.init_time;
-      // record us/ might overflow uint16_t - 65535
-      uint16_t log_duration = static_cast<uint16_t>(duration.count()*1000000);
+      //std::chrono::duration<double> duration = time_now - tx.init_time;
+      std::chrono::duration<double> duration = time_now - exec_init_time;
+      // record at scales of 100ns
+      uint32_t log_duration = static_cast<uint32_t>(duration.count() * 10000000);
       TxCounter::instance().log_latency(log_duration);
 #endif
     };
@@ -188,7 +195,7 @@ public:
 Index<YCSBRow>* YCSBTransaction::index;
 uint64_t YCSBTransaction::cown_base_addr;
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
-std::unordered_map<std::thread::id, std::vector<uint16_t>*>* log_map;
+std::unordered_map<std::thread::id, std::vector<uint32_t>*>* log_map;
 std::mutex* counter_map_mutex;
 
 int main(int argc, char** argv)
@@ -233,7 +240,7 @@ int main(int argc, char** argv)
 
   counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
   counter_map->reserve(core_cnt - 1);
-  log_map = new std::unordered_map<std::thread::id, std::vector<uint16_t>*>();
+  log_map = new std::unordered_map<std::thread::id, std::vector<uint32_t>*>();
   log_map->reserve(core_cnt - 1);
   counter_map_mutex = new std::mutex();
 
