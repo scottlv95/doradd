@@ -39,14 +39,7 @@ uint16_t gen_random_write_set()
     w2 = 1 << d;
   } while (w1 == w2);
 
-  //printf("w1 is %u, w2 is %u\n", w1, w2);
   return w1 + w2;
-}
-
-int test_gen_random_write_set() {
-  for (int i = 0; i < 10; i++)
-    gen_random_write_set();
-  return 0;
 }
 
 std::array<uint64_t, ROWS_PER_TX> gen_random_txn()
@@ -60,18 +53,9 @@ std::array<uint64_t, ROWS_PER_TX> gen_random_txn()
   {
     uint64_t idx = dist(gen);
     if (std::find(ret.begin(), ret.end(), ROWS_PER_TX) == ret.end())
-    {
       ret[i] = idx;
-      //printf("gen - %lu\n", idx);
-    }
   }
   return ret;
-}
-
-int test_gen_random_txn() {
-  for (int i = 0; i < 10; i++)
-    gen_random_txn();
-  return 0;
 }
 
 int main() {
@@ -84,6 +68,7 @@ int main() {
 
   // Init and populate Row
   std::vector<Row<YCSBRow>> rows;
+  rows.reserve(DB_SIZE);
   for (int k = 0; k < DB_SIZE; k++)
   {
     Row<YCSBRow> row;
@@ -126,8 +111,6 @@ int main() {
  
   for (auto i : log_vec)
     fprintf(fd, "%u\n", i);
-  //printf("batch is %lu\n", BATCH_SIZE);
-  //printf("each txn takes %f us\n", duration.count() * 1000000 / BATCH_SIZE);
 
   return 0;
 }
