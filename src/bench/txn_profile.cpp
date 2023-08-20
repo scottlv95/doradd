@@ -9,7 +9,7 @@
 #include <algorithm>
 
 const uint64_t ROW_SIZE = 900;
-const uint64_t WRITE_SIZE = 90;
+const uint64_t WRITE_SIZE = 100;
 const uint64_t ROWS_PER_TX = 10;
 const uint64_t DB_SIZE = 10'000'000;
 const size_t BATCH_SIZE = 1'000'000;
@@ -271,7 +271,9 @@ int main()
 
     auto time_now = std::chrono::system_clock::now();
     std::chrono::duration<double> duration = time_now - time_prev;
-    log_vec.push_back(duration.count() * 1'000'000);
+    
+    // log at 100ns precision 
+    log_vec.push_back(duration.count() * 10'000'000);
     batch++;
   }
  
