@@ -160,6 +160,7 @@ public:
       uint8_t sum = 0;
       uint16_t write_set_l = tx.write_set;
 
+#if 0 // BUG: lambda closure
       auto process_rows = [&](auto&... acq_row) {
         if (write_set_l & 0x1)
         {
@@ -175,16 +176,127 @@ public:
 
       process_rows(acq_row0, acq_row1, acq_row2, acq_row3, acq_row4,
           acq_row5, acq_row6, acq_row7, acq_row8, acq_row9);
-      
+#endif
       //busy_loop(1);
+
+      int j;
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row0->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row0->val.payload[j];
+      }
+      write_set_l >>= 1;
+  
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row1->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row1->val.payload[j];
+      }
+      write_set_l >>= 1;
+     
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row2->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row2->val.payload[j];
+      }
+      write_set_l >>= 1;
+  
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row3->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row3->val.payload[j];
+      }
+      write_set_l >>= 1;
+  
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row4->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row4->val.payload[j];
+      }
+      write_set_l >>= 1;
+  
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row5->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row5->val.payload[j];
+      }
+      write_set_l >>= 1;
+  
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row6->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row6->val.payload[j];
+      }
+      write_set_l >>= 1;
+  
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row7->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row7->val.payload[j];
+      }
+      write_set_l >>= 1;
+  
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row8->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row8->val.payload[j];
+      }
+      write_set_l >>= 1;
+  
+      if (write_set_l & 0x1)
+      {
+        memset(&acq_row9->val, sum, WRITE_SIZE);
+      }
+      else
+      {
+        for (j = 0; j < ROW_SIZE; j++)
+          sum += acq_row9->val.payload[j];
+      }
+      write_set_l >>= 1;
 
       TxCounter::instance().incr();
 #ifdef LOG_LATENCY
       auto time_now = std::chrono::system_clock::now();
       //std::chrono::duration<double> duration = time_now - tx.init_time;
       std::chrono::duration<double> duration = time_now - exec_init_time;
-      // record at scales of 100ns
-      uint32_t log_duration = static_cast<uint32_t>(duration.count() * 10000000);
+      // log at precision - 100ns
+      uint32_t log_duration = static_cast<uint32_t>(duration.count() * 10'000'000);
       TxCounter::instance().log_latency(log_duration);
 #endif
     };
@@ -258,7 +370,7 @@ int main(int argc, char** argv)
     // dispatcher pinning
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
-    CPU_SET(6, &cpuset);
+    CPU_SET(10, &cpuset);
 
     if (pthread_setaffinity_np(extern_thrd.native_handle(), sizeof(cpu_set_t), 
           &cpuset) != 0)
@@ -282,8 +394,9 @@ int main(int argc, char** argv)
     sched.remove_external_event_source();
   };
 #else
-  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[3], 
-    1000, core_cnt - 1, PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map, counter_map_mutex);
+  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[5], 
+      1000, look_ahead, sizeof(YCSBTransactionMarshalled), core_cnt - 1, 
+      PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map, counter_map_mutex);
   when(dispatcher_cown) << [=]
     (acquired_cown<FileDispatcher<YCSBTransaction>> acq_dispatcher) 
     { acq_dispatcher->run(); };
