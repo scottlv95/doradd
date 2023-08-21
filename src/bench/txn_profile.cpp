@@ -95,6 +95,7 @@ void process_txn_closure(uint16_t write_set,
   auto&& row8 = &(*rows)[indices[8]];
   auto&& row9 = &(*rows)[indices[9]];
 
+#if 0 // Wrong: write_set does not persist across each invocation
   auto process_rows = [&](auto&... row) {
     if (write_set & 0x1)
     {
@@ -107,9 +108,51 @@ void process_txn_closure(uint16_t write_set,
     }
     write_set >>= 1; 
   };
+#endif
+
+#if 0 // Option: using logical || fold, but hard to read  
+  auto meta_txn = [&](auto ws, auto&& r) {
+    //printf("ws is %u\n", ws);
+    if (ws & 0x1)
+    {
+      memset(&r->val, sum, WRITE_SIZE);
+    }
+    else
+    {
+      for (int j = 0; j < ROW_SIZE; j++)
+        sum += r->val.payload[j];
+    }
+    return false;
+  };
+
+  auto process_rows = 
+    [&meta_txn, write_set](auto&... row) mutable {
+      ((std::apply(meta_txn, std::pair(write_set, row)) 
+        || (write_set >>= 1)), ...);
+    };
+#endif
+
+  // Better: takes write_set as argument (by ref)
+  auto process_each_row = [&sum](auto& ws, auto&& row) {
+    if (ws & 0x1)
+    {
+      memset(&row->val, sum, WRITE_SIZE);
+    }
+    else
+    {
+      for (int j = 0; j < ROW_SIZE; j++)
+        sum += row->val.payload[j];
+    }
+    ws >>= 1;
+  };
+
+  auto process_rows = [&](auto&... row) {
+    (process_each_row(write_set, row), ...);
+  };
 
   process_rows(row0, row1, row2, row3, row4,
       row5, row6, row7, row8, row9);
+  
 }
 
 void process_txn_unfold(uint16_t write_set,
@@ -266,8 +309,8 @@ int main()
     auto time_prev = std::chrono::system_clock::now();
     
     //process_txn(write_set_l, std::move(indices), &rows);
-    //process_txn_closure(write_set_l, std::move(indices), &rows);
-    process_txn_unfold(write_set_l, std::move(indices), &rows);
+    process_txn_closure(write_set_l, std::move(indices), &rows);
+    //process_txn_unfold(write_set_l, std::move(indices), &rows);
 
     auto time_now = std::chrono::system_clock::now();
     std::chrono::duration<double> duration = time_now - time_prev;
