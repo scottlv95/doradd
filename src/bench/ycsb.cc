@@ -4,6 +4,7 @@
 #include <thread>
 #include <unordered_map>
 #include <debug/harness.h>
+#include <spscq.hpp>
 
 constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 900;
@@ -11,6 +12,7 @@ constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 10'000'000;
 const uint64_t PENDING_THRESHOLD = 1'000'000;
 const uint64_t SPAWN_THRESHOLD = 10'000'000;
+const size_t CHANNEL_SIZE = 64*8;
 
 struct YCSBRow
 {
@@ -138,7 +140,7 @@ public:
     };
     prefetch_rows(row0, row1, row2, row3, row4, row5, row6, row7, row8, row9);
 #endif
-
+;
     using type1 = acquired_cown<Row<YCSBRow>>;
     when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [=]
       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
@@ -159,26 +161,28 @@ public:
 #endif
       uint8_t sum = 0;
       uint16_t write_set_l = tx.write_set;
-
-#if 0 // BUG: lambda closure
-      auto process_rows = [&](auto&... acq_row) {
-        if (write_set_l & 0x1)
+#if 0
+      auto process_each_row = [&sum](auto& ws, auto&& row) {
+        if (ws & 0x1)
         {
-          ((memset(&acq_row->val, sum, WRITE_SIZE)), ...);
+          memset(&row->val, sum, WRITE_SIZE);
         }
         else
         {
           for (int j = 0; j < ROW_SIZE; j++)
-            ((sum += acq_row->val.payload[j]), ...);
+            sum += row->val.payload[j];
         }
-        write_set_l >>= 1; 
+        ws >>= 1; 
+      };
+
+      auto process_rows = [&](auto&... acq_row) {
+        (process_each_row(write_set_l, acq_row), ...);
       };
 
       process_rows(acq_row0, acq_row1, acq_row2, acq_row3, acq_row4,
           acq_row5, acq_row6, acq_row7, acq_row8, acq_row9);
 #endif
-      //busy_loop(1);
-
+#if 1 
       int j;
       if (write_set_l & 0x1)
       {
@@ -289,6 +293,7 @@ public:
           sum += acq_row9->val.payload[j];
       }
       write_set_l >>= 1;
+#endif
 
       TxCounter::instance().incr();
 #ifdef LOG_LATENCY
@@ -309,6 +314,7 @@ uint64_t YCSBTransaction::cown_base_addr;
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 std::unordered_map<std::thread::id, std::vector<uint32_t>*>* log_map;
 std::mutex* counter_map_mutex;
+//rigtorp::SPSCQueue<int> ring;
 
 int main(int argc, char** argv)
 {
@@ -355,27 +361,59 @@ int main(int argc, char** argv)
   log_map = new std::unordered_map<std::thread::id, std::vector<uint32_t>*>();
   log_map->reserve(core_cnt - 1);
   counter_map_mutex = new std::mutex();
-
+  
 #ifdef EXTERNAL_THREAD
   when() << [&]() {
     sched.add_external_event_source();
+#ifndef CORE_PIPE
     FileDispatcher<YCSBTransaction> dispatcher(argv[5], 1000, look_ahead, 
         sizeof(YCSBTransactionMarshalled), core_cnt - 1, PENDING_THRESHOLD, 
         SPAWN_THRESHOLD, counter_map, counter_map_mutex);
     std::thread extern_thrd([&]() mutable {
         dispatcher.run();
     });
+#else
+    // mmap before constructing prefetcher and spawner
+    int fd = open(argv[5], O_RDONLY);
+    if (fd == -1) 
+    {
+      printf("File not existed\n");
+      exit(1);
+    }
+    struct stat sb;
+    fstat(fd, &sb);
+    void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, 
+        PROT_READ, MAP_PRIVATE, fd, 0));
 
-#if 0 
+    rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
+
+    Prefetcher<YCSBTransaction> prefetcher(ret, &ring);
+    Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
+        counter_map_mutex, &ring);
+
+    std::thread prefetcher_thread([&]() mutable {
+        prefetcher.run();
+    });
+    std::thread spawner_thread([&]() mutable {
+        spawner.run();
+    });
+
     // dispatcher pinning
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(10, &cpuset);
+    cpu_set_t cpuset_p, cpuset_s;
+    CPU_ZERO(&cpuset_p);
+    CPU_ZERO(&cpuset_s);
+    CPU_SET(10, &cpuset_p);
+    CPU_SET(11, &cpuset_s);
 
-    if (pthread_setaffinity_np(extern_thrd.native_handle(), sizeof(cpu_set_t), 
-          &cpuset) != 0)
-      printf("failed to pin dispatcher\n");
-#endif
+    if (pthread_setaffinity_np(prefetcher_thread.native_handle(),
+          sizeof(cpu_set_t), &cpuset_p) != 0)
+      printf("failed to pin prefetcher\n");
+
+    if (pthread_setaffinity_np(spawner_thread.native_handle(),
+          sizeof(cpu_set_t), &cpuset_s) != 0)
+      printf("failed to pin spawner\n");
+#endif // CORE_PIPE 
+       
 #ifdef LOG_LATENCY
     std::this_thread::sleep_for(std::chrono::seconds(6));
     pthread_cancel(extern_thrd.native_handle());
@@ -389,7 +427,8 @@ int main(int argc, char** argv)
       }
     }
 #else
-    extern_thrd.join();
+    prefetcher_thread.join();
+    spawner_thread.join();
 #endif
     sched.remove_external_event_source();
   };

@@ -9,6 +9,7 @@
 #include <cassert>
 #include <stdlib.h> 
 #include <stdio.h>
+#include "spscq.hpp"
 //#include <libexplain/mmap.h>
 
 template<typename T>
@@ -237,5 +238,164 @@ public:
         last_print = time_now;
       }
     }  
+  }
+};
+
+#if 0
+template<typename T>
+struct DispatcherGeneric
+{
+// make sure mmap is called outside the constructor and only once
+// shared fields:
+// ring, read_top, count
+
+  char* read_top;
+  int count;
+  rigtorp::SPSCQueue<int*> ring;
+
+  DispatcherGeneric(void* mmap_ret, rigtorp::SPSCQueueu<int*> ring_):
+    read_top(reinterpret_cast<char*>(mmap_ret)),
+    ring(ring_) 
+  {
+    this->count = *(reinterpret_cast<uint32_t*>(read_top));
+  }
+}
+#endif
+
+template<typename T>
+struct Prefetcher 
+{
+  char* read_top;
+  int read_count;
+  rigtorp::SPSCQueue<int>* ring;
+
+  Prefetcher(void* mmap_ret, rigtorp::SPSCQueue<int>* ring_) : 
+    read_top(reinterpret_cast<char*>(mmap_ret)), ring(ring_) 
+  {
+    read_count = *(reinterpret_cast<uint32_t*>(read_top));
+    read_top += sizeof(uint32_t);
+  }
+
+  void run() 
+  {
+    int ret;
+    int idx = 0;
+    char* read_head = read_top;
+
+    // 1. push() # blocking call
+    // 2. (optional) read ring size
+    while(1)
+    {
+      if (ring->size() == 64*8) // TODO: use const var 
+        continue;
+      
+      if (idx >= read_count) {
+        read_head = read_top;
+        idx = 0;
+      }
+      ret = T::prepare_process(read_head);
+      read_head += ret;
+      idx++;
+      ring->push(ret);
+    }
+  }
+};
+
+template<typename T>
+struct Spawner
+{
+  // TODO: reorder var
+  uint8_t worker_cnt;
+  char* read_top;
+  char* read_head;
+  rigtorp::SPSCQueue<int>* ring;
+  uint64_t tx_exec_sum; 
+  uint64_t last_tx_exec_sum; 
+  std::chrono::time_point<std::chrono::system_clock> last_print;
+  bool counter_registered;
+  int read_count;
+  std::unordered_map<std::thread::id, uint64_t*>* counter_map;
+  std::mutex* counter_map_mutex;
+  std::vector<uint64_t*> counter_vec;
+
+  Spawner(void* mmap_ret
+      , uint8_t worker_cnt_
+      , std::unordered_map<std::thread::id, uint64_t*>* counter_map_
+      , std::mutex* counter_map_mutex_
+      , rigtorp::SPSCQueue<int>* ring_
+      ) : 
+    read_top(reinterpret_cast<char*>(mmap_ret)), 
+    worker_cnt(worker_cnt_),
+    counter_map(counter_map_),
+    counter_map_mutex(counter_map_mutex_),
+    ring(ring_) 
+  { 
+    read_count = *(reinterpret_cast<uint32_t*>(read_top));
+    read_top += sizeof(uint32_t);
+    printf("read_count in spawner is %d\n", read_count);
+    read_head = read_top;
+  }
+
+  void track_worker_counter()
+  {
+    if (counter_map->size() == worker_cnt) 
+    {
+      counter_registered = true;
+      // prefetching all &tx_cnt into dispacher obj
+      for (const auto& counter_pair : *counter_map)
+        counter_vec.push_back(counter_pair.second);
+      assert(counter_vec.size() == worker_cnt);
+    }
+  }
+
+  uint64_t calc_tx_exec_sum()
+  {
+    return std::accumulate(counter_vec.begin(), counter_vec.end(), 0ULL, 
+      [](uint64_t acc, const uint64_t* val) { return acc + *val; });
+  }
+
+  int dispatch_one()
+  {
+    T tx;
+    return T::parse_and_process(read_head, tx);
+  }
+  
+  void run() 
+  {
+    int idx = 0;
+    int ret;
+    uint64_t tx_count = 0;
+    std::chrono::milliseconds interval(1000);
+
+    while (ring->front())
+    {
+      if (!counter_registered)
+        track_worker_counter();
+
+      if (idx >= read_count) {
+        read_head = read_top;
+        idx = 0;
+      }
+
+      ret = dispatch_one();
+      read_head += ret;
+      idx++;    
+      tx_count++;
+      ring->pop();
+
+      // announce throughput
+      auto time_now = std::chrono::system_clock::now();
+      if ((time_now - last_print) > interval) {
+        std::chrono::duration<double> duration = time_now - last_print;
+        auto dur_cnt = duration.count();
+        if (counter_registered)
+          tx_exec_sum = calc_tx_exec_sum();
+        printf("spawn - %lf tx/s\n", tx_count / dur_cnt);
+        printf("exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);
+        tx_count = 0;
+        last_tx_exec_sum = tx_exec_sum;
+        last_print = time_now;
+      }
+    }
   }
 };
