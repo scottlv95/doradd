@@ -286,9 +286,6 @@ struct Prefetcher
     // 2. (optional) read ring size
     while(1)
     {
-      if (ring->size() == 64*8) // TODO: use const var 
-        continue;
-      
       if (idx >= read_count) {
         read_head = read_top;
         idx = 0;
