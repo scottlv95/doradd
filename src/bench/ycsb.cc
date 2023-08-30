@@ -12,7 +12,7 @@ constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 10'000'000;
 const uint64_t PENDING_THRESHOLD = 1'000'000;
 const uint64_t SPAWN_THRESHOLD = 10'000'000;
-const size_t CHANNEL_SIZE = 64*8;
+const size_t CHANNEL_SIZE = 16;
 
 struct YCSBRow
 {
@@ -314,7 +314,6 @@ uint64_t YCSBTransaction::cown_base_addr;
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 std::unordered_map<std::thread::id, std::vector<uint32_t>*>* log_map;
 std::mutex* counter_map_mutex;
-//rigtorp::SPSCQueue<int> ring;
 
 int main(int argc, char** argv)
 {
@@ -403,7 +402,7 @@ int main(int argc, char** argv)
     CPU_ZERO(&cpuset_p);
     CPU_ZERO(&cpuset_s);
     CPU_SET(10, &cpuset_p);
-    CPU_SET(11, &cpuset_s);
+    CPU_SET(11, &cpuset_s); // should avoid hyperthreads
 
     if (pthread_setaffinity_np(prefetcher_thread.native_handle(),
           sizeof(cpu_set_t), &cpuset_p) != 0)

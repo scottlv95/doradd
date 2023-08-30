@@ -12,6 +12,8 @@
 #include "spscq.hpp"
 //#include <libexplain/mmap.h>
 
+const size_t BATCH_RING_ENT = 32;
+
 template<typename T>
 struct FileDispatcher
 {
@@ -241,27 +243,6 @@ public:
   }
 };
 
-#if 0
-template<typename T>
-struct DispatcherGeneric
-{
-// make sure mmap is called outside the constructor and only once
-// shared fields:
-// ring, read_top, count
-
-  char* read_top;
-  int count;
-  rigtorp::SPSCQueue<int*> ring;
-
-  DispatcherGeneric(void* mmap_ret, rigtorp::SPSCQueueu<int*> ring_):
-    read_top(reinterpret_cast<char*>(mmap_ret)),
-    ring(ring_) 
-  {
-    this->count = *(reinterpret_cast<uint32_t*>(read_top));
-  }
-}
-#endif
-
 template<typename T>
 struct Prefetcher 
 {
@@ -281,6 +262,7 @@ struct Prefetcher
     int ret;
     int idx = 0;
     char* read_head = read_top;
+    size_t i;
 
     // 1. push() # blocking call
     // 2. (optional) read ring size
@@ -290,9 +272,13 @@ struct Prefetcher
         read_head = read_top;
         idx = 0;
       }
-      ret = T::prepare_process(read_head);
-      read_head += ret;
-      idx++;
+      
+      for (i = 0; i < BATCH_RING_ENT; i++)
+      {
+        ret = T::prepare_process(read_head);
+        read_head += ret;
+        idx++;
+      }
       ring->push(ret);
     }
   }
@@ -305,6 +291,7 @@ struct Spawner
   uint8_t worker_cnt;
   char* read_top;
   char* read_head;
+  char* prepare_proc_read_head;
   rigtorp::SPSCQueue<int>* ring;
   uint64_t tx_exec_sum; 
   uint64_t last_tx_exec_sum; 
@@ -331,6 +318,7 @@ struct Spawner
     read_top += sizeof(uint32_t);
     printf("read_count in spawner is %d\n", read_count);
     read_head = read_top;
+    prepare_proc_read_head = read_top;
   }
 
   void track_worker_counter()
@@ -363,21 +351,33 @@ struct Spawner
     int ret;
     uint64_t tx_count = 0;
     std::chrono::milliseconds interval(1000);
+    size_t i;
 
-    while (ring->front())
+    //while (ring->front())
+    while(1)
     {
       if (!counter_registered)
         track_worker_counter();
 
       if (idx >= read_count) {
         read_head = read_top;
+        prepare_proc_read_head = read_top;
         idx = 0;
       }
 
-      ret = dispatch_one();
-      read_head += ret;
-      idx++;    
-      tx_count++;
+      for (i = 0; i < BATCH_RING_ENT; i++)
+      {
+        ret = T::prepare_process(prepare_proc_read_head);
+        prepare_proc_read_head += ret;
+      }
+
+      for (i = 0; i < BATCH_RING_ENT; i++)
+      {
+        ret = dispatch_one();
+        read_head += ret;
+        idx++;    
+        tx_count++;
+      }
       ring->pop();
 
       // announce throughput
