@@ -4,3 +4,5 @@ scripts/*.txt
 
 *.swp
 *.txt
+*.log
+*.out
