@@ -12,11 +12,12 @@
 #include "spscq.hpp"
 //#include <libexplain/mmap.h>
 
-const size_t BATCH_RING_ENT = 32;
+const size_t BATCH_PREFETCHER = 32;
+const size_t BATCH_SPAWNER = 32; 
 
 #define RW 1
 #define LLC_LOCALITY 1
-#define L1d_LOCALITY 3
+#define L1D_LOCALITY 3
 
 template<typename T>
 struct FileDispatcher
@@ -159,7 +160,7 @@ public:
     for (int k = 0; k < look_ahead; k++)
     {
       prefetch_ret = T::prepare_process(prepare_proc_read_head, RW,
-        L1d_LOCALITY);
+        L1D_LOCALITY);
       prepare_proc_read_head += prefetch_ret;
     }
 #endif
@@ -269,8 +270,6 @@ struct Prefetcher
     char* read_head = read_top;
     size_t i;
 
-    // 1. push() # blocking call
-    // 2. (optional) read ring size
     while(1)
     {
       if (idx >= read_count) {
@@ -278,7 +277,7 @@ struct Prefetcher
         idx = 0;
       }
       
-      for (i = 0; i < BATCH_RING_ENT; i++)
+      for (i = 0; i < BATCH_PREFETCHER; i++)
       {
         ret = T::prepare_process(read_head, RW, LLC_LOCALITY);
         read_head += ret;
@@ -352,7 +351,7 @@ struct Spawner
   
   void run() 
   {
-    int idx = 0;
+    int idx = 0, mini_batch = 0;
     int ret;
     uint64_t tx_count = 0;
     std::chrono::milliseconds interval(1000);
@@ -370,20 +369,26 @@ struct Spawner
         idx = 0;
       }
 
-      for (i = 0; i < BATCH_RING_ENT; i++)
+      for (i = 0; i < BATCH_SPAWNER; i++)
       {
-        ret = T::prepare_process(prepare_proc_read_head, RW, L1d_LOCALITY);
+        ret = T::prepare_process(prepare_proc_read_head, RW, L1D_LOCALITY);
         prepare_proc_read_head += ret;
       }
 
-      for (i = 0; i < BATCH_RING_ENT; i++)
+      for (i = 0; i < BATCH_SPAWNER; i++)
       {
         ret = dispatch_one();
         read_head += ret;
         idx++;    
         tx_count++;
       }
-      ring->pop();
+
+      mini_batch++;
+      
+      if (mini_batch == (BATCH_PREFETCHER / BATCH_SPAWNER)) {
+        mini_batch = 0;
+        ring->pop();
+      }
 
       // announce throughput
       auto time_now = std::chrono::system_clock::now();
