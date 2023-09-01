@@ -77,7 +77,7 @@ public:
   }
 
 #else
-  static int prepare_process(const char* input)
+  static int prepare_process(const char* input, int rw, int locality)
   {
     const YCSBTransactionMarshalled* txm =
       reinterpret_cast<const YCSBTransactionMarshalled*>(input);
@@ -85,7 +85,8 @@ public:
     for (int i = 0; i < ROWS_PER_TX; i++)
     {
       __builtin_prefetch(reinterpret_cast<const void *>(
-          cown_base_addr + (uint64_t)(1024 * txm->indices[i]) + 32), 1, 3);
+        cown_base_addr + (uint64_t)(1024 * txm->indices[i]) + 32), rw,
+        locality);
     }
 
     return sizeof(YCSBTransactionMarshalled);

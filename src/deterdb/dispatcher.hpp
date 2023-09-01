@@ -14,6 +14,10 @@
 
 const size_t BATCH_RING_ENT = 32;
 
+#define RW 1
+#define LLC_LOCALITY 1
+#define L1d_LOCALITY 3
+
 template<typename T>
 struct FileDispatcher
 {
@@ -154,7 +158,8 @@ public:
 #else
     for (int k = 0; k < look_ahead; k++)
     {
-      prefetch_ret = T::prepare_process(prepare_proc_read_head);
+      prefetch_ret = T::prepare_process(prepare_proc_read_head, RW,
+        L1d_LOCALITY);
       prepare_proc_read_head += prefetch_ret;
     }
 #endif
@@ -275,7 +280,7 @@ struct Prefetcher
       
       for (i = 0; i < BATCH_RING_ENT; i++)
       {
-        ret = T::prepare_process(read_head);
+        ret = T::prepare_process(read_head, RW, LLC_LOCALITY);
         read_head += ret;
         idx++;
       }
@@ -367,7 +372,7 @@ struct Spawner
 
       for (i = 0; i < BATCH_RING_ENT; i++)
       {
-        ret = T::prepare_process(prepare_proc_read_head);
+        ret = T::prepare_process(prepare_proc_read_head, RW, L1d_LOCALITY);
         prepare_proc_read_head += ret;
       }
 
