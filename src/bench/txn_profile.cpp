@@ -52,7 +52,7 @@ std::array<uint64_t, ROWS_PER_TX> gen_random_txn()
   for(int i = 0; i < ROWS_PER_TX; i++)
   {
     uint64_t idx = dist(gen);
-    if (std::find(ret.begin(), ret.end(), ROWS_PER_TX) == ret.end())
+    if (std::find(ret.begin(), ret.end(), idx) == ret.end())
       ret[i] = idx;
   }
   return ret;
