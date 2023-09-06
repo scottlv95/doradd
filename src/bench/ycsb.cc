@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <debug/harness.h>
 #include <spscq.hpp>
+#include <pin-thread.hpp>
 
 constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 900;
@@ -12,7 +13,7 @@ constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 10'000'000;
 const uint64_t PENDING_THRESHOLD = 1'000'000;
 const uint64_t SPAWN_THRESHOLD = 10'000'000;
-const size_t CHANNEL_SIZE = 16;
+const size_t CHANNEL_SIZE = 8;
 
 struct YCSBRow
 {
@@ -336,13 +337,16 @@ int main(int argc, char** argv)
   // Scheduler::set_detect_leaks(true);
   // sched.set_fair(true);
   sched.init(core_cnt);
- 
+
   when() << []() { std::cout << "Hello deterministic world!\n"; };
 
   // Create rows and populate index
   YCSBTransaction::index = new Index<YCSBRow>;
   uint64_t cown_prev_addr = 0;
-  uint8_t* cown_arr_addr = new uint8_t[1024 * ROW_COUNT];
+  //uint8_t* cown_arr_addr = new uint8_t[1024 * ROW_COUNT];
+  uint8_t* cown_arr_addr = static_cast<uint8_t*>(aligned_alloc_hpage(
+        1024 * ROW_COUNT));
+
   YCSBTransaction::cown_base_addr = (uint64_t)cown_arr_addr;
   for (int i = 0; i < ROW_COUNT; i++)
   {
@@ -370,6 +374,7 @@ int main(int argc, char** argv)
         sizeof(YCSBTransactionMarshalled), core_cnt - 1, PENDING_THRESHOLD, 
         SPAWN_THRESHOLD, counter_map, counter_map_mutex);
     std::thread extern_thrd([&]() mutable {
+        pin_thread(9);
         dispatcher.run();
     });
 #else
@@ -427,8 +432,9 @@ int main(int argc, char** argv)
       }
     }
 #else
-    prefetcher_thread.join();
-    spawner_thread.join();
+    //prefetcher_thread.join();
+    //spawner_thread.join();
+    extern_thrd.join();
 #endif
     sched.remove_external_event_source();
   };

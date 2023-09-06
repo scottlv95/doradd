@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include "spscq.hpp"
 //#include <libexplain/mmap.h>
+#include "hugepage.hpp"
 
 const size_t BATCH_PREFETCHER = 32;
 const size_t BATCH_SPAWNER = 32; 
@@ -72,27 +73,11 @@ public:
       printf("File not existed\n");
       exit(1);
     }
+
+    //void* buf = aligned_alloc_hpage_fd(fd);
     struct stat sb;
     fstat(fd, &sb);
-
-#if 0
-    size_t mmap_sz = ((size_t)(sb.st_size / 4096) + 1) * 4096;
-    void* ret = mmap(nullptr, mmap_sz, 
-        PROT_READ | PROT_WRITE, 
-        MAP_PRIVATE | MAP_HUGETLB | MAP_ANONYMOUS, -1, 0);
-    if (ret == MAP_FAILED) {
-      int err = errno;
-      fprintf(stderr, "%s\n", explain_errno_mmap(err, nullptr, mmap_sz, PROT_READ | PROT_WRITE, MAP_PRIVATE|MAP_HUGETLB, -1, 0)); 
-      exit(EXIT_FAILURE);
-    }
-    
-    char* source_content = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
-    memcpy(ret, source_content, sb.st_size);
-    munmap(source_content, sb.st_size);
-    close(fd);
-#else
     void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
-#endif
 
     char* content = reinterpret_cast<char*>(ret);
     rnd = 1;
@@ -357,9 +342,11 @@ struct Spawner
     std::chrono::milliseconds interval(1000);
     size_t i;
 
-    //while (ring->front())
     while(1)
     {
+      if (!ring->front())
+        continue;
+
       if (!counter_registered)
         track_worker_counter();
 
