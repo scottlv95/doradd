@@ -112,6 +112,7 @@ public:
       nextWriteIdx = 0;
     }
     while (nextWriteIdx == readIdxCache_) {
+      for (int i = 0; i < 2; i++) _mm_pause();
       readIdxCache_ = readIdx_.load(std::memory_order_acquire);
     }
     new (&slots_[writeIdx + kPadding]) T(std::forward<Args>(args)...);

@@ -10,7 +10,6 @@
 #include <stdlib.h> 
 #include <stdio.h>
 #include "spscq.hpp"
-//#include <libexplain/mmap.h>
 #include "hugepage.hpp"
 
 const size_t BATCH_PREFETCHER = 32;
@@ -77,7 +76,8 @@ public:
     //void* buf = aligned_alloc_hpage_fd(fd);
     struct stat sb;
     fstat(fd, &sb);
-    void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0));
+    void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, PROT_READ,
+          MAP_PRIVATE | MAP_POPULATE, fd, 0));
 
     char* content = reinterpret_cast<char*>(ret);
     rnd = 1;
@@ -179,7 +179,6 @@ public:
     while (1) {
       if (!counter_registered) [[unlikely]]
         track_worker_counter();
-
 #if 0
       if (tx_spawn_sum >= spawn_threshold * rnd) [[unlikely]]
       {
@@ -273,6 +272,54 @@ struct Prefetcher
   }
 };
 
+#ifdef PREFETCH_HYPER
+template<typename T>
+struct PrefetcherHyper
+{
+  char* read_top;
+  int read_count;
+  rigtorp::SPSCQueue<int>* ring1;
+  rigtorp::SPSCQueue<int>* ring2;
+
+  PrefetcherHyper(void* mmap_ret, rigtorp::SPSCQueue<int>* ring1_,
+      rigtorp::SPSCQueue<int>* ring2_) : 
+    read_top(reinterpret_cast<char*>(mmap_ret)), ring1(ring1_), ring2(ring2_) 
+  {
+    read_count = *(reinterpret_cast<uint32_t*>(read_top));
+    read_top += sizeof(uint32_t);
+  }
+
+  void run() 
+  {
+    int ret;
+    int idx = 0;
+    char* read_head = read_top;
+    size_t i;
+
+    while(1)
+    {
+      if (!ring1->front())
+        continue;
+
+      if (idx >= read_count) {
+        read_head = read_top;
+        idx = 0;
+      }
+      
+      for (i = 0; i < BATCH_SPAWNER; i++)
+      {
+        ret = T::prepare_process(read_head, RW, L1D_LOCALITY);
+        read_head += ret;
+        idx++;
+      }
+
+      ring1->pop();
+      ring2->push(ret);
+    }
+  }
+};
+#endif
+
 template<typename T>
 struct Spawner
 {
@@ -336,7 +383,7 @@ struct Spawner
   
   void run() 
   {
-    int idx = 0, mini_batch = 0;
+    int idx = 0;
     int ret;
     uint64_t tx_count = 0;
     std::chrono::milliseconds interval(1000);
@@ -355,13 +402,13 @@ struct Spawner
         prepare_proc_read_head = read_top;
         idx = 0;
       }
-
+#if 0 
       for (i = 0; i < BATCH_SPAWNER; i++)
       {
         ret = T::prepare_process(prepare_proc_read_head, RW, L1D_LOCALITY);
         prepare_proc_read_head += ret;
       }
-
+#endif
       for (i = 0; i < BATCH_SPAWNER; i++)
       {
         ret = dispatch_one();
@@ -370,13 +417,7 @@ struct Spawner
         tx_count++;
       }
 
-      mini_batch++;
-      
-      if (mini_batch == (BATCH_PREFETCHER / BATCH_SPAWNER)) {
-        mini_batch = 0;
-        ring->pop();
-      }
-
+      ring->pop();
       // announce throughput
       auto time_now = std::chrono::system_clock::now();
       if ((time_now - last_print) > interval) {

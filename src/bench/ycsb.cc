@@ -13,7 +13,7 @@ constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 10'000'000;
 const uint64_t PENDING_THRESHOLD = 1'000'000;
 const uint64_t SPAWN_THRESHOLD = 10'000'000;
-const size_t CHANNEL_SIZE = 8;
+const size_t CHANNEL_SIZE = 1;
 
 struct YCSBRow
 {
@@ -78,7 +78,7 @@ public:
   }
 
 #else
-  static int prepare_process(const char* input, int rw, int locality)
+  static int prepare_process(const char* input, const int rw, const int locality)
   {
     const YCSBTransactionMarshalled* txm =
       reinterpret_cast<const YCSBTransactionMarshalled*>(input);
@@ -86,8 +86,7 @@ public:
     for (int i = 0; i < ROWS_PER_TX; i++)
     {
       __builtin_prefetch(reinterpret_cast<const void *>(
-        cown_base_addr + (uint64_t)(1024 * txm->indices[i]) + 32), rw,
-        locality);
+        cown_base_addr + (uint64_t)(1024 * txm->indices[i]) + 32), rw, locality);
     }
 
     return sizeof(YCSBTransactionMarshalled);
@@ -106,25 +105,25 @@ public:
 
 #ifdef NO_IDX_LOOKUP
     auto&& row0 = get_cown_ptr_from_addr<Row<YCSBRow>>(
-        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[0])));
+          reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[0])));
     auto&& row1 = get_cown_ptr_from_addr<Row<YCSBRow>>(
-        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[1])));
+          reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[1])));
     auto&& row2 = get_cown_ptr_from_addr<Row<YCSBRow>>(
-        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[2])));
+          reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[2])));
     auto&& row3 = get_cown_ptr_from_addr<Row<YCSBRow>>(
-        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[3])));
+          reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[3])));
     auto&& row4 = get_cown_ptr_from_addr<Row<YCSBRow>>(
-        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[4])));
+          reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[4])));
     auto&& row5 = get_cown_ptr_from_addr<Row<YCSBRow>>(
-        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[5])));
+          reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[5])));
     auto&& row6 = get_cown_ptr_from_addr<Row<YCSBRow>>(
-        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[6])));
+          reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[6])));
     auto&& row7 = get_cown_ptr_from_addr<Row<YCSBRow>>(
-        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[7])));
+          reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[7])));
     auto&& row8 = get_cown_ptr_from_addr<Row<YCSBRow>>(
-        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[8])));
+          reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[8])));
     auto&& row9 = get_cown_ptr_from_addr<Row<YCSBRow>>(
-        reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[9])));
+          reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[9])));
 #else
     auto&& row0 = index->get_row(txm->indices[0]);
     auto&& row1 = index->get_row(txm->indices[1]);
@@ -322,7 +321,7 @@ int main(int argc, char** argv)
   if (argc != 6 || strcmp(argv[1], "-n") != 0 || strcmp(argv[3], "-l") != 0)
   {
     fprintf(stderr, "Usage: ./program -n core_cnt -l look_ahead"  
-      "<dispatcher_input_file>\n");
+      " <dispatcher_input_file>\n");
     return -1;
   }
 
@@ -391,32 +390,26 @@ int main(int argc, char** argv)
         PROT_READ, MAP_PRIVATE, fd, 0));
 
     rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
+    rigtorp::SPSCQueue<int> ring1(CHANNEL_SIZE);
 
     Prefetcher<YCSBTransaction> prefetcher(ret, &ring);
+    PrefetcherHyper<YCSBTransaction> prefetcher_hyper(ret, &ring, &ring1);
     Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
-        counter_map_mutex, &ring);
+        counter_map_mutex, &ring1);
 
     std::thread prefetcher_thread([&]() mutable {
+        pin_thread(8);
         prefetcher.run();
     });
+    std::thread prefetcher_hyper_thread([&]() mutable {
+        pin_thread(33);
+        prefetcher_hyper.run();
+    });
     std::thread spawner_thread([&]() mutable {
+        pin_thread(9);
         spawner.run();
     });
 
-    // dispatcher pinning
-    cpu_set_t cpuset_p, cpuset_s;
-    CPU_ZERO(&cpuset_p);
-    CPU_ZERO(&cpuset_s);
-    CPU_SET(10, &cpuset_p);
-    CPU_SET(11, &cpuset_s); // should avoid hyperthreads
-
-    if (pthread_setaffinity_np(prefetcher_thread.native_handle(),
-          sizeof(cpu_set_t), &cpuset_p) != 0)
-      printf("failed to pin prefetcher\n");
-
-    if (pthread_setaffinity_np(spawner_thread.native_handle(),
-          sizeof(cpu_set_t), &cpuset_s) != 0)
-      printf("failed to pin spawner\n");
 #endif // CORE_PIPE 
        
 #ifdef LOG_LATENCY
@@ -432,9 +425,15 @@ int main(int argc, char** argv)
       }
     }
 #else
-    //prefetcher_thread.join();
-    //spawner_thread.join();
+
+#ifdef CORE_PIPE
+    prefetcher_thread.join();
+    prefetcher_hyper_thread.join();
+    spawner_thread.join();
+#else
     extern_thrd.join();
+#endif // CORE_PIPE
+
 #endif
     sched.remove_external_event_source();
   };
