@@ -1,5 +1,6 @@
 #include "zipfian_random.h"
 #include <cstdio>
+#include <cstring>
 #include <array>
 #include <vector>
 #include <algorithm>
@@ -10,24 +11,29 @@
 #define ROW_COUNT  10'000'000
 #define TX_COUNT   1'000'000
 #define ROW_PER_TX 10
-#define ZIPF_S     0.9
+#define NrMSBContentionKey 6
+#define NrContKey  7
 
 using Rand = foedus::assorted::ZipfianRandom;
 
-std::array<uint64_t, ROW_PER_TX> gen_keys(Rand* r)
+std::array<uint64_t, ROW_PER_TX> gen_keys(Rand* r, int contention)
 {
+  int nr_lsb = 63 - __builtin_clzll(ROW_COUNT) - NrMSBContentionKey;
+  size_t mask = 0;
+  if (nr_lsb > 0) mask = (1 << nr_lsb) - 1;
+
   std::array<uint64_t, ROW_PER_TX> keys;
   for (int i = 0; i < ROW_PER_TX; i++) {
  again:
     keys[i] = r->next() % ROW_COUNT;
-#if 0
-    if (i < g_contention_key) {
-      keys[i] &= ~mask;
-    } else {
-      if ((keys[i] & mask) == 0)
-        goto again;
-    }
-#endif
+    if (contention) {
+      if (i < NrContKey) {
+        keys[i] &= ~mask;
+      } else {
+        if ((keys[i] & mask) == 0)
+          goto again;
+      }
+    } 
     for (int j = 0; j < i; j++)
       if (keys[i] == keys[j])
         goto again;
@@ -50,14 +56,10 @@ uint16_t gen_write_set()
   return result;
 }
 
-void gen_bin_txn(Rand* rand, std::ofstream* f)
+void gen_bin_txn(Rand* rand, std::ofstream* f, int contention)
 {
-  auto keys = gen_keys(rand);
-  //for (int i = 0; i < ROW_PER_TX; i++)
-  //  fprintf(dbg_f, "%lu, ", keys[i]);
-  //fprintf(dbg_f, "\n");
+  auto keys = gen_keys(rand, contention);
   auto ws   = gen_write_set();
-  //fprintf(dbg_f, "%u\n", ws);
   int padding = 46;
 
   // pack
@@ -79,20 +81,50 @@ void gen_bin_txn(Rand* rand, std::ofstream* f)
   }
 }
 
-int main() 
+int main(int argc, char** argv) 
 {
-  Rand rand;
-  rand.init(ROW_COUNT, ZIPF_S, 1238);
+  if (argc != 5 || strcmp(argv[1], "-d") != 0 || strcmp(argv[3], "-c") != 0)
+  {
+    fprintf(stderr, "Usage: ./program -d distribution -c contention\n");
+    return -1;
+  }
 
-  std::ofstream outLog("ycsb_zipfian.txt", std::ios::binary);
+  double zipf_s = 0; 
+  if (!strcmp(argv[2], "zipfian"))
+  {
+    zipf_s = 0.9;
+    printf("generating w/ zipfian distribution\n");
+  }
+  else if (strcmp(argv[2], "uniform"))
+    fprintf(stderr, "distribution should be uniform or zipfian\n");
+
+  int contention = 0;
+  if (!strcmp(argv[4], "cont"))
+  {
+    contention = 1;
+    printf("generating w/ contented accesses\n");
+  } 
+  else
+  {
+    printf("generating w/ No contended accesses\n");
+  }
+
+  Rand rand;
+  rand.init(ROW_COUNT, zipf_s, 1238);
+
+  char log_name[25];
+  strcat(log_name, "ycsb_");
+  strcat(log_name, argv[2]);
+  strcat(log_name, "_");
+  strcat(log_name, argv[4]);
+  strcat(log_name, ".txt");
+  std::ofstream outLog(log_name, std::ios::binary);
   uint32_t count = TX_COUNT;
   outLog.write(reinterpret_cast<const char*>(&count), sizeof(uint32_t));
 
-  //FILE* dbg_f = fopen("./txn_human_r.log", "w");
-
   for (int i = 0; i < TX_COUNT; i++) 
   {
-    gen_bin_txn(&rand, &outLog);
+    gen_bin_txn(&rand, &outLog, contention);
   }
 
   outLog.close();
