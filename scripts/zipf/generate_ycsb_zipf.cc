@@ -12,28 +12,33 @@
 #define TX_COUNT   1'000'000
 #define ROW_PER_TX 10
 #define NrMSBContentionKey 6
-#define NrContKey  7
 
 using Rand = foedus::assorted::ZipfianRandom;
 
+// Contention: 7 keys of 10 are chosen from 77 (2^7) set of 10M (2^24)
+// nr_lsb is 17 (24-7) to mask 7 keys into a fixed space.
 std::array<uint64_t, ROW_PER_TX> gen_keys(Rand* r, int contention)
 {
   int nr_lsb = 63 - __builtin_clzll(ROW_COUNT) - NrMSBContentionKey;
   size_t mask = 0;
   if (nr_lsb > 0) mask = (1 << nr_lsb) - 1;
 
+  int NrContKey = 0;
+  if (contention) NrContKey = 7;
+
   std::array<uint64_t, ROW_PER_TX> keys;
   for (int i = 0; i < ROW_PER_TX; i++) {
  again:
     keys[i] = r->next() % ROW_COUNT;
-    if (contention) {
-      if (i < NrContKey) {
-        keys[i] &= ~mask;
-      } else {
-        if ((keys[i] & mask) == 0)
-          goto again;
-      }
-    } 
+    // if branch below skip the idx-0, i.e., the most contended key
+    // since "& mask" will opt it out, thus keys are [1, 10M-1] 
+    // To stay consistent w/ Caracal, we keep these here.
+    if (i < NrContKey) {
+      keys[i] &= ~mask;
+    } else {
+      if ((keys[i] & mask) == 0)
+        goto again;
+    }
     for (int j = 0; j < i; j++)
       if (keys[i] == keys[j])
         goto again;
@@ -131,6 +136,8 @@ int main(int argc, char** argv)
     gen_bin_txn(&rand, &outLog, contention);
   }
 
+  printf("counter is %d\n", counter);
+  printf("counter_1 is %d\n", counter_1);
   outLog.close();
   return 0;
 }
