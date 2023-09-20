@@ -42,8 +42,12 @@ std::array<uint64_t, ROW_PER_TX> gen_keys(Rand* r, int contention)
   return keys;
 }
 
-uint16_t gen_write_set() 
+uint16_t gen_write_set(int contention) 
 {
+  // Set 0:10 read-write ratio for contented workloads
+  if (contention)
+    return static_cast<uint16_t>((1 << 10) - 1);
+
   std::vector<uint8_t> binDigits = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1};
   uint16_t result = 0;
   std::random_device rd;
@@ -59,7 +63,7 @@ uint16_t gen_write_set()
 void gen_bin_txn(Rand* rand, std::ofstream* f, int contention)
 {
   auto keys = gen_keys(rand, contention);
-  auto ws   = gen_write_set();
+  auto ws   = gen_write_set(contention);
   int padding = 46;
 
   // pack
