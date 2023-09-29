@@ -125,8 +125,7 @@ public:
 
   int dispatch_one()
   {
-    T tx;
-    return T::parse_and_process(read_head, tx);
+    return T::parse_and_process(read_head);
   }
  
 #ifdef PREFETCH
@@ -377,8 +376,7 @@ struct Spawner
 
   int dispatch_one()
   {
-    T tx;
-    return T::parse_and_process(read_head, tx);
+    return T::parse_and_process(read_head);
   }
   
   void run() 
@@ -402,7 +400,7 @@ struct Spawner
         prepare_proc_read_head = read_top;
         idx = 0;
       }
-#if 0 
+#ifndef PREFETCH_HYPER 
       for (i = 0; i < BATCH_SPAWNER; i++)
       {
         ret = T::prepare_process(prepare_proc_read_head, RW, L1D_LOCALITY);

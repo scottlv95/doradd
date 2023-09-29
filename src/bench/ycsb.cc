@@ -93,12 +93,12 @@ public:
   }
 #endif
 
-  static int parse_and_process(const char* input, YCSBTransaction& tx)
+  static int parse_and_process(const char* input)
   {
     const YCSBTransactionMarshalled* txm =
       reinterpret_cast<const YCSBTransactionMarshalled*>(input);
 
-    tx.write_set = txm->write_set;
+    auto ws_cap = txm->write_set;
 #ifdef LOG_LATENCY
     //tx.init_time = std::chrono::system_clock::now(); 
 #endif
@@ -141,9 +141,9 @@ public:
     };
     prefetch_rows(row0, row1, row2, row3, row4, row5, row6, row7, row8, row9);
 #endif
-;
+
     using type1 = acquired_cown<Row<YCSBRow>>;
-    when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [=]
+    when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [ws_cap]
       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
     {
 #ifdef LOG_LATENCY
@@ -161,7 +161,7 @@ public:
     }
 #endif
       uint8_t sum = 0;
-      uint16_t write_set_l = tx.write_set;
+      uint16_t write_set_l = ws_cap;
 #if 0
       auto process_each_row = [&sum](auto& ws, auto&& row) {
         if (ws & 0x1)
@@ -308,6 +308,8 @@ public:
     };
     return sizeof(YCSBTransactionMarshalled);
   }
+  YCSBTransaction(const YCSBTransaction&) = delete;
+  YCSBTransaction& operator=(const YCSBTransaction&) = delete;
 };
 
 Index<YCSBRow>* YCSBTransaction::index;
@@ -393,18 +395,20 @@ int main(int argc, char** argv)
     rigtorp::SPSCQueue<int> ring1(CHANNEL_SIZE);
 
     Prefetcher<YCSBTransaction> prefetcher(ret, &ring);
-    PrefetcherHyper<YCSBTransaction> prefetcher_hyper(ret, &ring, &ring1);
+    //PrefetcherHyper<YCSBTransaction> prefetcher_hyper(ret, &ring, &ring1);
     Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
-        counter_map_mutex, &ring1);
+        counter_map_mutex, &ring);
 
     std::thread prefetcher_thread([&]() mutable {
         pin_thread(8);
         prefetcher.run();
     });
+#if 0
     std::thread prefetcher_hyper_thread([&]() mutable {
         pin_thread(33);
         prefetcher_hyper.run();
     });
+#endif
     std::thread spawner_thread([&]() mutable {
         pin_thread(9);
         spawner.run();
@@ -428,7 +432,7 @@ int main(int argc, char** argv)
 
 #ifdef CORE_PIPE
     prefetcher_thread.join();
-    prefetcher_hyper_thread.join();
+    //prefetcher_hyper_thread.join();
     spawner_thread.join();
 #else
     extern_thrd.join();
