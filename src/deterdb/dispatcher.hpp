@@ -239,11 +239,42 @@ struct Prefetcher
   int read_count;
   rigtorp::SPSCQueue<int>* ring;
 
+#ifdef ADAPT_BATCH
+  uint64_t* recvd_req_cnt;
+  uint64_t handled_req_cnt;
+
+  Prefetcher(void* mmap_ret, rigtorp::SPSCQueue<int>* ring_, uint64_t* cnt) :
+    read_top(reinterpret_cast<char*>(mmap_ret)), ring(ring_), recvd_req_cnt(cnt) 
+#else
+  
   Prefetcher(void* mmap_ret, rigtorp::SPSCQueue<int>* ring_) : 
     read_top(reinterpret_cast<char*>(mmap_ret)), ring(ring_) 
+#endif
   {
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
     read_top += sizeof(uint32_t);
+  }
+
+  // check available req cnts
+  size_t check_avail_cnts()
+  {
+    uint64_t avail_cnt;
+    size_t dyn_batch;
+
+    do {
+      avail_cnt = *recvd_req_cnt - handled_req_cnt;
+      if (avail_cnt >= 16) 
+        dyn_batch = 16;
+      else if (avail_cnt > 0)
+        dyn_batch = static_cast<size_t>(avail_cnt);
+      else
+      {
+        _mm_pause();
+        continue;  
+      }
+    } while (avail_cnt == 0);
+
+    return dyn_batch;
   }
 
   void run() 
@@ -252,6 +283,10 @@ struct Prefetcher
     int idx = 0;
     char* read_head = read_top;
     size_t i;
+    size_t batch_sz;
+#ifdef ADAPT_BATCH
+    handled_req_cnt = 0;
+#endif
 
     while(1)
     {
@@ -260,13 +295,25 @@ struct Prefetcher
         idx = 0;
       }
       
-      for (i = 0; i < BATCH_PREFETCHER; i++)
+#ifdef ADAPT_BATCH
+      batch_sz = check_avail_cnts();
+#else
+      batch_sz = BATCH_PREFETCHER;
+#endif
+
+      for (i = 0; i < batch_sz; i++)
       {
         ret = T::prepare_process(read_head, RW, LLC_LOCALITY);
         read_head += ret;
         idx++;
       }
+
+#ifdef ADAPT_BATCH
+      ring->push(batch_sz);
+      handled_req_cnt += batch_sz;
+#else
       ring->push(ret);
+#endif
     }
   }
 };
@@ -386,11 +433,18 @@ struct Spawner
     uint64_t tx_count = 0;
     std::chrono::milliseconds interval(1000);
     size_t i;
+    size_t batch_sz;
 
     while(1)
     {
       if (!ring->front())
         continue;
+#ifdef ADAPT_BATCH
+      batch_sz = static_cast<size_t>(*ring->front());
+      // Do we need to pop here, right after checking front()
+#else
+      batch_sz = BATCH_SPAWNER;
+#endif
 
       if (!counter_registered)
         track_worker_counter();
@@ -401,13 +455,13 @@ struct Spawner
         idx = 0;
       }
 #ifndef PREFETCH_HYPER 
-      for (i = 0; i < BATCH_SPAWNER; i++)
+      for (i = 0; i < batch_sz; i++)
       {
         ret = T::prepare_process(prepare_proc_read_head, RW, L1D_LOCALITY);
         prepare_proc_read_head += ret;
       }
 #endif
-      for (i = 0; i < BATCH_SPAWNER; i++)
+      for (i = 0; i < batch_sz; i++)
       {
         ret = dispatch_one();
         read_head += ret;

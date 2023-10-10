@@ -31,7 +31,10 @@ add_compile_definitions(NO_IDX_LOOKUP)
 add_compile_definitions(EXTERNAL_THREAD)
 #add_compile_definitions(LOG_LATENCY)
 add_compile_definitions(CORE_PIPE)
-add_compile_definitions(PREFETCH_HYPER)
+#add_compile_definitions(PREFETCH_HYPER)
+add_compile_definitions(ADAPT_BATCH) # adaptive batching
+
+target_include_directories(ycsb PRIVATE ../lancet)
 target_include_directories(ycsb PRIVATE ../deterdb)
 target_include_directories(ycsb PRIVATE ${VERONA_PATH}/src/rt)
 target_include_directories(ycsb PRIVATE ${SNMALLOC_PATH}/src)
