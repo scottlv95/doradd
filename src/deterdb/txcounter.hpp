@@ -41,7 +41,7 @@ private:
     std::lock_guard<std::mutex> lock(*counter_map_mutex);
     (*counter_map)[std::this_thread::get_id()] = &tx_cnt;
 #ifdef LOG_LATENCY
-#define LOG_SIZE 100000000
+#define LOG_SIZE 8000000
     log_arr = new std::vector<uint32_t>();
     log_arr->reserve(LOG_SIZE);
     (*log_map)[std::this_thread::get_id()] = log_arr;

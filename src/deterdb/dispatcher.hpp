@@ -384,17 +384,28 @@ struct Spawner
   std::mutex* counter_map_mutex;
   std::vector<uint64_t*> counter_vec;
 
+#ifdef RPC_LATENCY
+  using ts_type = std::chrono::time_point<std::chrono::system_clock>;
+  std::vector<ts_type>* init_time_log_arr;
+#endif  
+
   Spawner(void* mmap_ret
       , uint8_t worker_cnt_
       , std::unordered_map<std::thread::id, uint64_t*>* counter_map_
       , std::mutex* counter_map_mutex_
       , rigtorp::SPSCQueue<int>* ring_
+#ifdef RPC_LATENCY
+      , std::vector<ts_type>* init_time_log_arr_
+#endif
       ) : 
     read_top(reinterpret_cast<char*>(mmap_ret)), 
     worker_cnt(worker_cnt_),
     counter_map(counter_map_),
     counter_map_mutex(counter_map_mutex_),
-    ring(ring_) 
+    ring(ring_)
+#ifdef RPC_LATENCY
+    , init_time_log_arr(init_time_log_arr_)
+#endif
   { 
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
     read_top += sizeof(uint32_t);
@@ -421,11 +432,19 @@ struct Spawner
       [](uint64_t acc, const uint64_t* val) { return acc + *val; });
   }
 
+#ifdef RPC_LATENCY
+  int dispatch_one(int id)
+  {
+    ts_type init_time = (*init_time_log_arr)[id];
+    return T::parse_and_process(read_head, init_time);
+  }
+#else
   int dispatch_one()
   {
     return T::parse_and_process(read_head);
   }
-  
+#endif
+
   void run() 
   {
     int idx = 0;
@@ -434,9 +453,16 @@ struct Spawner
     std::chrono::milliseconds interval(1000);
     size_t i;
     size_t batch_sz;
+#ifdef RPC_LATENCY
+    int txn_log_id = 0;
+#endif
 
     while(1)
     {
+#ifdef RPC_LATENCY
+#define RPC_LOG_SIZE 20000000
+      if (txn_log_id >= RPC_LOG_SIZE) break;
+#endif
       if (!ring->front())
         continue;
 #ifdef ADAPT_BATCH
@@ -456,17 +482,27 @@ struct Spawner
       }
 #ifndef PREFETCH_HYPER 
       for (i = 0; i < batch_sz; i++)
-      {
+      { 
         ret = T::prepare_process(prepare_proc_read_head, RW, L1D_LOCALITY);
+#ifdef RPC_LATENCY
+        __builtin_prefetch(&(*init_time_log_arr)[txn_log_id+i], 0, L1D_LOCALITY);
+#endif
         prepare_proc_read_head += ret;
       }
 #endif
       for (i = 0; i < batch_sz; i++)
       {
+#ifdef RPC_LATENCY
+        ret = dispatch_one(txn_log_id);
+#else
         ret = dispatch_one();
+#endif
         read_head += ret;
         idx++;    
         tx_count++;
+#ifdef RPC_LATENCY
+        txn_log_id++;
+#endif
       }
 
       ring->pop();

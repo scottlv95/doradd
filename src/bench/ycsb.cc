@@ -6,6 +6,7 @@
 #include <debug/harness.h>
 #include <spscq.hpp>
 #include <pin-thread.hpp>
+#include "rpc_handler.hpp"
 
 constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 900;
@@ -13,7 +14,11 @@ constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 10'000'000;
 const uint64_t PENDING_THRESHOLD = 1'000'000;
 const uint64_t SPAWN_THRESHOLD = 10'000'000;
-const size_t CHANNEL_SIZE = 1;
+const size_t CHANNEL_SIZE = 2;
+
+#ifdef RPC_LATENCY
+using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
+#endif
 
 struct YCSBRow
 {
@@ -93,7 +98,11 @@ public:
   }
 #endif
 
+#ifdef RPC_LATENCY
+  static int parse_and_process(const char* input, ts_type init_time)
+#else
   static int parse_and_process(const char* input)
+#endif // RPC_LATENCY
   {
     const YCSBTransactionMarshalled* txm =
       reinterpret_cast<const YCSBTransactionMarshalled*>(input);
@@ -143,11 +152,15 @@ public:
 #endif
 
     using type1 = acquired_cown<Row<YCSBRow>>;
+#ifdef RPC_LATENCY
+    when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [ws_cap, init_time]
+#else
     when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [ws_cap]
+#endif
       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
     {
 #ifdef LOG_LATENCY
-      auto exec_init_time = std::chrono::system_clock::now(); 
+    //auto exec_init_time = std::chrono::system_clock::now(); 
 #endif
 
 #ifdef PREFETCH_ROW
@@ -300,9 +313,11 @@ public:
 #ifdef LOG_LATENCY
       auto time_now = std::chrono::system_clock::now();
       //std::chrono::duration<double> duration = time_now - tx.init_time;
-      std::chrono::duration<double> duration = time_now - exec_init_time;
-      // log at precision - 100ns
-      uint32_t log_duration = static_cast<uint32_t>(duration.count() * 10'000'000);
+      //std::chrono::duration<double> duration = time_now - exec_init_time;
+      std::chrono::duration<double> duration = time_now - init_time;
+      // log at precision - 1us
+      uint32_t log_duration = static_cast<uint32_t>(duration.count() * 1'000'000);
+      
       TxCounter::instance().log_latency(log_duration);
 #endif
     };
@@ -320,10 +335,10 @@ std::mutex* counter_map_mutex;
 
 int main(int argc, char** argv)
 {
-  if (argc != 6 || strcmp(argv[1], "-n") != 0 || strcmp(argv[3], "-l") != 0)
+  if (argc != 8 || strcmp(argv[1], "-n") != 0 || strcmp(argv[3], "-l") != 0)
   {
     fprintf(stderr, "Usage: ./program -n core_cnt -l look_ahead"  
-      " <dispatcher_input_file>\n");
+      " <dispatcher_input_file> -i <inter_arrival>\n");
     return -1;
   }
 
@@ -391,46 +406,82 @@ int main(int argc, char** argv)
     void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, 
         PROT_READ, MAP_PRIVATE, fd, 0));
 
-    rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
-    rigtorp::SPSCQueue<int> ring1(CHANNEL_SIZE);
+#ifdef ADAPT_BATCH
+    uint64_t req_cnt; 
+#ifdef RPC_LATENCY
+#define RPC_LOG_SIZE 20000000 // 10M txns
+    std::vector<ts_type>* init_time_log_arr = new std::vector<ts_type>();
+    init_time_log_arr->reserve(RPC_LOG_SIZE);
+    
+    std::string log_dir = "./results/";
+    std::string log_suffix = "-latency.log";
+    std::string log_name = log_dir + argv[7] + log_suffix;
+    FILE* log_fd = fopen(reinterpret_cast<const char*>(log_name.c_str()), "w");   
+    
+    // argv[7]: gen_type
+    RPCHandler rpc_handler(&req_cnt, argv[7], init_time_log_arr);
+#else 
+    RPCHandler rpc_handler(&req_cnt, argv[7]);
+#endif  // RPC_LATENCY 
+#endif // ADAPT_BATCH
 
+    rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
+#ifndef ADAPT_BATCH
     Prefetcher<YCSBTransaction> prefetcher(ret, &ring);
-    //PrefetcherHyper<YCSBTransaction> prefetcher_hyper(ret, &ring, &ring1);
     Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
         counter_map_mutex, &ring);
-
-    std::thread prefetcher_thread([&]() mutable {
-        pin_thread(8);
-        prefetcher.run();
-    });
-#if 0
-    std::thread prefetcher_hyper_thread([&]() mutable {
-        pin_thread(33);
-        prefetcher_hyper.run();
-    });
+#else
+    Prefetcher<YCSBTransaction> prefetcher(ret, &ring, &req_cnt);
+#ifdef RPC_LATENCY
+    // give init_time_log_arr to spawner. Needed for capturing in when.
+    Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
+        counter_map_mutex, &ring, init_time_log_arr);
+#else
+    Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
+        counter_map_mutex, &ring);
 #endif
+#endif // ADAPT_BATCH
     std::thread spawner_thread([&]() mutable {
         pin_thread(9);
         spawner.run();
     });
 
+    std::thread prefetcher_thread([&]() mutable {
+        pin_thread(8);
+        prefetcher.run();
+    });
+#ifdef ADAPT_BATCH
+    std::thread rpc_handler_thread([&]() mutable {
+      pin_thread(7);
+      rpc_handler.run();
+    });
+#endif
+
 #endif // CORE_PIPE 
        
 #ifdef LOG_LATENCY
     std::this_thread::sleep_for(std::chrono::seconds(6));
+#ifdef RPC_LATENCY
+    pthread_cancel(spawner_thread.native_handle());
+    pthread_cancel(prefetcher_thread.native_handle());
+    pthread_cancel(rpc_handler_thread.native_handle());
+#else
     pthread_cancel(extern_thrd.native_handle());
-    FILE* fd = fopen("./latency.log", "w");
+#endif
     for (const auto& entry : *log_map) {
       printf("flush entry --ing\n");
-      fprintf(fd, "flush entry --ing\n");
+      fprintf(log_fd, "flush entry --ing\n");
       if (entry.second) {
         for (auto value : *(entry.second)) 
-          fprintf(fd, "%u\n", value);                  
+          fprintf(log_fd, "%u\n", value);                  
       }
     }
 #else
 
 #ifdef CORE_PIPE
+#ifdef ADAPT_BATCH
+    rpc_handler_thread.join();
+#endif
     prefetcher_thread.join();
     //prefetcher_hyper_thread.join();
     spawner_thread.join();
@@ -438,7 +489,7 @@ int main(int argc, char** argv)
     extern_thrd.join();
 #endif // CORE_PIPE
 
-#endif
+#endif // LOG_LATENCY
     sched.remove_external_event_source();
   };
 #else

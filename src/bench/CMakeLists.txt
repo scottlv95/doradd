@@ -29,10 +29,11 @@ add_compile_definitions(PREFETCH)
 #add_compile_definitions(PREFETCH_ROW)
 add_compile_definitions(NO_IDX_LOOKUP)
 add_compile_definitions(EXTERNAL_THREAD)
-#add_compile_definitions(LOG_LATENCY)
 add_compile_definitions(CORE_PIPE)
 #add_compile_definitions(PREFETCH_HYPER)
 add_compile_definitions(ADAPT_BATCH) # adaptive batching
+add_compile_definitions(RPC_LATENCY)
+add_compile_definitions(LOG_LATENCY)
 
 target_include_directories(ycsb PRIVATE ../lancet)
 target_include_directories(ycsb PRIVATE ../deterdb)
