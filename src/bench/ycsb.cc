@@ -17,7 +17,8 @@ const uint64_t SPAWN_THRESHOLD = 10'000'000;
 const size_t CHANNEL_SIZE = 2;
 
 #ifdef RPC_LATENCY
-using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
+  using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
+  #define RPC_LOG_SIZE 20000000 // 20M txns
 #endif
 
 struct YCSBRow
@@ -382,13 +383,47 @@ int main(int argc, char** argv)
   log_map->reserve(core_cnt - 1);
   counter_map_mutex = new std::mutex();
   
-#ifdef EXTERNAL_THREAD
   when() << [&]() {
     sched.add_external_event_source();
+
+#ifdef ADAPT_BATCH
+    uint64_t req_cnt; 
+  #ifdef RPC_LATENCY
+    std::vector<ts_type>* init_time_log_arr = new std::vector<ts_type>();
+    init_time_log_arr->reserve(RPC_LOG_SIZE);
+    
+    std::string log_dir = "./results/";
+    std::string log_suffix = "-latency.log";
+    std::string log_name = log_dir + argv[7] + log_suffix;
+    FILE* log_fd = fopen(reinterpret_cast<const char*>(log_name.c_str()), "w");   
+    
+    // argv[7]: gen_type
+    RPCHandler rpc_handler(&req_cnt, argv[7], init_time_log_arr);
+  #else 
+    RPCHandler rpc_handler(&req_cnt, argv[7]);
+  #endif  // RPC_LATENCY 
+#endif // ADAPT_BATCH
+       
 #ifndef CORE_PIPE
+  #ifdef ADAPT_BATCH 
+    FileDispatcher<YCSBTransaction> dispatcher(argv[5], 1000, look_ahead, 
+        sizeof(YCSBTransactionMarshalled), core_cnt - 1, PENDING_THRESHOLD, 
+        SPAWN_THRESHOLD, counter_map, counter_map_mutex, &req_cnt
+    #ifdef RPC_LATENCY
+        , init_time_log_arr
+    #endif
+        );
+    // rpc_handler
+    std::thread rpc_handler_thread([&]() mutable {
+      pin_thread(7);
+      rpc_handler.run();
+    });
+  #else
     FileDispatcher<YCSBTransaction> dispatcher(argv[5], 1000, look_ahead, 
         sizeof(YCSBTransactionMarshalled), core_cnt - 1, PENDING_THRESHOLD, 
         SPAWN_THRESHOLD, counter_map, counter_map_mutex);
+
+  #endif // ADAPT_BATCH
     std::thread extern_thrd([&]() mutable {
         pin_thread(9);
         dispatcher.run();
@@ -406,41 +441,22 @@ int main(int argc, char** argv)
     void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, 
         PROT_READ, MAP_PRIVATE, fd, 0));
 
-#ifdef ADAPT_BATCH
-    uint64_t req_cnt; 
-#ifdef RPC_LATENCY
-#define RPC_LOG_SIZE 20000000 // 10M txns
-    std::vector<ts_type>* init_time_log_arr = new std::vector<ts_type>();
-    init_time_log_arr->reserve(RPC_LOG_SIZE);
-    
-    std::string log_dir = "./results/";
-    std::string log_suffix = "-latency.log";
-    std::string log_name = log_dir + argv[7] + log_suffix;
-    FILE* log_fd = fopen(reinterpret_cast<const char*>(log_name.c_str()), "w");   
-    
-    // argv[7]: gen_type
-    RPCHandler rpc_handler(&req_cnt, argv[7], init_time_log_arr);
-#else 
-    RPCHandler rpc_handler(&req_cnt, argv[7]);
-#endif  // RPC_LATENCY 
-#endif // ADAPT_BATCH
-
     rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
-#ifndef ADAPT_BATCH
+  #ifndef ADAPT_BATCH
     Prefetcher<YCSBTransaction> prefetcher(ret, &ring);
     Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
         counter_map_mutex, &ring);
-#else
+  #else
     Prefetcher<YCSBTransaction> prefetcher(ret, &ring, &req_cnt);
-#ifdef RPC_LATENCY
+    #ifdef RPC_LATENCY
     // give init_time_log_arr to spawner. Needed for capturing in when.
     Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
         counter_map_mutex, &ring, init_time_log_arr);
-#else
+    #else
     Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
         counter_map_mutex, &ring);
-#endif
-#endif // ADAPT_BATCH
+    #endif // RPC_LATENCY
+  #endif // ADAPT_BATCH
     std::thread spawner_thread([&]() mutable {
         pin_thread(9);
         spawner.run();
@@ -450,24 +466,28 @@ int main(int argc, char** argv)
         pin_thread(8);
         prefetcher.run();
     });
-#ifdef ADAPT_BATCH
+  #ifdef ADAPT_BATCH
     std::thread rpc_handler_thread([&]() mutable {
       pin_thread(7);
       rpc_handler.run();
     });
-#endif
+  #endif
 
 #endif // CORE_PIPE 
        
 #ifdef LOG_LATENCY
     std::this_thread::sleep_for(std::chrono::seconds(6));
-#ifdef RPC_LATENCY
+  #ifdef CORE_PIPE 
     pthread_cancel(spawner_thread.native_handle());
     pthread_cancel(prefetcher_thread.native_handle());
-    pthread_cancel(rpc_handler_thread.native_handle());
-#else
+  #else
     pthread_cancel(extern_thrd.native_handle());
-#endif
+  #endif // CORE_PIPE
+  
+  #ifdef ADAPT_BATCH
+    pthread_cancel(rpc_handler_thread.native_handle());
+  #endif // ADAPT_BATCH
+
     for (const auto& entry : *log_map) {
       printf("flush entry --ing\n");
       fprintf(log_fd, "flush entry --ing\n");
@@ -477,29 +497,21 @@ int main(int argc, char** argv)
       }
     }
 #else
-
-#ifdef CORE_PIPE
-#ifdef ADAPT_BATCH
+  #ifdef ADAPT_BATCH
     rpc_handler_thread.join();
-#endif
+  #endif // ADAPT_BATCH
+
+  #ifdef CORE_PIPE
     prefetcher_thread.join();
-    //prefetcher_hyper_thread.join();
     spawner_thread.join();
-#else
+  #else
     extern_thrd.join();
-#endif // CORE_PIPE
+  #endif // CORE_PIPE
 
 #endif // LOG_LATENCY
     sched.remove_external_event_source();
   };
-#else
-  auto dispatcher_cown = make_cown<FileDispatcher<YCSBTransaction>>(argv[5], 
-      1000, look_ahead, sizeof(YCSBTransactionMarshalled), core_cnt - 1, 
-      PENDING_THRESHOLD, SPAWN_THRESHOLD, counter_map, counter_map_mutex);
-  when(dispatcher_cown) << [=]
-    (acquired_cown<FileDispatcher<YCSBTransaction>> acq_dispatcher) 
-    { acq_dispatcher->run(); };
-#endif
+
   sched.run();
 
 }
