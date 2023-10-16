@@ -18,7 +18,7 @@ const size_t CHANNEL_SIZE = 2;
 
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
-  #define RPC_LOG_SIZE 20000000 // 20M txns
+  #define RPC_LOG_SIZE 8000000 // 20M txns
 #endif
 
 struct YCSBRow
@@ -100,7 +100,7 @@ public:
 #endif
 
 #ifdef RPC_LATENCY
-  static int parse_and_process(const char* input, ts_type init_time)
+  static int parse_and_process(const char* input, ts_type init_time, bool measure)
 #else
   static int parse_and_process(const char* input)
 #endif // RPC_LATENCY
@@ -154,7 +154,7 @@ public:
 
     using type1 = acquired_cown<Row<YCSBRow>>;
 #ifdef RPC_LATENCY
-    when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [ws_cap, init_time]
+    when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [ws_cap, init_time, measure]
 #else
     when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [ws_cap]
 #endif
@@ -312,14 +312,16 @@ public:
 
       TxCounter::instance().incr();
 #ifdef LOG_LATENCY
+      if (measure) {
       auto time_now = std::chrono::system_clock::now();
       //std::chrono::duration<double> duration = time_now - tx.init_time;
       //std::chrono::duration<double> duration = time_now - exec_init_time;
       std::chrono::duration<double> duration = time_now - init_time;
       // log at precision - 1us
       uint32_t log_duration = static_cast<uint32_t>(duration.count() * 1'000'000);
-      
+     
       TxCounter::instance().log_latency(log_duration);
+      }
 #endif
     };
     return sizeof(YCSBTransactionMarshalled);
@@ -396,7 +398,7 @@ int main(int argc, char** argv)
     std::string log_suffix = "-latency.log";
     std::string log_name = log_dir + argv[7] + log_suffix;
     FILE* log_fd = fopen(reinterpret_cast<const char*>(log_name.c_str()), "w");   
-    
+   
     // argv[7]: gen_type
     RPCHandler rpc_handler(&req_cnt, argv[7], init_time_log_arr);
   #else 
