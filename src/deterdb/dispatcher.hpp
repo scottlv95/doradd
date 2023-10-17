@@ -465,7 +465,9 @@ struct Spawner
   std::vector<uint64_t*> counter_vec;
 
 #ifdef RPC_LATENCY
-  std::vector<ts_type>* init_time_log_arr;
+  //std::vector<ts_type>* init_time_log_arr;
+  uint64_t init_time_log_arr;
+
   int txn_log_id = 0;
   ts_type init_time;
   bool measure = false;
@@ -477,7 +479,8 @@ struct Spawner
       , std::mutex* counter_map_mutex_
       , rigtorp::SPSCQueue<int>* ring_
 #ifdef RPC_LATENCY
-      , std::vector<ts_type>* init_time_log_arr_
+      //, std::vector<ts_type>* init_time_log_arr_
+      , uint64_t init_time_log_arr_
 #endif
       ) : 
     read_top(reinterpret_cast<char*>(mmap_ret)), 
@@ -503,7 +506,6 @@ struct Spawner
     if (counter_map->size() == worker_cnt) 
     {
       counter_registered = true;
-      assert(counter_vec.size() == worker_cnt);
     }
   }
 
@@ -519,9 +521,12 @@ struct Spawner
 #ifdef RPC_LATENCY
   int dispatch_one()
   {
+    //if (measure)
+      //init_time = (*init_time_log_arr)[txn_log_id - INIT_CNT];
     if (measure)
-      init_time = (*init_time_log_arr)[txn_log_id - INIT_CNT];
-    
+      init_time = *reinterpret_cast<ts_type*>(init_time_log_arr 
+          + (uint64_t)sizeof(ts_type)*(txn_log_id - INIT_CNT));
+
     txn_log_id++;
     return T::parse_and_process(read_head, init_time, measure);
   }
@@ -577,9 +582,12 @@ struct Spawner
       { 
         ret = T::prepare_process(prepare_proc_read_head, RW, L1D_LOCALITY);
 #ifdef RPC_LATENCY
-        if (measure)
-          __builtin_prefetch(&(*init_time_log_arr)[txn_log_id-INIT_CNT+i],
-              0, L1D_LOCALITY);
+
+        /*if (measure)
+          __builtin_prefetch(
+              reinterpret_cast<ts_type*>(init_time_log_arr 
+                + (uint64_t)(txn_log_id-INIT_CNT+i)*sizeof(ts_type),
+              0, L1D_LOCALITY));*/
 #endif
         prepare_proc_read_head += ret;
       }

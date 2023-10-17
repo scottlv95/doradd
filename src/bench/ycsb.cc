@@ -18,7 +18,7 @@ const size_t CHANNEL_SIZE = 2;
 
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
-  #define RPC_LOG_SIZE 8000000 // 20M txns
+  #define RPC_LOG_SIZE 5000000 // 20M txns
 #endif
 
 struct YCSBRow
@@ -391,16 +391,20 @@ int main(int argc, char** argv)
 #ifdef ADAPT_BATCH
     uint64_t req_cnt; 
   #ifdef RPC_LATENCY
-    std::vector<ts_type>* init_time_log_arr = new std::vector<ts_type>();
-    init_time_log_arr->reserve(RPC_LOG_SIZE);
-    
+    //std::vector<ts_type>* init_time_log_arr = new std::vector<ts_type>();
+    //init_time_log_arr->reserve(RPC_LOG_SIZE);
+    uint8_t* log_arr = static_cast<uint8_t*>(aligned_alloc_hpage( 
+      RPC_LOG_SIZE *sizeof(ts_type)));
+
+    uint64_t log_arr_addr = (uint64_t)log_arr;
+ 
     std::string log_dir = "./results/";
     std::string log_suffix = "-latency.log";
     std::string log_name = log_dir + argv[7] + log_suffix;
     FILE* log_fd = fopen(reinterpret_cast<const char*>(log_name.c_str()), "w");   
    
     // argv[7]: gen_type
-    RPCHandler rpc_handler(&req_cnt, argv[7], init_time_log_arr);
+    RPCHandler rpc_handler(&req_cnt, argv[7], log_arr_addr);
   #else 
     RPCHandler rpc_handler(&req_cnt, argv[7]);
   #endif  // RPC_LATENCY 
@@ -453,7 +457,7 @@ int main(int argc, char** argv)
     #ifdef RPC_LATENCY
     // give init_time_log_arr to spawner. Needed for capturing in when.
     Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
-        counter_map_mutex, &ring, init_time_log_arr);
+        counter_map_mutex, &ring, log_arr_addr);
     #else
     Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
         counter_map_mutex, &ring);

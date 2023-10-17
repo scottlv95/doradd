@@ -19,9 +19,11 @@ struct RPCHandler
   uint64_t* avail_cnt;
   struct rand_gen *dist; // inter-arrival distribution
 #ifdef RPC_LATENCY
-  std::vector<ts_type>* log_arr;
-  
-  RPCHandler(uint64_t* avail_cnt_, char* gen_type, std::vector<ts_type>* log_arr_) : 
+  //std::vector<ts_type>* log_arr;
+  uint64_t log_arr;
+
+  //RPCHandler(uint64_t* avail_cnt_, char* gen_type, std::vector<ts_type>* log_arr_) : 
+  RPCHandler(uint64_t* avail_cnt_, char* gen_type, uint64_t log_arr_) : 
     avail_cnt(avail_cnt_), log_arr(log_arr_)
 #else
   RPCHandler(uint64_t* avail_cnt_, char* gen_type) : avail_cnt(avail_cnt_)
@@ -29,7 +31,7 @@ struct RPCHandler
   {
     dist = lancet_init_rand(gen_type);
 #ifdef RPC_LATENCY
-    assert(log_arr->size() == RPC_LOG_SIZE);
+    //assert(log_arr->size() == RPC_LOG_SIZE);
 #endif
   }
 
@@ -48,9 +50,12 @@ struct RPCHandler
 
 #ifdef RPC_LATENCY
       if (measure) {
-        if (i++ >= (RPC_LOG_SIZE - INIT_CNT)) break;
-        auto time_now = std::chrono::system_clock::now();
-        log_arr->push_back(time_now);
+        if (i >= (RPC_LOG_SIZE - INIT_CNT)) break;
+        //auto time_now = std::chrono::system_clock::now();
+        //log_arr->push_back(time_now);
+        auto* addr = reinterpret_cast<void*>(
+            log_arr + (uint64_t)(i++ * sizeof(ts_type)));
+        *reinterpret_cast<ts_type*>(addr) = std::chrono::system_clock::now();
       }
 #endif
 
