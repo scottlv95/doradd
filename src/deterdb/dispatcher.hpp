@@ -22,8 +22,8 @@ const size_t BATCH_SPAWNER = 32;
 
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>;
-  #define RPC_LOG_SIZE 8000000
-  #define INIT_CNT     400000 
+  #define RPC_LOG_SIZE 5000000
+  #define INIT_CNT     1000000 
 #endif
 
 template<typename T>
@@ -143,17 +143,28 @@ public:
     if (counter_map->size() == worker_cnt) 
     {
       counter_registered = true;
-      // prefetching all &tx_cnt into dispacher obj
+#ifdef RPC_LATENCY
+      // skip to moving to map
+#else
       for (const auto& counter_pair : *counter_map)
         counter_vec.push_back(counter_pair.second);
+#endif
       assert(counter_vec.size() == worker_cnt);
     }
   }
 
   uint64_t calc_tx_exec_sum()
   {
+#ifdef RPC_LATENCY
+    uint64_t sum = 0;
+   for (const auto& counter_pair : *counter_map) 
+     sum += *(counter_pair.second);
+   
+   return sum;
+#else
     return std::accumulate(counter_vec.begin(), counter_vec.end(), 0ULL, 
       [](uint64_t acc, const uint64_t* val) { return acc + *val; });
+#endif
   }
 
   // check available req cnts
@@ -484,6 +495,7 @@ struct Spawner
     read_head = read_top;
     prepare_proc_read_head = read_top;
     last_print = std::chrono::system_clock::now();;
+    last_tx_exec_sum = 0; 
   }
 
   void track_worker_counter()
@@ -491,23 +503,22 @@ struct Spawner
     if (counter_map->size() == worker_cnt) 
     {
       counter_registered = true;
-      // prefetching all &tx_cnt into dispacher obj
-      for (const auto& counter_pair : *counter_map)
-        counter_vec.push_back(counter_pair.second);
       assert(counter_vec.size() == worker_cnt);
     }
   }
 
   uint64_t calc_tx_exec_sum()
   {
-    return std::accumulate(counter_vec.begin(), counter_vec.end(), 0ULL, 
-      [](uint64_t acc, const uint64_t* val) { return acc + *val; });
+    uint64_t sum = 0;
+    for (const auto& counter_pair : *counter_map) 
+      sum += *(counter_pair.second);
+   
+    return sum;
   }
 
 #ifdef RPC_LATENCY
   int dispatch_one()
   {
-    measure = (txn_log_id >= INIT_CNT) ? true : false;
     if (measure)
       init_time = (*init_time_log_arr)[txn_log_id - INIT_CNT];
     
@@ -534,6 +545,15 @@ struct Spawner
     {
 #ifdef RPC_LATENCY
       if (txn_log_id >= RPC_LOG_SIZE) break;
+      
+      if (!measure) {
+        if (txn_log_id >= INIT_CNT) { 
+          measure = true;
+          last_print = std::chrono::system_clock::now();
+          last_tx_exec_sum = calc_tx_exec_sum();
+          printf("before logging tx_exec_sum is %lu\n", last_tx_exec_sum);
+        }
+      }
 #endif
       if (!ring->front())
         continue;
@@ -574,17 +594,27 @@ struct Spawner
 
       ring->pop();
       // announce throughput
-      auto time_now = std::chrono::system_clock::now();
+#ifdef RPC_LATENCY
+      if (txn_log_id >= RPC_LOG_SIZE) { 
+        auto time_now = std::chrono::system_clock::now();
+#else
       if ((time_now - last_print) > interval) {
+#endif
         std::chrono::duration<double> duration = time_now - last_print;
         auto dur_cnt = duration.count();
         if (counter_registered)
           tx_exec_sum = calc_tx_exec_sum();
+#ifdef RPC_LATENCY
+        printf("spawn - %lf tx/s\n", (txn_log_id - INIT_CNT) / dur_cnt);
+        printf("exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);
+        break;
+#else
         printf("spawn - %lf tx/s\n", tx_count / dur_cnt);
         printf("exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);
         tx_count = 0;
         last_tx_exec_sum = tx_exec_sum;
         last_print = time_now;
+#endif
       }
     }
   }

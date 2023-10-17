@@ -10,8 +10,8 @@
 
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
-  #define RPC_LOG_SIZE   8000000
-  #define INIT_CNT       400000
+  #define RPC_LOG_SIZE   5000000
+  #define INIT_CNT       1000000
 #endif
 
 struct RPCHandler
@@ -62,7 +62,7 @@ struct RPCHandler
           measure = true;
           continue;  
         }
-        next_ts += 1000;
+        next_ts += 2000;
       } else {
         next_ts += gen_inter_arrival(dist);
       }
