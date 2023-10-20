@@ -320,10 +320,12 @@ struct Prefetcher
   rigtorp::SPSCQueue<int>* ring;
 
 #ifdef ADAPT_BATCH
-  uint64_t* recvd_req_cnt;
+  //uint64_t* recvd_req_cnt;
+  std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
 
-  Prefetcher(void* mmap_ret, rigtorp::SPSCQueue<int>* ring_, uint64_t* cnt) :
+  Prefetcher(void* mmap_ret, rigtorp::SPSCQueue<int>* ring_, //uint64_t* cnt) :
+    std::atomic<uint64_t>* cnt) :
     read_top(reinterpret_cast<char*>(mmap_ret)), ring(ring_), recvd_req_cnt(cnt) 
 #else
   
@@ -342,9 +344,14 @@ struct Prefetcher
     size_t dyn_batch;
 
     do {
-      avail_cnt = *recvd_req_cnt - handled_req_cnt;
+      //avail_cnt = *recvd_req_cnt - handled_req_cnt;
+      uint64_t load_val = recvd_req_cnt->load(std::memory_order_relaxed);
+      avail_cnt = load_val - handled_req_cnt;
       if (avail_cnt >= 16) 
+      { 
         dyn_batch = 16;
+        break;
+      }
       //else if (avail_cnt > 0)
       //  dyn_batch = static_cast<size_t>(avail_cnt);
       else
@@ -552,11 +559,13 @@ struct Spawner
       if (txn_log_id >= RPC_LOG_SIZE) break;
       
       if (!measure) {
-        if (txn_log_id >= INIT_CNT) { 
+        if (txn_log_id > INIT_CNT) { 
           measure = true;
           last_print = std::chrono::system_clock::now();
-          last_tx_exec_sum = calc_tx_exec_sum();
-          printf("before logging tx_exec_sum is %lu\n", last_tx_exec_sum);
+          if (counter_registered) {
+            last_tx_exec_sum = calc_tx_exec_sum();
+            printf("before logging tx_exec_sum is %lu\n", last_tx_exec_sum);
+          }
         }
       }
 #endif

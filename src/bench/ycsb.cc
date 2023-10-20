@@ -389,10 +389,9 @@ int main(int argc, char** argv)
     sched.add_external_event_source();
 
 #ifdef ADAPT_BATCH
-    uint64_t req_cnt; 
+    //uint64_t req_cnt = 0; 
+    std::atomic<uint64_t> req_cnt(0);
   #ifdef RPC_LATENCY
-    //std::vector<ts_type>* init_time_log_arr = new std::vector<ts_type>();
-    //init_time_log_arr->reserve(RPC_LOG_SIZE);
     uint8_t* log_arr = static_cast<uint8_t*>(aligned_alloc_hpage( 
       RPC_LOG_SIZE *sizeof(ts_type)));
 
@@ -482,7 +481,7 @@ int main(int argc, char** argv)
 #endif // CORE_PIPE 
        
 #ifdef LOG_LATENCY
-    std::this_thread::sleep_for(std::chrono::seconds(6));
+    std::this_thread::sleep_for(std::chrono::seconds(10));
   #ifdef CORE_PIPE 
     pthread_cancel(spawner_thread.native_handle());
     pthread_cancel(prefetcher_thread.native_handle());
