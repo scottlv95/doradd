@@ -23,7 +23,7 @@ const size_t BATCH_SPAWNER = 32;
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>;
   #define RPC_LOG_SIZE 5000000
-  #define INIT_CNT     1000000 
+  #define INIT_CNT     1000000
 #endif
 
 template<typename T>
@@ -320,11 +320,10 @@ struct Prefetcher
   rigtorp::SPSCQueue<int>* ring;
 
 #ifdef ADAPT_BATCH
-  //uint64_t* recvd_req_cnt;
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
 
-  Prefetcher(void* mmap_ret, rigtorp::SPSCQueue<int>* ring_, //uint64_t* cnt) :
+  Prefetcher(void* mmap_ret, rigtorp::SPSCQueue<int>* ring_, 
     std::atomic<uint64_t>* cnt) :
     read_top(reinterpret_cast<char*>(mmap_ret)), ring(ring_), recvd_req_cnt(cnt) 
 #else
@@ -344,23 +343,19 @@ struct Prefetcher
     size_t dyn_batch;
 
     do {
-      //avail_cnt = *recvd_req_cnt - handled_req_cnt;
       uint64_t load_val = recvd_req_cnt->load(std::memory_order_relaxed);
       avail_cnt = load_val - handled_req_cnt;
       if (avail_cnt >= 16) 
-      { 
         dyn_batch = 16;
-        break;
-      }
-      //else if (avail_cnt > 0)
-      //  dyn_batch = static_cast<size_t>(avail_cnt);
+      else if (avail_cnt > 0)
+        dyn_batch = static_cast<size_t>(avail_cnt);
       else
       {
         _mm_pause();
         continue;  
       }
-    //} while (avail_cnt == 0);
-    } while (avail_cnt < 16);
+    } while (avail_cnt == 0);
+    //} while (avail_cnt < 16);
     return dyn_batch;
   }
 
@@ -472,7 +467,6 @@ struct Spawner
   std::vector<uint64_t*> counter_vec;
 
 #ifdef RPC_LATENCY
-  //std::vector<ts_type>* init_time_log_arr;
   uint64_t init_time_log_arr;
 
   int txn_log_id = 0;
@@ -486,7 +480,6 @@ struct Spawner
       , std::mutex* counter_map_mutex_
       , rigtorp::SPSCQueue<int>* ring_
 #ifdef RPC_LATENCY
-      //, std::vector<ts_type>* init_time_log_arr_
       , uint64_t init_time_log_arr_
 #endif
       ) : 
@@ -528,8 +521,6 @@ struct Spawner
 #ifdef RPC_LATENCY
   int dispatch_one()
   {
-    //if (measure)
-      //init_time = (*init_time_log_arr)[txn_log_id - INIT_CNT];
     if (measure)
       init_time = *reinterpret_cast<ts_type*>(init_time_log_arr 
           + (uint64_t)sizeof(ts_type)*(txn_log_id - INIT_CNT));
@@ -572,8 +563,8 @@ struct Spawner
       if (!ring->front())
         continue;
 #ifdef ADAPT_BATCH
-      //batch_sz = static_cast<size_t>(*ring->front());
-      batch_sz = 16;
+      batch_sz = static_cast<size_t>(*ring->front());
+      //batch_sz = 16;
 #else
       batch_sz = BATCH_SPAWNER;
 #endif
