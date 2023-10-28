@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include "spscq.hpp"
 #include "hugepage.hpp"
+#include "warmup.hpp"
 
 const size_t BATCH_PREFETCHER = 32;
 const size_t BATCH_SPAWNER = 32; 
@@ -23,7 +24,7 @@ const size_t BATCH_SPAWNER = 32;
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>;
   #define RPC_LOG_SIZE 5000000
-  #define INIT_CNT     1000000
+  #define INIT_CNT     2
 #endif
 
 template<typename T>
@@ -544,6 +545,9 @@ struct Spawner
     size_t i;
     size_t batch_sz;
 
+    prepare_run();
+
+    // run
     while(1)
     {
 #ifdef RPC_LATENCY
