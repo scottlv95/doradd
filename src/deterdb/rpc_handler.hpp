@@ -10,8 +10,7 @@
 
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
-  #define RPC_LOG_SIZE   5000000
-  #define INIT_CNT       1000000  
+  #define RPC_LOG_SIZE   4000000
 #endif
 
 struct RPCHandler
@@ -33,10 +32,7 @@ struct RPCHandler
   void run() 
   {
     long next_ts = time_ns();
-    int i, init_i = 0;
-#ifdef RPC_LATENCY
-    bool measure = false;
-#endif
+    int i = 0;
 
     // spinning and populating cnts
     while(1)
@@ -44,29 +40,14 @@ struct RPCHandler
       while(time_ns() < next_ts) _mm_pause();
 
 #ifdef RPC_LATENCY
-      if (measure) {
-        if (i >= (RPC_LOG_SIZE - INIT_CNT)) break;
-        auto* addr = reinterpret_cast<void*>(
-            log_arr + (uint64_t)(i++ * sizeof(ts_type)));
-        *reinterpret_cast<ts_type*>(addr) = std::chrono::system_clock::now();
-      }
+      if (i >= RPC_LOG_SIZE) break;
+      auto* addr = reinterpret_cast<void*>(
+        log_arr + (uint64_t)(i++ * sizeof(ts_type)));
+      *reinterpret_cast<ts_type*>(addr) = std::chrono::system_clock::now();
 #endif
 
       avail_cnt->fetch_add(1, std::memory_order_relaxed);
-
-#ifdef RPC_LATENCY
-      if (!measure) {
-        if (init_i++ > INIT_CNT - 1) {
-          measure = true;
-          continue;  
-        }
-        next_ts += 1000;
-      } else {
-        next_ts += gen_inter_arrival(dist);
-      }
-#else
       next_ts += gen_inter_arrival(dist);
-#endif
     }
   }
 };

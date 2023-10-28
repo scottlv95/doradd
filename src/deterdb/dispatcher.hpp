@@ -23,8 +23,7 @@ const size_t BATCH_SPAWNER = 32;
 
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>;
-  #define RPC_LOG_SIZE 5000000
-  #define INIT_CNT     2
+  #define RPC_LOG_SIZE 4000000
 #endif
 
 template<typename T>
@@ -194,12 +193,11 @@ public:
 #ifdef RPC_LATENCY
   int dispatch_one()
   {
-    bool measure = (txn_log_id >= INIT_CNT) ? true : false;
-    if (measure)
-      init_time = (*init_time_log_arr)[txn_log_id - INIT_CNT];
-    
+    init_time = *reinterpret_cast<ts_type*>(init_time_log_arr 
+      + (uint64_t)sizeof(ts_type) * txn_log_id);
+
     txn_log_id++;
-    return T::parse_and_process(read_head, init_time, measure);
+    return T::parse_and_process(read_head, init_time);
   }
 #else
   int dispatch_one()
@@ -229,10 +227,6 @@ public:
     {
       prefetch_ret = T::prepare_process(prepare_proc_read_head, RW,
         L1D_LOCALITY);
-#ifdef RPC_LATENCY
-      if (txn_log_id >= INIT_CNT)
-        __builtin_prefetch(&(*init_time_log_arr)[txn_log_id - INIT_CNT + k], 0, L1D_LOCALITY);
-#endif
       prepare_proc_read_head += prefetch_ret;
     }
 #endif
@@ -469,10 +463,8 @@ struct Spawner
 
 #ifdef RPC_LATENCY
   uint64_t init_time_log_arr;
-
   int txn_log_id = 0;
   ts_type init_time;
-  bool measure = false;
 #endif  
 
   Spawner(void* mmap_ret
@@ -498,7 +490,7 @@ struct Spawner
     printf("read_count in spawner is %d\n", read_count);
     read_head = read_top;
     prepare_proc_read_head = read_top;
-    last_print = std::chrono::system_clock::now();;
+    //last_print = std::chrono::system_clock::now();;
     last_tx_exec_sum = 0; 
   }
 
@@ -522,12 +514,11 @@ struct Spawner
 #ifdef RPC_LATENCY
   int dispatch_one()
   {
-    if (measure)
-      init_time = *reinterpret_cast<ts_type*>(init_time_log_arr 
-          + (uint64_t)sizeof(ts_type)*(txn_log_id - INIT_CNT));
+    init_time = *reinterpret_cast<ts_type*>(init_time_log_arr 
+      + (uint64_t)sizeof(ts_type) * txn_log_id);
 
     txn_log_id++;
-    return T::parse_and_process(read_head, init_time, measure);
+    return T::parse_and_process(read_head, init_time);
   }
 #else
   int dispatch_one()
@@ -545,30 +536,24 @@ struct Spawner
     size_t i;
     size_t batch_sz;
 
+    // warm-up
     prepare_run();
 
     // run
     while(1)
     {
 #ifdef RPC_LATENCY
-      if (txn_log_id >= RPC_LOG_SIZE) break;
+      if (txn_log_id == 0)
+        last_print = std::chrono::system_clock::now();
       
-      if (!measure) {
-        if (txn_log_id > INIT_CNT) { 
-          measure = true;
-          last_print = std::chrono::system_clock::now();
-          if (counter_registered) {
-            last_tx_exec_sum = calc_tx_exec_sum();
-            printf("before logging tx_exec_sum is %lu\n", last_tx_exec_sum);
-          }
-        }
-      }
+      if (txn_log_id >= RPC_LOG_SIZE) break;    
 #endif
+        
       if (!ring->front())
         continue;
+
 #ifdef ADAPT_BATCH
       batch_sz = static_cast<size_t>(*ring->front());
-      //batch_sz = 16;
 #else
       batch_sz = BATCH_SPAWNER;
 #endif
@@ -585,14 +570,6 @@ struct Spawner
       for (i = 0; i < batch_sz; i++)
       { 
         ret = T::prepare_process(prepare_proc_read_head, RW, L1D_LOCALITY);
-#ifdef RPC_LATENCY
-
-        /*if (measure)
-          __builtin_prefetch(
-              reinterpret_cast<ts_type*>(init_time_log_arr 
-                + (uint64_t)(txn_log_id-INIT_CNT+i)*sizeof(ts_type),
-              0, L1D_LOCALITY));*/
-#endif
         prepare_proc_read_head += ret;
       }
 #endif
@@ -617,7 +594,7 @@ struct Spawner
         if (counter_registered)
           tx_exec_sum = calc_tx_exec_sum();
 #ifdef RPC_LATENCY
-        printf("spawn - %lf tx/s\n", (txn_log_id - INIT_CNT) / dur_cnt);
+        printf("spawn - %lf tx/s\n", txn_log_id / dur_cnt);
         printf("exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);
         break;
 #else

@@ -18,7 +18,7 @@ const size_t CHANNEL_SIZE = 2;
 
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
-  #define RPC_LOG_SIZE 5000000 // 20M txns
+  #define RPC_LOG_SIZE 4000000 // 20M txns
 #endif
 
 struct YCSBRow
@@ -100,7 +100,7 @@ public:
 #endif
 
 #ifdef RPC_LATENCY
-  static int parse_and_process(const char* input, ts_type init_time, bool measure)
+  static int parse_and_process(const char* input, ts_type init_time)
 #else
   static int parse_and_process(const char* input)
 #endif // RPC_LATENCY
@@ -154,7 +154,7 @@ public:
 
     using type1 = acquired_cown<Row<YCSBRow>>;
 #ifdef RPC_LATENCY
-    when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [ws_cap, init_time, measure]
+    when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [ws_cap, init_time]
 #else
     when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [ws_cap]
 #endif
@@ -312,7 +312,6 @@ public:
 
       TxCounter::instance().incr();
 #ifdef LOG_LATENCY
-      if (measure) {
       auto time_now = std::chrono::system_clock::now();
       //std::chrono::duration<double> duration = time_now - tx.init_time;
       //std::chrono::duration<double> duration = time_now - exec_init_time;
@@ -321,7 +320,6 @@ public:
       uint32_t log_duration = static_cast<uint32_t>(duration.count() * 1'000'000);
      
       TxCounter::instance().log_latency(log_duration);
-      }
 #endif
     };
     return sizeof(YCSBTransactionMarshalled);
@@ -442,7 +440,7 @@ int main(int argc, char** argv)
     struct stat sb;
     fstat(fd, &sb);
     void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, 
-        PROT_READ, MAP_PRIVATE, fd, 0));
+        PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0));
 
     rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
   #ifndef ADAPT_BATCH
@@ -462,20 +460,24 @@ int main(int argc, char** argv)
   #endif // ADAPT_BATCH
   
   when() << [&]() {
+    printf("start in external_thread\n");
     //sched.add_external_event_source();
 
     std::thread spawner_thread([&]() mutable {
         pin_thread(9);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
         spawner.run();
     });
 
     std::thread prefetcher_thread([&]() mutable {
         pin_thread(8);
+        std::this_thread::sleep_for(std::chrono::seconds(2));
         prefetcher.run();
     });
   #ifdef ADAPT_BATCH
     std::thread rpc_handler_thread([&]() mutable {
       pin_thread(7);
+      std::this_thread::sleep_for(std::chrono::seconds(4));
       rpc_handler.run();
     });
   #endif
@@ -483,7 +485,7 @@ int main(int argc, char** argv)
 #endif // CORE_PIPE 
        
 #ifdef LOG_LATENCY
-    std::this_thread::sleep_for(std::chrono::seconds(20));
+    std::this_thread::sleep_for(std::chrono::seconds(15));
   #ifdef CORE_PIPE 
     pthread_cancel(spawner_thread.native_handle());
     pthread_cancel(prefetcher_thread.native_handle());
