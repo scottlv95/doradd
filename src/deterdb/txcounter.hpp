@@ -4,9 +4,16 @@
 #include <unordered_map>
 #include <mutex>
 #include <vector>
+#include <tuple>
+
+#ifdef LOG_SCHED_OHEAD
+using log_arr_type = std::vector<std::tuple<uint32_t, uint32_t>>;
+#else
+using log_arr_type = std::vector<uint32_t>;
+#endif
 
 extern std::unordered_map<std::thread::id, uint64_t*>* counter_map;
-extern std::unordered_map<std::thread::id, std::vector<uint32_t>*>* log_map;
+extern std::unordered_map<std::thread::id, log_arr_type*>* log_map;
 extern std::mutex* counter_map_mutex;
 
 /* Thread-local singleton TxCounter */
@@ -25,15 +32,25 @@ struct TxCounter {
   void incr() { tx_cnt++; }
 
 #ifdef LOG_LATENCY
+  #ifdef LOG_SCHED_OHEAD
+  void log_latency(uint32_t exec_time, uint32_t txn_time) {
+    log_arr->push_back({exec_time, txn_time});
+  }
+  #else
   void log_latency(uint32_t exec_time) {
     log_arr->push_back(exec_time);  
   }
+  #endif
 #endif
 
 private:
   uint64_t tx_cnt; 
 #ifdef LOG_LATENCY
+  #ifdef LOG_SCHED_OHEAD
+  std::vector<std::tuple<uint32_t, uint32_t>>* log_arr;
+  #else
   std::vector<uint32_t>* log_arr; 
+  #endif
 #endif
   
   TxCounter()  {
@@ -41,8 +58,12 @@ private:
     std::lock_guard<std::mutex> lock(*counter_map_mutex);
     (*counter_map)[std::this_thread::get_id()] = &tx_cnt;
 #ifdef LOG_LATENCY
-#define LOG_SIZE 700000
+#define LOG_SIZE 1000000
+  #ifdef LOG_SCHED_OHEAD
+    log_arr = new std::vector<std::tuple<uint32_t, uint32_t>>();
+  #else
     log_arr = new std::vector<uint32_t>();
+  #endif
     log_arr->reserve(LOG_SIZE);
     (*log_map)[std::this_thread::get_id()] = log_arr;
 #endif

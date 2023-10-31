@@ -32,6 +32,7 @@ add_compile_definitions(CORE_PIPE)
 add_compile_definitions(ADAPT_BATCH) # adaptive batching
 add_compile_definitions(RPC_LATENCY)
 add_compile_definitions(LOG_LATENCY)
+add_compile_definitions(LOG_SCHED_OHEAD)
 
 target_include_directories(ycsb PRIVATE ../lancet)
 target_include_directories(ycsb PRIVATE ../deterdb)

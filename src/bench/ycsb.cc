@@ -160,8 +160,8 @@ public:
 #endif
       (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
     {
-#ifdef LOG_LATENCY
-    //auto exec_init_time = std::chrono::system_clock::now(); 
+#ifdef LOG_SCHED_OHEAD 
+      auto exec_init_time = std::chrono::system_clock::now(); 
 #endif
 
 #ifdef PREFETCH_ROW
@@ -317,9 +317,15 @@ public:
       //std::chrono::duration<double> duration = time_now - exec_init_time;
       std::chrono::duration<double> duration = time_now - init_time;
       // log at precision - 1us
-      uint32_t log_duration = static_cast<uint32_t>(duration.count() * 1'000'000);
-     
+      uint32_t log_duration = static_cast<uint32_t>(duration.count() * 10'000'000);
+  #ifdef LOG_SCHED_OHEAD
+      std::chrono::duration<double> duration_1 = time_now - exec_init_time;
+      uint32_t log_duration_1 = 
+        static_cast<uint32_t>(duration_1.count() * 10'000'000);
+      TxCounter::instance().log_latency(log_duration, log_duration_1);
+  #else
       TxCounter::instance().log_latency(log_duration);
+  #endif
 #endif
     };
     return sizeof(YCSBTransactionMarshalled);
@@ -328,10 +334,16 @@ public:
   YCSBTransaction& operator=(const YCSBTransaction&) = delete;
 };
 
+#ifdef LOG_SCHED_OHEAD
+using log_arr_type = std::vector<std::tuple<uint32_t, uint32_t>>;
+#else
+using log_arr_type = std::vector<uint32_t>;
+#endif
+
 Index<YCSBRow>* YCSBTransaction::index;
 uint64_t YCSBTransaction::cown_base_addr;
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
-std::unordered_map<std::thread::id, std::vector<uint32_t>*>* log_map;
+std::unordered_map<std::thread::id, log_arr_type*>* log_map;
 std::mutex* counter_map_mutex;
 
 int main(int argc, char** argv)
@@ -379,7 +391,9 @@ int main(int argc, char** argv)
 
   counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
   counter_map->reserve(core_cnt - 1);
-  log_map = new std::unordered_map<std::thread::id, std::vector<uint32_t>*>();
+
+ 
+  log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
   log_map->reserve(core_cnt - 1);
   counter_map_mutex = new std::mutex();
   
@@ -485,7 +499,7 @@ int main(int argc, char** argv)
 #endif // CORE_PIPE 
        
 #ifdef LOG_LATENCY
-    std::this_thread::sleep_for(std::chrono::seconds(15));
+    std::this_thread::sleep_for(std::chrono::seconds(20));
   #ifdef CORE_PIPE 
     pthread_cancel(spawner_thread.native_handle());
     pthread_cancel(prefetcher_thread.native_handle());
@@ -501,8 +515,14 @@ int main(int argc, char** argv)
       printf("flush entry --ing\n");
       fprintf(log_fd, "flush entry --ing\n");
       if (entry.second) {
+  #ifdef LOG_SCHED_OHEAD
+        for (std::tuple<uint32_t, uint32_t> value_tuple : *(entry.second))
+          fprintf(log_fd, "%u %u\n", 
+              std::get<0>(value_tuple), std::get<1>(value_tuple));
+  #else
         for (auto value : *(entry.second)) 
           fprintf(log_fd, "%u\n", value);                  
+  #endif // LOG_SCHED_OHEAD
       }
     }
 #else
