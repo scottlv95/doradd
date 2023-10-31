@@ -38,9 +38,9 @@ struct YCSBTransaction
 {
 public:
   // Bit field. Assume less than 16 concurrent rows per transaction
-  uint16_t write_set;
+  // uint16_t write_set;
 #ifdef LOG_LATENCY
-  std::chrono::time_point<std::chrono::system_clock> init_time;
+  // std::chrono::time_point<std::chrono::system_clock> init_time;
 #endif
   static Index<YCSBRow>* index;
   static uint64_t cown_base_addr;
@@ -317,7 +317,7 @@ public:
       //std::chrono::duration<double> duration = time_now - exec_init_time;
       std::chrono::duration<double> duration = time_now - init_time;
       // log at precision - 1us
-      uint32_t log_duration = static_cast<uint32_t>(duration.count() * 10'000'000);
+      uint32_t log_duration = static_cast<uint32_t>(duration.count() * 1'000'000);
   #ifdef LOG_SCHED_OHEAD
       std::chrono::duration<double> duration_1 = time_now - exec_init_time;
       uint32_t log_duration_1 = 
@@ -499,7 +499,7 @@ int main(int argc, char** argv)
 #endif // CORE_PIPE 
        
 #ifdef LOG_LATENCY
-    std::this_thread::sleep_for(std::chrono::seconds(20));
+    std::this_thread::sleep_for(std::chrono::seconds(12));
   #ifdef CORE_PIPE 
     pthread_cancel(spawner_thread.native_handle());
     pthread_cancel(prefetcher_thread.native_handle());

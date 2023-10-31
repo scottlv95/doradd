@@ -23,7 +23,8 @@ struct RPCHandler
   RPCHandler(std::atomic<uint64_t>* avail_cnt_, char* gen_type, 
     uint64_t log_arr_) : avail_cnt(avail_cnt_), log_arr(log_arr_)
 #else
-  RPCHandler(uint64_t* avail_cnt_, char* gen_type) : avail_cnt(avail_cnt_)
+  RPCHandler(std::atomic<uint64_t>* avail_cnt_, char* gen_type) :
+    avail_cnt(avail_cnt_)
 #endif
   {
     dist = lancet_init_rand(gen_type);

@@ -15,6 +15,7 @@
 
 const size_t BATCH_PREFETCHER = 32;
 const size_t BATCH_SPAWNER = 32; 
+using ts_type = std::chrono::time_point<std::chrono::system_clock>;
 
 #define BATCH 16 
 #define RW 1
@@ -22,7 +23,6 @@ const size_t BATCH_SPAWNER = 32;
 #define L1D_LOCALITY 3
 
 #ifdef RPC_LATENCY
-  using ts_type = std::chrono::time_point<std::chrono::system_clock>;
   #define RPC_LOG_SIZE 4000000
 #endif
 
@@ -135,7 +135,9 @@ public:
     last_tx_exec_sum = 0;
     counter_registered = false;
     last_print = std::chrono::system_clock::now();;
+#ifdef RPC_LATENCY
     init_time = last_print;
+#endif
   }
 
   void track_worker_counter()
@@ -167,6 +169,7 @@ public:
 #endif
   }
 
+#ifdef ADAPT_BATCH
   // check available req cnts
   size_t check_avail_cnts()
   {
@@ -189,6 +192,7 @@ public:
 
     return dyn_batch;
   }
+#endif
 
 #ifdef RPC_LATENCY
   int dispatch_one()
@@ -331,6 +335,7 @@ struct Prefetcher
     read_top += sizeof(uint32_t);
   }
 
+#ifdef ADAPT_BATCH
   // check available req cnts
   size_t check_avail_cnts()
   {
@@ -353,6 +358,7 @@ struct Prefetcher
     //} while (avail_cnt < 16);
     return dyn_batch;
   }
+#endif
 
   void run() 
   {
@@ -582,13 +588,14 @@ struct Spawner
       }
 
       ring->pop();
+
       // announce throughput
 #ifdef RPC_LATENCY
       if (txn_log_id >= RPC_LOG_SIZE) { 
-        auto time_now = std::chrono::system_clock::now();
 #else
-      if ((time_now - last_print) > interval) {
+      if (tx_count >= 4'000'000) {
 #endif
+        auto time_now = std::chrono::system_clock::now();
         std::chrono::duration<double> duration = time_now - last_print;
         auto dur_cnt = duration.count();
         if (counter_registered)
