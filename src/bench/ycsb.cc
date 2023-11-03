@@ -12,13 +12,12 @@ constexpr uint32_t ROWS_PER_TX = 10;
 constexpr uint32_t ROW_SIZE = 900;
 constexpr uint32_t WRITE_SIZE = 100;
 const uint64_t ROW_COUNT = 10'000'000;
-const uint64_t PENDING_THRESHOLD = 1'000'000;
-const uint64_t SPAWN_THRESHOLD = 10'000'000;
+//const uint64_t PENDING_THRESHOLD = 100'000;
+//const uint64_t SPAWN_THRESHOLD = 100'000;
 const size_t CHANNEL_SIZE = 2;
 
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
-  #define RPC_LOG_SIZE 4000000 // 20M txns
 #endif
 
 struct YCSBRow
@@ -475,23 +474,23 @@ int main(int argc, char** argv)
   
   when() << [&]() {
     printf("start in external_thread\n");
-    //sched.add_external_event_source();
+    sched.add_external_event_source();
 
     std::thread spawner_thread([&]() mutable {
-        pin_thread(9);
+        pin_thread(1);
         std::this_thread::sleep_for(std::chrono::seconds(1));
         spawner.run();
     });
 
     std::thread prefetcher_thread([&]() mutable {
-        pin_thread(8);
+        pin_thread(2);
         std::this_thread::sleep_for(std::chrono::seconds(2));
         prefetcher.run();
     });
   #ifdef ADAPT_BATCH
     std::thread rpc_handler_thread([&]() mutable {
-      pin_thread(7);
-      std::this_thread::sleep_for(std::chrono::seconds(4));
+      pin_thread(3);
+      std::this_thread::sleep_for(std::chrono::seconds(5));
       rpc_handler.run();
     });
   #endif
@@ -499,7 +498,7 @@ int main(int argc, char** argv)
 #endif // CORE_PIPE 
        
 #ifdef LOG_LATENCY
-    std::this_thread::sleep_for(std::chrono::seconds(12));
+    std::this_thread::sleep_for(std::chrono::seconds(20));
   #ifdef CORE_PIPE 
     pthread_cancel(spawner_thread.native_handle());
     pthread_cancel(prefetcher_thread.native_handle());
@@ -538,7 +537,7 @@ int main(int argc, char** argv)
   #endif // CORE_PIPE
 
 #endif // LOG_LATENCY
-    //sched.remove_external_event_source();
+    sched.remove_external_event_source();
   };
 
   sched.run();

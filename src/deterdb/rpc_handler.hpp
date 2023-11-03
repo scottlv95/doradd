@@ -10,7 +10,6 @@
 
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
-  #define RPC_LOG_SIZE   4000000
 #endif
 
 struct RPCHandler
@@ -41,7 +40,10 @@ struct RPCHandler
       while(time_ns() < next_ts) _mm_pause();
 
 #ifdef RPC_LATENCY
-      if (i >= RPC_LOG_SIZE) break;
+      if (i >= RPC_LOG_SIZE) {
+        printf("entire reqs are %d\n", i);
+        break;
+      }
       auto* addr = reinterpret_cast<void*>(
         log_arr + (uint64_t)(i++ * sizeof(ts_type)));
       *reinterpret_cast<ts_type*>(addr) = std::chrono::system_clock::now();
