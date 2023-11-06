@@ -396,8 +396,6 @@ int main(int argc, char** argv)
   log_map->reserve(core_cnt - 1);
   counter_map_mutex = new std::mutex();
   
-  //when() << [&]() {
-  //  sched.add_external_event_source();
 #ifdef ADAPT_BATCH
     std::atomic<uint64_t> req_cnt(0);
   #ifdef RPC_LATENCY
@@ -421,12 +419,16 @@ int main(int argc, char** argv)
 #ifndef CORE_PIPE
   #ifdef ADAPT_BATCH 
     FileDispatcher<YCSBTransaction> dispatcher(argv[5], 1000, look_ahead, 
-        sizeof(YCSBTransactionMarshalled), core_cnt - 1, PENDING_THRESHOLD, 
-        SPAWN_THRESHOLD, counter_map, counter_map_mutex, &req_cnt
+        sizeof(YCSBTransactionMarshalled), core_cnt - 1,
+        counter_map, counter_map_mutex, &req_cnt
     #ifdef RPC_LATENCY
-        , init_time_log_arr
+        , log_arr_addr 
     #endif
         );
+  
+  when() << [&]() {
+    printf("start in external_thread\n");
+
     // rpc_handler
     std::thread rpc_handler_thread([&]() mutable {
       pin_thread(7);
@@ -434,8 +436,8 @@ int main(int argc, char** argv)
     });
   #else
     FileDispatcher<YCSBTransaction> dispatcher(argv[5], 1000, look_ahead, 
-        sizeof(YCSBTransactionMarshalled), core_cnt - 1, PENDING_THRESHOLD, 
-        SPAWN_THRESHOLD, counter_map, counter_map_mutex);
+        sizeof(YCSBTransactionMarshalled), core_cnt - 1, 
+        counter_map, counter_map_mutex);
 
   #endif // ADAPT_BATCH
     std::thread extern_thrd([&]() mutable {
