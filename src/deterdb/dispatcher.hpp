@@ -39,12 +39,14 @@ private:
   char* prepare_read_head;  // prepare_parse ptr
   char* prepare_proc_read_head;                           
   uint64_t tx_count;
-  uint64_t tx_spawn_sum; // spawned txn counts
-  uint64_t tx_exec_sum;  // executed txn counts 
+  uint64_t tx_spawn_sum; // spawned trxn counts
+  uint64_t tx_exec_sum;  // executed trxn counts 
   uint64_t last_tx_exec_sum; 
+  uint64_t pending_threshold;
+  uint64_t spawn_threshold;
 
 #ifdef ADAPT_BATCH
-  std::atomic<uint64_t>* recvd_req_cnt;
+  uint64_t* recvd_req_cnt;
   uint64_t handled_req_cnt = 0;
 #endif
 
@@ -55,7 +57,7 @@ private:
   std::vector<uint64_t*> counter_vec;
 
 #ifdef RPC_LATENCY
-  uint64_t init_time_log_arr;
+  std::vector<ts_type>* init_time_log_arr;
   int txn_log_id = 0;
   bool measure = false;
   ts_type init_time;
@@ -67,18 +69,22 @@ public:
       , size_t look_ahead_
       , size_t log_marshall_sz_
       , uint8_t worker_cnt_
+      , uint64_t pending_threshold_
+      , uint64_t spawn_threshold_
       , std::unordered_map<std::thread::id, uint64_t*>* counter_map_
       , std::mutex* counter_map_mutex_
 #ifdef ADAPT_BATCH
-      , std::atomic<uint64_t>* recvd_req_cnt_
+      , uint64_t* recvd_req_cnt_
 #endif
 #ifdef RPC_LATENCY
-      , uint64_t init_time_log_arr_
+      , std::vector<ts_type>* init_time_log_arr_
 #endif
       ) : batch(batch_),
           look_ahead(look_ahead_),
           log_marshall_sz(log_marshall_sz_),
           worker_cnt(worker_cnt_), 
+          pending_threshold(pending_threshold_), 
+          spawn_threshold(spawn_threshold_), 
           counter_map(counter_map_),
           counter_map_mutex(counter_map_mutex_)
 #ifdef ADAPT_BATCH
@@ -95,6 +101,7 @@ public:
       exit(1);
     }
 
+    //void* buf = aligned_alloc_hpage_fd(fd);
     struct stat sb;
     fstat(fd, &sb);
     void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, PROT_READ,
@@ -102,13 +109,22 @@ public:
 
     char* content = reinterpret_cast<char*>(ret);
     rnd = 1;
+#ifdef INTERLEAVE
+    idx = 1 * look_ahead;
+#else
     idx = 0;
+#endif
     count = *(reinterpret_cast<uint32_t*>(content));
     printf("log count is %u\n", count);
     content += sizeof(uint32_t);
     read_head = content;
     prepare_read_head = content;
+#ifdef INTERLEAVE
+    assert(log_marshall_sz % 64 == 0);
+    prepare_proc_read_head = content + log_marshall_sz * look_ahead * 1;
+#else
     prepare_proc_read_head = content;
+#endif
     read_top = content;
     tx_count = 0;
     tx_spawn_sum = 0;
@@ -126,16 +142,28 @@ public:
     if (counter_map->size() == worker_cnt) 
     {
       counter_registered = true;
+#ifdef RPC_LATENCY
+      // skip to moving to map
+#else
+      for (const auto& counter_pair : *counter_map)
+        counter_vec.push_back(counter_pair.second);
+#endif
+      assert(counter_vec.size() == worker_cnt);
     }
   }
 
   uint64_t calc_tx_exec_sum()
   {
+#ifdef RPC_LATENCY
     uint64_t sum = 0;
-    for (const auto& counter_pair : *counter_map) 
+   for (const auto& counter_pair : *counter_map) 
      sum += *(counter_pair.second);
    
    return sum;
+#else
+    return std::accumulate(counter_vec.begin(), counter_vec.end(), 0ULL, 
+      [](uint64_t acc, const uint64_t* val) { return acc + *val; });
+#endif
   }
 
 #ifdef ADAPT_BATCH
@@ -146,18 +174,18 @@ public:
     size_t dyn_batch;
 
     do {
-      uint64_t load_val = recvd_req_cnt->load(std::memory_order_relaxed);
-      avail_cnt = load_val - handled_req_cnt;
-      if (avail_cnt >= 16) 
-        dyn_batch = 16;
-      else if (avail_cnt > 0)
-        dyn_batch = static_cast<size_t>(avail_cnt);
+      avail_cnt = *recvd_req_cnt - handled_req_cnt;
+      if (avail_cnt >= BATCH) 
+        dyn_batch = BATCH;
+      //else if (avail_cnt > 0)
+      //  dyn_batch = static_cast<size_t>(avail_cnt);
       else
       {
         _mm_pause();
         continue;  
       }
-    } while (avail_cnt == 0);
+    //} while (avail_cnt == 0);
+    } while (avail_cnt < BATCH);
 
     return dyn_batch;
   }
@@ -206,14 +234,7 @@ public:
 
     // dispatch 
     for (int j = 0; j < look_ahead; j++)
-    {      
-      if (idx >= count) 
-      {
-        idx = 0;
-        read_head = read_top;
-        prepare_read_head = read_top;
-        prepare_proc_read_head = read_top;
-      }
+    {
       dispatch_ret = dispatch_one();
       read_head += dispatch_ret;
       ret += dispatch_ret;
@@ -230,7 +251,6 @@ public:
 
 #endif 
 
-#if 0
   bool over_pending()
   {
     tx_exec_sum = calc_tx_exec_sum();
@@ -238,7 +258,6 @@ public:
     printf("spawn - %lu, exec - %lu\n", tx_spawn_sum, tx_exec_sum);
     return (tx_spawn_sum - tx_exec_sum) > pending_threshold? true : false;
   }
-#endif
 
   void run()
   {
@@ -263,16 +282,18 @@ public:
 #endif
       
       tx_spawn_sum += look_ahead;
-
+      if (idx >= (count - 16)) 
+      {
+        idx = 0;
+        read_head = read_top;
+        prepare_read_head = read_top;
+        prepare_proc_read_head = read_top;
+      }
       int ret = dispatch_batch();
 
       // announce throughput
-#ifdef RPC_LATENCY
-      if (tx_count >= RPC_LOG_SIZE) { 
-#else
-      if (tx_count >= 4'000'000) {
-#endif
-        auto time_now = std::chrono::system_clock::now();
+      auto time_now = std::chrono::system_clock::now();
+      if ((time_now - last_print) > interval) {
         std::chrono::duration<double> duration = time_now - last_print;
         auto dur_cnt = duration.count();
         if (counter_registered)
@@ -283,7 +304,7 @@ public:
         last_tx_exec_sum = tx_exec_sum;
         last_print = time_now;
       }
-    }
+    }  
   }
 };
 
@@ -331,7 +352,7 @@ struct Prefetcher
         continue;  
       }
     } while (avail_cnt == 0);
-
+    //} while (avail_cnt < 16);
     return dyn_batch;
   }
 #endif
@@ -349,7 +370,7 @@ struct Prefetcher
 
     while(1)
     {
-      if (idx >= read_count) {
+      if (idx > (read_count - 16)) {
         read_head = read_top;
         idx = 0;
       }
@@ -474,7 +495,6 @@ struct Spawner
     printf("read_count in spawner is %d\n", read_count);
     read_head = read_top;
     prepare_proc_read_head = read_top;
-    //last_print = std::chrono::system_clock::now();;
     last_tx_exec_sum = 0; 
     tx_spawn_sum = 0;
   }
@@ -482,9 +502,7 @@ struct Spawner
   void track_worker_counter()
   {
     if (counter_map->size() == worker_cnt) 
-    {
       counter_registered = true;
-    }
   }
 
   uint64_t calc_tx_exec_sum()
@@ -545,14 +563,21 @@ struct Spawner
 
       if (!counter_registered)
         track_worker_counter();
-
+      
+      if (idx > (read_count - 16)) {
+        read_head = read_top;
+        prepare_proc_read_head = read_top;
+        idx = 0;
+      }
+      
+      for (i = 0; i < batch_sz; i++)
+      { 
+        ret = T::prepare_process(prepare_proc_read_head, RW, L1D_LOCALITY);
+        prepare_proc_read_head += ret;
+      }
+      
       for (i = 0; i < batch_sz; i++)
       {
-        if (idx >= read_count) {
-          read_head = read_top;
-          prepare_proc_read_head = read_top;
-          idx = 0;
-        }
         ret = dispatch_one();
         read_head += ret;
         idx++;    
