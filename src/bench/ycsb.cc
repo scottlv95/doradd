@@ -44,7 +44,7 @@ public:
   static Index<YCSBRow>* index;
   static uint64_t cown_base_addr;
 
-#ifndef NO_IDX_LOOKUP
+#if 1 
   // prefetch row entry before accessing in parse()
   static int prepare_parse(const char* input)
   {
@@ -59,7 +59,9 @@ public:
 
     return sizeof(YCSBTransactionMarshalled);
   }
+#endif
 
+#ifndef NO_IDX_LOOKUP
   // prefetch cowns for when closure
   static int prepare_process(const char* input)
   {
@@ -70,18 +72,12 @@ public:
     {
       auto* entry = index->get_row_addr(txm->indices[i]);
       auto&& cown = std::move(*entry);
-      //auto&& cown = index->get_row(txm->indices[i]);
+      // auto&& cown = index->get_row(txm->indices[i]);
       cown.prefetch();
     }
 
     return sizeof(YCSBTransactionMarshalled);
   }
-
-  template <typename... Rows>
-  void prefetch_rows(const Rows&... rows) {
-    (rows.prefetch(), ...); // Prefetch each row using the fold expression
-  }
-
 #else
   static int prepare_process(const char* input, const int rw, const int locality)
   {
@@ -157,22 +153,14 @@ public:
 #else
     when(row0,row1,row2,row3,row4,row5,row6,row7,row8,row9) << [ws_cap]
 #endif
-      (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3,type1 acq_row4,type1 acq_row5,type1 acq_row6,type1 acq_row7,type1 acq_row8,type1 acq_row9)
+      (type1 acq_row0, type1 acq_row1, type1 acq_row2, type1 acq_row3, 
+       type1 acq_row4, type1 acq_row5, type1 acq_row6, type1 acq_row7,
+       type1 acq_row8, type1 acq_row9)
     {
 #ifdef LOG_SCHED_OHEAD 
       auto exec_init_time = std::chrono::system_clock::now(); 
 #endif
 
-#ifdef PREFETCH_ROW
-#define p 1 // permission read-only or rw 
-#define l 3 // locality - llc or l1d
-    for (int k = 0; k < ROW_SIZE; k++) {
-      auto prefetch_rows_worker = [&k](auto&... acq_row) {
-        (__builtin_prefetch(acq_row->val.payload + k, p, l), ...); 
-      };
-      prefetch_rows_worker(acq_row0, acq_row1, acq_row2, acq_row3, acq_row4, acq_row5, acq_row6, acq_row7, acq_row8, acq_row9);
-    }
-#endif
       uint8_t sum = 0;
       uint16_t write_set_l = ws_cap;
 #if 0
@@ -390,56 +378,55 @@ int main(int argc, char** argv)
 
   counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
   counter_map->reserve(core_cnt - 1);
-
  
   log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
   log_map->reserve(core_cnt - 1);
   counter_map_mutex = new std::mutex();
   
-  //when() << [&]() {
-  //  sched.add_external_event_source();
 #ifdef ADAPT_BATCH
-    std::atomic<uint64_t> req_cnt(0);
+  std::atomic<uint64_t> req_cnt(0);
   #ifdef RPC_LATENCY
-    uint8_t* log_arr = static_cast<uint8_t*>(aligned_alloc_hpage( 
-      RPC_LOG_SIZE *sizeof(ts_type)));
+  uint8_t* log_arr = static_cast<uint8_t*>(aligned_alloc_hpage( 
+    RPC_LOG_SIZE *sizeof(ts_type)));
 
-    uint64_t log_arr_addr = (uint64_t)log_arr;
+  uint64_t log_arr_addr = (uint64_t)log_arr;
  
-    std::string log_dir = "./results/";
-    std::string log_suffix = "-latency.log";
-    std::string log_name = log_dir + argv[7] + log_suffix;
-    FILE* log_fd = fopen(reinterpret_cast<const char*>(log_name.c_str()), "w");   
+  std::string log_dir = "./results/";
+  std::string log_suffix = "-latency.log";
+  std::string log_name = log_dir + argv[7] + log_suffix;
+  FILE* log_fd = fopen(reinterpret_cast<const char*>(log_name.c_str()), "w");   
    
-    // argv[7]: gen_type
-    RPCHandler rpc_handler(&req_cnt, argv[7], log_arr_addr);
+  // argv[7]: gen_type
+  RPCHandler rpc_handler(&req_cnt, argv[7], log_arr_addr);
   #else 
-    RPCHandler rpc_handler(&req_cnt, argv[7]);
+  RPCHandler rpc_handler(&req_cnt, argv[7]);
   #endif  // RPC_LATENCY 
 #endif // ADAPT_BATCH
        
 #ifndef CORE_PIPE
+  FileDispatcher<YCSBTransaction> dispatcher(argv[5], 1000, look_ahead, 
+    sizeof(YCSBTransactionMarshalled), core_cnt - 1,
+    counter_map, counter_map_mutex 
   #ifdef ADAPT_BATCH 
-    FileDispatcher<YCSBTransaction> dispatcher(argv[5], 1000, look_ahead, 
-        sizeof(YCSBTransactionMarshalled), core_cnt - 1, PENDING_THRESHOLD, 
-        SPAWN_THRESHOLD, counter_map, counter_map_mutex, &req_cnt
-    #ifdef RPC_LATENCY
-        , init_time_log_arr
-    #endif
-        );
+    , &req_cnt
+  #endif
+  #ifdef RPC_LATENCY
+    , log_arr_addr 
+  #endif
+    );
+  
+  when() << [&]() {
+    printf("start in external_thread\n");
+
+  #ifdef ADAPT_BATCH 
     // rpc_handler
     std::thread rpc_handler_thread([&]() mutable {
-      pin_thread(7);
+      pin_thread(2);
       rpc_handler.run();
     });
-  #else
-    FileDispatcher<YCSBTransaction> dispatcher(argv[5], 1000, look_ahead, 
-        sizeof(YCSBTransactionMarshalled), core_cnt - 1, PENDING_THRESHOLD, 
-        SPAWN_THRESHOLD, counter_map, counter_map_mutex);
-
   #endif // ADAPT_BATCH
     std::thread extern_thrd([&]() mutable {
-        pin_thread(9);
+        pin_thread(3);
         dispatcher.run();
     });
 #else
