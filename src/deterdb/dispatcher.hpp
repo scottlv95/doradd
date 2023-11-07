@@ -13,12 +13,11 @@
 #include "hugepage.hpp"
 #include "warmup.hpp"
 
-const size_t BATCH_PREFETCHER = 16;
-const size_t BATCH_SPAWNER = 16; 
+const size_t BATCH_PREFETCHER = 2;
+const size_t BATCH_SPAWNER = 2; 
 const uint64_t RPC_LOG_SIZE = 4'000'000;
 using ts_type = std::chrono::time_point<std::chrono::system_clock>;
 
-#define BATCH 16 
 #define RW 1
 #define LLC_LOCALITY 1
 #define L1D_LOCALITY 3
@@ -35,7 +34,8 @@ private:
   uint32_t count;
   char* read_head;
   char* read_top;
-  char* prepare_proc_read_head;                           
+  char* prepare_parse_read_head;
+  char* prepare_proc_read_head;
   
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
   std::mutex* counter_map_mutex;
@@ -87,6 +87,7 @@ public:
     printf("log count is %u\n", count);
     read_top += sizeof(uint32_t);
     read_head = read_top;
+    prepare_parse_read_head = read_top;
     prepare_proc_read_head = read_top;
     tx_count = 0;
     tx_spawn_sum = 0;
@@ -164,6 +165,7 @@ public:
     {
       idx = 0;
       read_head = read_top;
+      prepare_parse_read_head = read_top;
       prepare_proc_read_head = read_top;
     }
  
@@ -175,10 +177,17 @@ public:
 
 #ifdef PREFETCH
   #ifndef NO_IDX_LOOKUP 
+#if 0 
     for (i = 0; i < look_ahead; i++)
     {
       prefetch_ret = T::prepare_parse(prepare_proc_read_head);
       prepare_proc_read_head += prefetch_ret;
+    }
+#endif
+    for (i = 0; i < look_ahead; i++)
+    {
+      prefetch_ret = T::prepare_process(prepare_parse_read_head);
+      prepare_parse_read_head += prefetch_ret;
     }
   #else
     for (i = 0; i < look_ahead; i++)
@@ -414,9 +423,7 @@ struct Spawner
   void track_worker_counter()
   {
     if (counter_map->size() == worker_cnt) 
-    {
       counter_registered = true;
-    }
   }
 
   uint64_t calc_tx_exec_sum()

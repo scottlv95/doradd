@@ -70,9 +70,9 @@ public:
 
     for (int i = 0; i < ROWS_PER_TX; i++)
     {
-      auto* entry = index->get_row_addr(txm->indices[i]);
-      auto&& cown = std::move(*entry);
-      // auto&& cown = index->get_row(txm->indices[i]);
+      //auto* entry = index->get_row_addr(txm->indices[i]);
+      //auto&& cown = std::move(*entry);
+      auto&& cown = index->get_row(txm->indices[i]);
       cown.prefetch();
     }
 
@@ -141,10 +141,11 @@ public:
     auto&& row8 = index->get_row(txm->indices[8]);
     auto&& row9 = index->get_row(txm->indices[9]);
 
-    auto prefetch_rows = [](auto&&... rows) {
+    /*auto prefetch_rows = [](auto&&... rows) {
         (rows.prefetch(), ...);
     };
     prefetch_rows(row0, row1, row2, row3, row4, row5, row6, row7, row8, row9);
+    */
 #endif
 
     using type1 = acquired_cown<Row<YCSBRow>>;
@@ -160,9 +161,12 @@ public:
 #ifdef LOG_SCHED_OHEAD 
       auto exec_init_time = std::chrono::system_clock::now(); 
 #endif
+#ifdef ZERO_SERV_TIME 
+      // Null in txn logic
 
-      uint8_t sum = 0;
-      uint16_t write_set_l = ws_cap;
+      //uint8_t sum = 0;
+      //uint16_t write_set_l = ws_cap;
+#else
 #if 0
       auto process_each_row = [&sum](auto& ws, auto&& row) {
         if (ws & 0x1)
@@ -314,6 +318,7 @@ public:
       TxCounter::instance().log_latency(log_duration);
   #endif
 #endif
+#endif // ZERO_SERV_TIME
     };
     return sizeof(YCSBTransactionMarshalled);
   }
@@ -354,10 +359,9 @@ int main(int argc, char** argv)
 
   when() << []() { std::cout << "Hello deterministic world!\n"; };
 
-  // Create rows and populate index
+  // Create rows (cowns) with huge pages and via static allocation
   YCSBTransaction::index = new Index<YCSBRow>;
   uint64_t cown_prev_addr = 0;
-  //uint8_t* cown_arr_addr = new uint8_t[1024 * ROW_COUNT];
   uint8_t* cown_arr_addr = static_cast<uint8_t*>(aligned_alloc_hpage(
         1024 * ROW_COUNT));
 
