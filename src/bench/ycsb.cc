@@ -350,8 +350,6 @@ int main(int argc, char** argv)
   assert(8 <= look_ahead && look_ahead <= 128);
 
   auto& sched = Scheduler::get();
-  // Scheduler::set_detect_leaks(true);
-  // sched.set_fair(true);
   sched.init(core_cnt);
 
   when() << []() { std::cout << "Hello deterministic world!\n"; };
@@ -402,46 +400,30 @@ int main(int argc, char** argv)
   RPCHandler rpc_handler(&req_cnt, argv[7]);
   #endif  // RPC_LATENCY 
 #endif // ADAPT_BATCH
-       
+     
+  // mmap before constructing prefetcher and spawner  
+  int fd = open(argv[5], O_RDONLY);
+  if (fd == -1) 
+  {
+    printf("File not existed\n");
+    exit(1);
+  }
+  struct stat sb;
+  fstat(fd, &sb);
+  void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, 
+    PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0));
+      
 #ifndef CORE_PIPE
-  FileDispatcher<YCSBTransaction> dispatcher(argv[5], 1000, look_ahead, 
-    sizeof(YCSBTransactionMarshalled), core_cnt - 1,
-    counter_map, counter_map_mutex 
+    FileDispatcher<YCSBTransaction> dispatcher(
+      ret, core_cnt - 1, counter_map, counter_map_mutex 
   #ifdef ADAPT_BATCH 
-    , &req_cnt
+      , &req_cnt
   #endif
   #ifdef RPC_LATENCY
-    , log_arr_addr 
+      , log_arr_addr 
   #endif
     );
-  
-  when() << [&]() {
-    printf("start in external_thread\n");
-
-  #ifdef ADAPT_BATCH 
-    // rpc_handler
-    std::thread rpc_handler_thread([&]() mutable {
-      pin_thread(2);
-      rpc_handler.run();
-    });
-  #endif // ADAPT_BATCH
-    std::thread extern_thrd([&]() mutable {
-        pin_thread(3);
-        dispatcher.run();
-    });
 #else
-    // mmap before constructing prefetcher and spawner
-    int fd = open(argv[5], O_RDONLY);
-    if (fd == -1) 
-    {
-      printf("File not existed\n");
-      exit(1);
-    }
-    struct stat sb;
-    fstat(fd, &sb);
-    void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, 
-        PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0));
-
     rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
   #ifndef ADAPT_BATCH
     Prefetcher<YCSBTransaction> prefetcher(ret, &ring);
@@ -458,11 +440,18 @@ int main(int argc, char** argv)
         counter_map_mutex, &ring);
     #endif // RPC_LATENCY
   #endif // ADAPT_BATCH
-  
+#endif // CORE_PIPE
+
   when() << [&]() {
     printf("start in external_thread\n");
-    sched.add_external_event_source();
-
+    // sched.add_external_event_source();
+#ifndef CORE_PIPE
+    std::thread extern_thrd([&]() mutable {
+      pin_thread(2);
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+      dispatcher.run();
+    });
+#else
     std::thread spawner_thread([&]() mutable {
         pin_thread(1);
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -474,15 +463,14 @@ int main(int argc, char** argv)
         std::this_thread::sleep_for(std::chrono::seconds(2));
         prefetcher.run();
     });
-  #ifdef ADAPT_BATCH
+#endif
+#ifdef ADAPT_BATCH
     std::thread rpc_handler_thread([&]() mutable {
       pin_thread(3);
       std::this_thread::sleep_for(std::chrono::seconds(5));
       rpc_handler.run();
     });
-  #endif
-
-#endif // CORE_PIPE 
+#endif
        
 #ifdef LOG_LATENCY
     std::this_thread::sleep_for(std::chrono::seconds(20));
@@ -524,7 +512,7 @@ int main(int argc, char** argv)
   #endif // CORE_PIPE
 
 #endif // LOG_LATENCY
-    sched.remove_external_event_source();
+    //sched.remove_external_event_source();
   };
 
   sched.run();

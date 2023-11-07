@@ -13,8 +13,8 @@
 #include "hugepage.hpp"
 #include "warmup.hpp"
 
-const size_t BATCH_PREFETCHER = 32;
-const size_t BATCH_SPAWNER = 32; 
+const size_t BATCH_PREFETCHER = 16;
+const size_t BATCH_SPAWNER = 16; 
 const uint64_t RPC_LOG_SIZE = 4'000'000;
 using ts_type = std::chrono::time_point<std::chrono::system_clock>;
 
@@ -28,16 +28,19 @@ struct FileDispatcher
 {
 private:
   uint8_t worker_cnt;
+  bool counter_registered;
   uint16_t rnd;
   uint32_t idx;
-  uint32_t batch;
-  size_t log_marshall_sz;
   size_t look_ahead;
   uint32_t count;
   char* read_head;
   char* read_top;
-  char* prepare_read_head;  // prepare_parse ptr
   char* prepare_proc_read_head;                           
+  
+  std::unordered_map<std::thread::id, uint64_t*>* counter_map;
+  std::mutex* counter_map_mutex;
+  //std::vector<uint64_t*> counter_vec; 
+
   uint64_t tx_count;
   uint64_t tx_spawn_sum; // spawned txn counts
   uint64_t tx_exec_sum;  // executed txn counts 
@@ -49,23 +52,15 @@ private:
 #endif
 
   ts_type last_print;
-  std::unordered_map<std::thread::id, uint64_t*>* counter_map;
-  std::mutex* counter_map_mutex;
-  bool counter_registered;
-  std::vector<uint64_t*> counter_vec;
 
 #ifdef RPC_LATENCY
   uint64_t init_time_log_arr;
   int txn_log_id = 0;
-  bool measure = false;
   ts_type init_time;
 #endif
 
 public:
-  FileDispatcher(char* file_name
-      , int batch_
-      , size_t look_ahead_
-      , size_t log_marshall_sz_
+  FileDispatcher(void* mmap_ret
       , uint8_t worker_cnt_
       , std::unordered_map<std::thread::id, uint64_t*>* counter_map_
       , std::mutex* counter_map_mutex_
@@ -75,9 +70,7 @@ public:
 #ifdef RPC_LATENCY
       , uint64_t init_time_log_arr_
 #endif
-      ) : batch(batch_),
-          look_ahead(look_ahead_),
-          log_marshall_sz(log_marshall_sz_),
+      ) : read_top(reinterpret_cast<char*>(mmap_ret)),
           worker_cnt(worker_cnt_), 
           counter_map(counter_map_),
           counter_map_mutex(counter_map_mutex_)
@@ -88,28 +81,13 @@ public:
           , init_time_log_arr(init_time_log_arr_)
 #endif
   {
-    int fd = open(file_name, O_RDONLY);
-    if (fd == -1) 
-    {
-      printf("File not existed\n");
-      exit(1);
-    }
-
-    struct stat sb;
-    fstat(fd, &sb);
-    void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, PROT_READ,
-          MAP_PRIVATE | MAP_POPULATE, fd, 0));
-
-    char* content = reinterpret_cast<char*>(ret);
     rnd = 1;
     idx = 0;
-    count = *(reinterpret_cast<uint32_t*>(content));
+    count = *(reinterpret_cast<uint32_t*>(read_top));
     printf("log count is %u\n", count);
-    content += sizeof(uint32_t);
-    read_head = content;
-    prepare_read_head = content;
-    prepare_proc_read_head = content;
-    read_top = content;
+    read_top += sizeof(uint32_t);
+    read_head = read_top;
+    prepare_proc_read_head = read_top;
     tx_count = 0;
     tx_spawn_sum = 0;
     tx_exec_sum = 0;
@@ -124,9 +102,7 @@ public:
   void track_worker_counter()
   {
     if (counter_map->size() == worker_cnt) 
-    {
       counter_registered = true;
-    }
   }
 
   uint64_t calc_tx_exec_sum()
@@ -183,7 +159,14 @@ public:
   {
     int i, j, ret = 0;
     int prefetch_ret, dispatch_ret;
-
+    
+    if (idx > (count - 16)) 
+    {
+      idx = 0;
+      read_head = read_top;
+      prepare_proc_read_head = read_top;
+    }
+ 
 #ifdef ADAPT_BATCH
     look_ahead = check_avail_cnts();
 #endif
@@ -192,8 +175,8 @@ public:
   #ifndef NO_IDX_LOOKUP 
     for (i = 0; i < look_ahead; i++)
     {
-      prefetch_ret = T::prepare_parse(prepare_read_head);
-      prepare_read_head += prefetch_ret;
+      prefetch_ret = T::prepare_parse(prepare_proc_read_head);
+      prepare_proc_read_head += prefetch_ret;
     }
   #else
     for (i = 0; i < look_ahead; i++)
@@ -208,13 +191,6 @@ public:
     // dispatch 
     for (j = 0; j < look_ahead; j++)
     {      
-      if (idx >= count) 
-      {
-        idx = 0;
-        read_head = read_top;
-        prepare_read_head = read_top;
-        prepare_proc_read_head = read_top;
-      }
       dispatch_ret = dispatch_one();
       read_head += dispatch_ret;
       ret += dispatch_ret;
@@ -241,9 +217,11 @@ public:
 
   void run()
   {
-    std::chrono::milliseconds interval(1000);
+    // warm-up
+    prepare_run();
+
     while (1) {
-      if (!counter_registered) [[unlikely]]
+      if (!counter_registered) 
         track_worker_counter();
 
 #ifdef RPC_LATENCY
@@ -290,7 +268,7 @@ template<typename T>
 struct Prefetcher 
 {
   char* read_top;
-  int read_count;
+  uint32_t read_count;
   rigtorp::SPSCQueue<int>* ring;
 
 #ifdef ADAPT_BATCH
@@ -338,7 +316,7 @@ struct Prefetcher
   void run() 
   {
     int ret;
-    int idx = 0;
+    uint32_t idx = 0;
     char* read_head = read_top;
     size_t i;
     size_t batch_sz;
@@ -379,28 +357,29 @@ struct Prefetcher
 template<typename T>
 struct Spawner
 {
-  // TODO: reorder var
   uint8_t worker_cnt;
+  bool counter_registered;
   uint16_t rnd;
+  uint32_t read_count;
   char* read_top;
   char* read_head;
   char* prepare_proc_read_head;
   rigtorp::SPSCQueue<int>* ring;
+  std::unordered_map<std::thread::id, uint64_t*>* counter_map;
+  std::mutex* counter_map_mutex;
+  std::vector<uint64_t*> counter_vec; // FIXME 
+
   uint64_t tx_exec_sum; 
   uint64_t last_tx_exec_sum; 
   uint64_t tx_spawn_sum;
-  std::chrono::time_point<std::chrono::system_clock> last_print;
-  bool counter_registered;
-  int read_count;
-  std::unordered_map<std::thread::id, uint64_t*>* counter_map;
-  std::mutex* counter_map_mutex;
-  std::vector<uint64_t*> counter_vec;
 
 #ifdef RPC_LATENCY
   uint64_t txn_log_id = 0;
   uint64_t init_time_log_arr;
   ts_type init_time;
 #endif  
+
+  ts_type last_print;
 
   Spawner(void* mmap_ret
       , uint8_t worker_cnt_
@@ -465,7 +444,7 @@ struct Spawner
 
   void run() 
   {
-    int idx = 0;
+    uint32_t idx = 0;
     int ret;
     uint64_t tx_count = 0;
     size_t i;
