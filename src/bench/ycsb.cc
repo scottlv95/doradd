@@ -414,6 +414,7 @@ int main(int argc, char** argv)
     PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0));
       
 #ifndef CORE_PIPE
+#if 0
     FileDispatcher<YCSBTransaction> dispatcher(
       ret, core_cnt - 1, counter_map, counter_map_mutex 
   #ifdef ADAPT_BATCH 
@@ -423,6 +424,7 @@ int main(int argc, char** argv)
       , log_arr_addr 
   #endif
     );
+#endif
 #else
     rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
   #ifndef ADAPT_BATCH
@@ -446,6 +448,16 @@ int main(int argc, char** argv)
     printf("start in external_thread\n");
     // sched.add_external_event_source();
 #ifndef CORE_PIPE
+    // FIXME: why single dispatcher need to be init within lambda
+    FileDispatcher<YCSBTransaction> dispatcher(
+      ret, core_cnt - 1, counter_map, counter_map_mutex 
+  #ifdef ADAPT_BATCH 
+      , &req_cnt
+  #endif
+  #ifdef RPC_LATENCY
+      , log_arr_addr 
+  #endif
+    );
     std::thread extern_thrd([&]() mutable {
       pin_thread(2);
       std::this_thread::sleep_for(std::chrono::seconds(1));

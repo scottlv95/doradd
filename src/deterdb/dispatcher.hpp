@@ -169,6 +169,8 @@ public:
  
 #ifdef ADAPT_BATCH
     look_ahead = check_avail_cnts();
+#else
+    look_ahead = BATCH_SPAWNER; 
 #endif
 
 #ifdef PREFETCH
