@@ -2,18 +2,9 @@
 #include <unordered_map>
 
 #include "db.hpp" 
-#include "spscq.hpp"
-#include "pin-thread.hpp"
-#include "rpc_handler.hpp"
 #include "txcounter.hpp"
-#include "dispatcher.hpp"
 #include "constants.hpp"
-
-const size_t CHANNEL_SIZE = 2; // TODO: move this to header file
-
-#ifdef RPC_LATENCY
-  using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
-#endif
+#include "pipeline.hpp"
 
 struct YCSBRow
 {
@@ -321,12 +312,6 @@ public:
   YCSBTransaction& operator=(const YCSBTransaction&) = delete;
 };
 
-#ifdef LOG_SCHED_OHEAD
-using log_arr_type = std::vector<std::tuple<uint32_t, uint32_t>>;
-#else
-using log_arr_type = std::vector<uint32_t>;
-#endif
-
 Index<YCSBRow>* YCSBTransaction::index;
 uint64_t YCSBTransaction::cown_base_addr;
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
@@ -349,19 +334,14 @@ int main(int argc, char** argv)
   size_t look_ahead = atoi(argv[4]);
   assert(8 <= look_ahead && look_ahead <= 128);
 
-  auto& sched = Scheduler::get();
-  sched.init(core_cnt);
-
-  when() << []() { std::cout << "Hello deterministic world!\n"; };
-
   // Create rows (cowns) with huge pages and via static allocation
   YCSBTransaction::index = new Index<YCSBRow>;
   uint64_t cown_prev_addr = 0;
   uint8_t* cown_arr_addr = static_cast<uint8_t*>(aligned_alloc_hpage(
-        1024 * ROW_COUNT));
+        1024 * DB_SIZE));
 
   YCSBTransaction::cown_base_addr = (uint64_t)cown_arr_addr;
-  for (int i = 0; i < ROW_COUNT; i++)
+  for (int i = 0; i < DB_SIZE; i++)
   {
     cown_ptr<Row<YCSBRow>> cown_r = make_cown_custom<Row<YCSBRow>>(
         reinterpret_cast<void *>(cown_arr_addr + (uint64_t)1024 * i));
@@ -373,158 +353,5 @@ int main(int argc, char** argv)
     YCSBTransaction::index->insert_row(cown_r);
   }
 
-  counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
-  counter_map->reserve(core_cnt - 1);
- 
-  log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
-  log_map->reserve(core_cnt - 1);
-  counter_map_mutex = new std::mutex();
-  
-#ifdef ADAPT_BATCH
-  std::atomic<uint64_t> req_cnt(0);
-  #ifdef RPC_LATENCY
-  uint8_t* log_arr = static_cast<uint8_t*>(aligned_alloc_hpage( 
-    RPC_LOG_SIZE *sizeof(ts_type)));
-
-  uint64_t log_arr_addr = (uint64_t)log_arr;
- 
-  std::string log_dir = "./results/";
-  std::string log_suffix = "-latency.log";
-  std::string log_name = log_dir + argv[7] + log_suffix;
-  FILE* log_fd = fopen(reinterpret_cast<const char*>(log_name.c_str()), "w");   
-   
-  // argv[7]: gen_type
-  RPCHandler rpc_handler(&req_cnt, argv[7], log_arr_addr);
-  #else 
-  RPCHandler rpc_handler(&req_cnt, argv[7]);
-  #endif  // RPC_LATENCY 
-#endif // ADAPT_BATCH
-     
-  // mmap before constructing prefetcher and spawner  
-  int fd = open(argv[5], O_RDONLY);
-  if (fd == -1) 
-  {
-    printf("File not existed\n");
-    exit(1);
-  }
-  struct stat sb;
-  fstat(fd, &sb);
-  void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, 
-    PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0));
-      
-#ifndef CORE_PIPE
-#if 0
-    FileDispatcher<YCSBTransaction> dispatcher(
-      ret, core_cnt - 1, counter_map, counter_map_mutex 
-  #ifdef ADAPT_BATCH 
-      , &req_cnt
-  #endif
-  #ifdef RPC_LATENCY
-      , log_arr_addr 
-  #endif
-    );
-#endif
-#else
-    rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
-  #ifndef ADAPT_BATCH
-    Prefetcher<YCSBTransaction> prefetcher(ret, &ring);
-    Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
-        counter_map_mutex, &ring);
-  #else
-    Prefetcher<YCSBTransaction> prefetcher(ret, &ring, &req_cnt);
-    #ifdef RPC_LATENCY
-    // give init_time_log_arr to spawner. Needed for capturing in when.
-    Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
-        counter_map_mutex, &ring, log_arr_addr);
-    #else
-    Spawner<YCSBTransaction> spawner(ret, core_cnt - 1, counter_map, 
-        counter_map_mutex, &ring);
-    #endif // RPC_LATENCY
-  #endif // ADAPT_BATCH
-#endif // CORE_PIPE
-
-  when() << [&]() {
-    printf("start in external_thread\n");
-    // sched.add_external_event_source();
-#ifndef CORE_PIPE
-    // FIXME: why single dispatcher need to be init within lambda
-    FileDispatcher<YCSBTransaction> dispatcher(
-      ret, core_cnt - 1, counter_map, counter_map_mutex 
-  #ifdef ADAPT_BATCH 
-      , &req_cnt
-  #endif
-  #ifdef RPC_LATENCY
-      , log_arr_addr 
-  #endif
-    );
-    std::thread extern_thrd([&]() mutable {
-      pin_thread(2);
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-      dispatcher.run();
-    });
-#else
-    std::thread spawner_thread([&]() mutable {
-        pin_thread(1);
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-        spawner.run();
-    });
-
-    std::thread prefetcher_thread([&]() mutable {
-        pin_thread(2);
-        std::this_thread::sleep_for(std::chrono::seconds(2));
-        prefetcher.run();
-    });
-#endif
-#ifdef ADAPT_BATCH
-    std::thread rpc_handler_thread([&]() mutable {
-      pin_thread(3);
-      std::this_thread::sleep_for(std::chrono::seconds(5));
-      rpc_handler.run();
-    });
-#endif
-       
-#ifdef LOG_LATENCY
-    std::this_thread::sleep_for(std::chrono::seconds(20));
-  #ifdef CORE_PIPE 
-    pthread_cancel(spawner_thread.native_handle());
-    pthread_cancel(prefetcher_thread.native_handle());
-  #else
-    pthread_cancel(extern_thrd.native_handle());
-  #endif // CORE_PIPE
-  
-  #ifdef ADAPT_BATCH
-    pthread_cancel(rpc_handler_thread.native_handle());
-  #endif // ADAPT_BATCH
-
-    for (const auto& entry : *log_map) {
-      printf("flush entry --ing\n");
-      fprintf(log_fd, "flush entry --ing\n");
-      if (entry.second) {
-  #ifdef LOG_SCHED_OHEAD
-        for (std::tuple<uint32_t, uint32_t> value_tuple : *(entry.second))
-          fprintf(log_fd, "%u %u\n", 
-              std::get<0>(value_tuple), std::get<1>(value_tuple));
-  #else
-        for (auto value : *(entry.second)) 
-          fprintf(log_fd, "%u\n", value);                  
-  #endif // LOG_SCHED_OHEAD
-      }
-    }
-#else
-  #ifdef ADAPT_BATCH
-    rpc_handler_thread.join();
-  #endif // ADAPT_BATCH
-
-  #ifdef CORE_PIPE
-    prefetcher_thread.join();
-    spawner_thread.join();
-  #else
-    extern_thrd.join();
-  #endif // CORE_PIPE
-
-#endif // LOG_LATENCY
-    //sched.remove_external_event_source();
-  };
-
-  sched.run();
+  build_pipelines<YCSBTransaction>(core_cnt - 1, argv[5], argv[7]);
 }
