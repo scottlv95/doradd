@@ -9,18 +9,11 @@
 #include <cassert>
 #include <stdlib.h> 
 #include <stdio.h>
+
+#include "config.hpp"
 #include "spscq.hpp"
 #include "hugepage.hpp"
 #include "warmup.hpp"
-
-const size_t BATCH_PREFETCHER = 2;
-const size_t BATCH_SPAWNER = 2; 
-const uint64_t RPC_LOG_SIZE = 4'000'000;
-using ts_type = std::chrono::time_point<std::chrono::system_clock>;
-
-#define RW 1
-#define LLC_LOCALITY 1
-#define L1D_LOCALITY 3
 
 template<typename T>
 struct FileDispatcher
@@ -42,8 +35,8 @@ private:
   //std::vector<uint64_t*> counter_vec; 
 
   uint64_t tx_count;
-  uint64_t tx_spawn_sum; // spawned txn counts
-  uint64_t tx_exec_sum;  // executed txn counts 
+  uint64_t tx_spawn_sum;
+  uint64_t tx_exec_sum; 
   uint64_t last_tx_exec_sum; 
 
 #ifdef ADAPT_BATCH
@@ -116,7 +109,6 @@ public:
   }
 
 #ifdef ADAPT_BATCH
-  // check available req cnts
   size_t check_avail_cnts()
   {
     uint64_t avail_cnt;
@@ -125,8 +117,8 @@ public:
     do {
       uint64_t load_val = recvd_req_cnt->load(std::memory_order_relaxed);
       avail_cnt = load_val - handled_req_cnt;
-      if (avail_cnt >= 16) 
-        dyn_batch = 16;
+      if (avail_cnt >= MAX_BATCH) 
+        dyn_batch = MAX_BATCH;
       else if (avail_cnt > 0)
         dyn_batch = static_cast<size_t>(avail_cnt);
       else
@@ -161,7 +153,7 @@ public:
     int i, j, ret = 0;
     int prefetch_ret, dispatch_ret;
     
-    if (idx > (count - 16)) 
+    if (idx > (count - MAX_BATCH)) 
     {
       idx = 0;
       read_head = read_top;
@@ -177,7 +169,7 @@ public:
 
 #ifdef PREFETCH
   #ifndef NO_IDX_LOOKUP 
-#if 0 
+#if 0
     for (i = 0; i < look_ahead; i++)
     {
       prefetch_ret = T::prepare_parse(prepare_proc_read_head);
@@ -255,11 +247,7 @@ public:
       int ret = dispatch_batch();
 
       // announce throughput
-#ifdef RPC_LATENCY
-      if (tx_count >= RPC_LOG_SIZE) { 
-#else
-      if (tx_count >= 4'000'000) {
-#endif
+      if (tx_count >= ANNOUNCE_THROUGHPUT_BATCH_SIZE) {
         auto time_now = std::chrono::system_clock::now();
         std::chrono::duration<double> duration = time_now - last_print;
         auto dur_cnt = duration.count();
@@ -300,7 +288,6 @@ struct Prefetcher
   }
 
 #ifdef ADAPT_BATCH
-  // check available req cnts
   size_t check_avail_cnts()
   {
     uint64_t avail_cnt;
@@ -309,8 +296,8 @@ struct Prefetcher
     do {
       uint64_t load_val = recvd_req_cnt->load(std::memory_order_relaxed);
       avail_cnt = load_val - handled_req_cnt;
-      if (avail_cnt >= 16) 
-        dyn_batch = 16;
+      if (avail_cnt >= MAX_BATCH) 
+        dyn_batch = MAX_BATCH;
       else if (avail_cnt > 0)
         dyn_batch = static_cast<size_t>(avail_cnt);
       else
@@ -337,7 +324,7 @@ struct Prefetcher
 
     while(1)
     {
-      if (idx > (read_count - 16)) {
+      if (idx > (read_count - MAX_BATCH)) {
         read_head = read_top;
         idx = 0;
       }
@@ -415,7 +402,6 @@ struct Spawner
     printf("read_count in spawner is %d\n", read_count);
     read_head = read_top;
     prepare_proc_read_head = read_top;
-    //last_print = std::chrono::system_clock::now();;
     last_tx_exec_sum = 0; 
     tx_spawn_sum = 0;
   }
@@ -485,7 +471,7 @@ struct Spawner
       if (!counter_registered)
         track_worker_counter();
       
-      if (idx > (read_count - 16)) {
+      if (idx > (read_count - MAX_BATCH)) {
         read_head = read_top;
         prepare_proc_read_head = read_top;
         idx = 0;
@@ -509,11 +495,7 @@ struct Spawner
       ring->pop();
 
       // announce throughput
-#ifdef RPC_LATENCY
-      if (tx_count >= RPC_LOG_SIZE) { 
-#else
-      if (tx_count >= 4'000'000) {
-#endif
+      if (tx_count >= ANNOUNCE_THROUGHPUT_BATCH_SIZE) {
         auto time_now = std::chrono::system_clock::now();
         std::chrono::duration<double> duration = time_now - last_print;
         auto dur_cnt = duration.count();

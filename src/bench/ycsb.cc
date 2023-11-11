@@ -1,20 +1,15 @@
-#include <deterdb.hpp>
-#include <dispatcher.hpp>
-#include <txcounter.hpp>
 #include <thread>
 #include <unordered_map>
-#include <debug/harness.h>
-#include <spscq.hpp>
-#include <pin-thread.hpp>
-#include "rpc_handler.hpp"
 
-constexpr uint32_t ROWS_PER_TX = 10;
-constexpr uint32_t ROW_SIZE = 900;
-constexpr uint32_t WRITE_SIZE = 100;
-const uint64_t ROW_COUNT = 10'000'000;
-//const uint64_t PENDING_THRESHOLD = 100'000;
-//const uint64_t SPAWN_THRESHOLD = 100'000;
-const size_t CHANNEL_SIZE = 2;
+#include "db.hpp" 
+#include "spscq.hpp"
+#include "pin-thread.hpp"
+#include "rpc_handler.hpp"
+#include "txcounter.hpp"
+#include "dispatcher.hpp"
+#include "constants.hpp"
+
+const size_t CHANNEL_SIZE = 2; // TODO: move this to header file
 
 #ifdef RPC_LATENCY
   using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
@@ -161,12 +156,12 @@ public:
 #ifdef LOG_SCHED_OHEAD 
       auto exec_init_time = std::chrono::system_clock::now(); 
 #endif
-#ifdef ZERO_SERV_TIME 
+//#ifdef ZERO_SERV_TIME 
       // Null in txn logic
 
-      //uint8_t sum = 0;
-      //uint16_t write_set_l = ws_cap;
-#else
+      uint8_t sum = 0;
+      uint16_t write_set_l = ws_cap;
+//#else
 #if 0
       auto process_each_row = [&sum](auto& ws, auto&& row) {
         if (ws & 0x1)
@@ -318,7 +313,7 @@ public:
       TxCounter::instance().log_latency(log_duration);
   #endif
 #endif
-#endif // ZERO_SERV_TIME
+//#endif // ZERO_SERV_TIME
     };
     return sizeof(YCSBTransactionMarshalled);
   }

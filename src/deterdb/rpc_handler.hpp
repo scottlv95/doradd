@@ -6,11 +6,9 @@
 #include <cassert>
 #include <stdlib.h> 
 #include <stdio.h>
-#include "../lancet/inter_arrival.hpp"
 
-#ifdef RPC_LATENCY
-  using ts_type = std::chrono::time_point<std::chrono::system_clock>; 
-#endif
+#include "../lancet/inter_arrival.hpp"
+#include "config.hpp"
 
 struct RPCHandler
 {
