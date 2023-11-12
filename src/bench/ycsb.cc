@@ -13,9 +13,10 @@ struct YCSBRow
 
 struct __attribute__((packed)) YCSBTransactionMarshalled
 {
-  uint64_t indices[ROWS_PER_TX];
+  uint32_t indices[ROWS_PER_TX];
   uint16_t write_set;
-  uint8_t  pad[46];
+  uint64_t cown_ptrs[ROWS_PER_TX];
+  uint8_t  pad[6];
 };
 static_assert(sizeof(YCSBTransactionMarshalled) == 128);
 
@@ -29,8 +30,34 @@ public:
 #endif
   static Index<YCSBRow>* index;
   static uint64_t cown_base_addr;
+  
+#ifdef INDEXER
+  // Indexer: read db and in-place update cown_ptr
+  static int prepare_cowns(char* input)
+  {
+    auto txm = reinterpret_cast<YCSBTransactionMarshalled*>(input);
+    
+    for (int i = 0; i < ROWS_PER_TX; i++)
+    {
+      auto&& cown = index->get_row(txm->indices[i]);
+      txm->cown_ptrs[i] = cown.get_base_addr();
+    }
 
-#if 1 
+    return sizeof(YCSBTransactionMarshalled);
+  }
+
+  static int prefetch_cowns(const char* input)
+  {
+    auto txm = reinterpret_cast<const YCSBTransactionMarshalled*>(input);
+    
+    for (int i = 0; i < ROWS_PER_TX; i++)
+      __builtin_prefetch(reinterpret_cast<const void *>(
+        txm->cown_ptrs[i] + 32), 1, 3);
+    
+    return sizeof(YCSBTransactionMarshalled);
+  }
+#else
+
   // prefetch row entry before accessing in parse()
   static int prepare_parse(const char* input)
   {
@@ -45,9 +72,8 @@ public:
 
     return sizeof(YCSBTransactionMarshalled);
   }
-#endif
 
-#ifndef NO_IDX_LOOKUP
+  #ifndef NO_IDX_LOOKUP
   // prefetch cowns for when closure
   static int prepare_process(const char* input)
   {
@@ -64,7 +90,7 @@ public:
 
     return sizeof(YCSBTransactionMarshalled);
   }
-#else
+  #else
   static int prepare_process(const char* input, const int rw, const int locality)
   {
     const YCSBTransactionMarshalled* txm =
@@ -78,7 +104,8 @@ public:
 
     return sizeof(YCSBTransactionMarshalled);
   }
-#endif
+  #endif // NO_IDX_LOOKUP
+#endif // INDEXER
 
 #ifdef RPC_LATENCY
   static int parse_and_process(const char* input, ts_type init_time)
@@ -94,7 +121,29 @@ public:
     //tx.init_time = std::chrono::system_clock::now(); 
 #endif
 
-#ifdef NO_IDX_LOOKUP
+#ifdef INDEXER
+    auto&& row0 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(txm->cown_ptrs[0]));
+    auto&& row1 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(txm->cown_ptrs[1]));
+    auto&& row2 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(txm->cown_ptrs[2]));
+    auto&& row3 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(txm->cown_ptrs[3]));
+    auto&& row4 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(txm->cown_ptrs[4]));
+    auto&& row5 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(txm->cown_ptrs[5]));
+    auto&& row6 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(txm->cown_ptrs[6]));
+    auto&& row7 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(txm->cown_ptrs[7]));
+    auto&& row8 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(txm->cown_ptrs[8]));
+    auto&& row9 = get_cown_ptr_from_addr<Row<YCSBRow>>(
+        reinterpret_cast<void *>(txm->cown_ptrs[9]));
+#else
+  #ifdef NO_IDX_LOOKUP
     auto&& row0 = get_cown_ptr_from_addr<Row<YCSBRow>>(
           reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[0])));
     auto&& row1 = get_cown_ptr_from_addr<Row<YCSBRow>>(
@@ -115,7 +164,7 @@ public:
           reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[8])));
     auto&& row9 = get_cown_ptr_from_addr<Row<YCSBRow>>(
           reinterpret_cast<void *>(cown_base_addr + (uint64_t)(1024 * txm->indices[9])));
-#else
+  #else
     auto&& row0 = index->get_row(txm->indices[0]);
     auto&& row1 = index->get_row(txm->indices[1]);
     auto&& row2 = index->get_row(txm->indices[2]);
@@ -126,13 +175,8 @@ public:
     auto&& row7 = index->get_row(txm->indices[7]);
     auto&& row8 = index->get_row(txm->indices[8]);
     auto&& row9 = index->get_row(txm->indices[9]);
-
-    /*auto prefetch_rows = [](auto&&... rows) {
-        (rows.prefetch(), ...);
-    };
-    prefetch_rows(row0, row1, row2, row3, row4, row5, row6, row7, row8, row9);
-    */
-#endif
+  #endif // NO_IDX_LOOKUP
+#endif // INDEXER
 
     using type1 = acquired_cown<Row<YCSBRow>>;
 #ifdef RPC_LATENCY

@@ -32,10 +32,12 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     printf("Init and Run - Dispatcher Pipelines\n");
     //sched.add_external_event_source();
 
+#if defined(ADAPT_BATCH) || defined(INDEXER)
+    std::atomic<uint64_t> req_cnt(0);
+#endif
 
     // Init RPC handler
 #ifdef ADAPT_BATCH
-    std::atomic<uint64_t> req_cnt(0);
   #ifdef RPC_LATENCY
     uint8_t* log_arr = static_cast<uint8_t*>(aligned_alloc_hpage( 
       RPC_LOG_SIZE *sizeof(ts_type)));
@@ -64,7 +66,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     struct stat sb;
     fstat(fd, &sb);
     void* ret = reinterpret_cast<char*>(mmap(nullptr, sb.st_size, 
-      PROT_READ, MAP_PRIVATE | MAP_POPULATE, fd, 0));
+      PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_POPULATE, fd, 0));
 
 
     // Init dispatcher, prefetcher, and spawner 
@@ -86,12 +88,13 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     });
 #else
 
+  #ifdef INDEXER
+    Indexer<T> indexer(ret, &req_cnt);
+  #endif
+
     rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
-  #ifndef ADAPT_BATCH
-    Prefetcher<T> prefetcher(ret, &ring);
-    Spawner<T> spawner(ret, worker_cnt, counter_map, 
-        counter_map_mutex, &ring);
-  #else
+
+  #if defined(ADAPT_BATCH) || defined(INDEXER)
     Prefetcher<T> prefetcher(ret, &ring, &req_cnt);
     #ifdef RPC_LATENCY
     // give init_time_log_arr to spawner. Needed for capturing in when.
@@ -101,6 +104,10 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     Spawner<T> spawner(ret, worker_cnt, counter_map, 
         counter_map_mutex, &ring);
     #endif // RPC_LATENCY
+  #else 
+    Prefetcher<T> prefetcher(ret, &ring);
+    Spawner<T> spawner(ret, worker_cnt, counter_map, 
+        counter_map_mutex, &ring);
   #endif // ADAPT_BATCH
 
     std::thread spawner_thread([&]() mutable {
@@ -112,6 +119,14 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
         pin_thread(2);
         std::this_thread::sleep_for(std::chrono::seconds(2));
         prefetcher.run();
+    });
+#endif
+
+#ifdef INDEXER
+    std::thread indexer_thread([&]() mutable {
+        pin_thread(0);
+        std::this_thread::sleep_for(std::chrono::seconds(4));
+        indexer.run();
     });
 #endif
 
@@ -129,6 +144,9 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
   #ifdef CORE_PIPE 
     pthread_cancel(spawner_thread.native_handle());
     pthread_cancel(prefetcher_thread.native_handle());
+    #ifdef INDEXER
+    pthread_cancel(indexer_thread.native_handle());
+    #endif
   #else
     pthread_cancel(extern_thrd.native_handle());
   #endif // CORE_PIPE
@@ -157,6 +175,9 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
   #endif // ADAPT_BATCH
 
   #ifdef CORE_PIPE
+    #ifdef INDEXER
+    indexer_thread.join();
+    #endif
     prefetcher_thread.join();
     spawner_thread.join();
   #else

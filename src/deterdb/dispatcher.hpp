@@ -264,13 +264,56 @@ public:
 };
 
 template<typename T>
+struct Indexer
+{
+  uint32_t read_count;
+  char* read_top;
+
+  // inter-thread comm w/ the prefetcher
+  std::atomic<uint64_t>* idx_ready_req_cnt;
+
+  Indexer(void* mmap_ret, std::atomic<uint64_t>* cnt) :
+    read_top(reinterpret_cast<char*>(mmap_ret)), idx_ready_req_cnt(cnt)
+  {
+    read_count = *(reinterpret_cast<uint32_t*>(read_top));
+    read_top += sizeof(uint32_t);
+  }
+   
+  void run()
+  {
+    uint32_t read_idx = 0;
+    char* read_head = read_top;
+    int i, ret = 0;
+    int batch = MAX_BATCH;
+
+    while(1)
+    {
+      if (read_idx > (read_count - batch))
+      {
+        read_head = read_top;
+        read_idx = 0;
+      }
+
+      for (i = 0; i < batch; i++)
+      {
+        ret = T::prepare_cowns(read_head);
+        read_head += ret;
+        read_idx++;
+      }
+      
+      idx_ready_req_cnt->fetch_add(batch, std::memory_order_relaxed);
+    }
+  }
+};
+
+template<typename T>
 struct Prefetcher 
 {
   char* read_top;
   uint32_t read_count;
   rigtorp::SPSCQueue<int>* ring;
 
-#ifdef ADAPT_BATCH
+#if defined(ADAPT_BATCH) || defined(INDEXER)
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
 
@@ -287,7 +330,7 @@ struct Prefetcher
     read_top += sizeof(uint32_t);
   }
 
-#ifdef ADAPT_BATCH
+#if defined(ADAPT_BATCH) || defined(INDEXER)
   size_t check_avail_cnts()
   {
     uint64_t avail_cnt;
@@ -318,7 +361,7 @@ struct Prefetcher
     char* read_head = read_top;
     size_t i;
     size_t batch_sz;
-#ifdef ADAPT_BATCH
+#if defined(ADAPT_BATCH) || defined(INDEXER)
     handled_req_cnt = 0;
 #endif
 
@@ -329,7 +372,7 @@ struct Prefetcher
         idx = 0;
       }
 
-#ifdef ADAPT_BATCH
+#if defined(ADAPT_BATCH) || defined(INDEXER)
       batch_sz = check_avail_cnts();
 #else
       batch_sz = BATCH_PREFETCHER;
@@ -337,12 +380,16 @@ struct Prefetcher
 
       for (i = 0; i < batch_sz; i++)
       {
+#ifdef INDEXER
+        ret = T::prefetch_cowns(read_head);
+#else
         ret = T::prepare_process(read_head, RW, LLC_LOCALITY);
+#endif
         read_head += ret;
         idx++;
       }
 
-#ifdef ADAPT_BATCH
+#if defined(ADAPT_BATCH) || defined(INDEXER)
       ring->push(batch_sz);
       handled_req_cnt += batch_sz;
 #else
@@ -462,7 +509,7 @@ struct Spawner
       if (!ring->front())
         continue;
 
-#ifdef ADAPT_BATCH
+#if defined(ADAPT_BATCH) || defined(INDEXER)
       batch_sz = static_cast<size_t>(*ring->front());
 #else
       batch_sz = BATCH_SPAWNER;
@@ -479,7 +526,11 @@ struct Spawner
       
       for (i = 0; i < batch_sz; i++)
       { 
+#ifdef INDEXER
+        ret = T::prefetch_cowns(prepare_proc_read_head);
+#else
         ret = T::prepare_process(prepare_proc_read_head, RW, L1D_LOCALITY);
+#endif
         prepare_proc_read_head += ret;
       }
  
