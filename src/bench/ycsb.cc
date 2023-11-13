@@ -31,12 +31,12 @@ public:
   static Index<YCSBRow>* index;
   static uint64_t cown_base_addr;
   
-#ifdef INDEXER
+#if defined(INDEXER) || defined(TEST_TWO)
   // Indexer: read db and in-place update cown_ptr
   static int prepare_cowns(char* input)
   {
     auto txm = reinterpret_cast<YCSBTransactionMarshalled*>(input);
-    
+
     for (int i = 0; i < ROWS_PER_TX; i++)
     {
       auto&& cown = index->get_row(txm->indices[i]);
@@ -49,7 +49,7 @@ public:
   static int prefetch_cowns(const char* input)
   {
     auto txm = reinterpret_cast<const YCSBTransactionMarshalled*>(input);
-    
+
     for (int i = 0; i < ROWS_PER_TX; i++)
       __builtin_prefetch(reinterpret_cast<const void *>(
         txm->cown_ptrs[i] + 32), 1, 3);
@@ -121,7 +121,7 @@ public:
     //tx.init_time = std::chrono::system_clock::now(); 
 #endif
 
-#ifdef INDEXER
+#if defined(INDEXER) || defined(TEST_TWO)
     auto&& row0 = get_cown_ptr_from_addr<Row<YCSBRow>>(
         reinterpret_cast<void *>(txm->cown_ptrs[0]));
     auto&& row1 = get_cown_ptr_from_addr<Row<YCSBRow>>(

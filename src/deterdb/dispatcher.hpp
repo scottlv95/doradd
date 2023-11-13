@@ -359,6 +359,7 @@ struct Prefetcher
     int ret;
     uint32_t idx = 0;
     char* read_head = read_top;
+    char* prepare_read_head = read_top;
     size_t i;
     size_t batch_sz;
 #if defined(ADAPT_BATCH) || defined(INDEXER)
@@ -369,6 +370,7 @@ struct Prefetcher
     {
       if (idx > (read_count - MAX_BATCH)) {
         read_head = read_top;
+        prepare_read_head = read_top;
         idx = 0;
       }
 
@@ -378,9 +380,17 @@ struct Prefetcher
       batch_sz = BATCH_PREFETCHER;
 #endif
 
+#ifdef TEST_TWO
       for (i = 0; i < batch_sz; i++)
       {
-#ifdef INDEXER
+        ret = T::prepare_cowns(prepare_read_head);
+        prepare_read_head += ret;
+      }
+#endif
+
+      for (i = 0; i < batch_sz; i++)
+      {
+#if defined(TEST_TWO) || defined(INDEXER)
         ret = T::prefetch_cowns(read_head);
 #else
         ret = T::prepare_process(read_head, RW, LLC_LOCALITY);
@@ -408,7 +418,7 @@ struct Spawner
   uint32_t read_count;
   char* read_top;
   char* read_head;
-  char* prepare_proc_read_head;
+  char* prepare_read_head;
   rigtorp::SPSCQueue<int>* ring;
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
   std::mutex* counter_map_mutex;
@@ -448,7 +458,7 @@ struct Spawner
     read_top += sizeof(uint32_t);
     printf("read_count in spawner is %d\n", read_count);
     read_head = read_top;
-    prepare_proc_read_head = read_top;
+    prepare_read_head = read_top;
     last_tx_exec_sum = 0; 
     tx_spawn_sum = 0;
   }
@@ -520,18 +530,18 @@ struct Spawner
       
       if (idx > (read_count - MAX_BATCH)) {
         read_head = read_top;
-        prepare_proc_read_head = read_top;
+        prepare_read_head = read_top;
         idx = 0;
       }
       
       for (i = 0; i < batch_sz; i++)
       { 
-#ifdef INDEXER
-        ret = T::prefetch_cowns(prepare_proc_read_head);
+#if defined(TEST_TWO) || defined(INDEXER)
+        ret = T::prefetch_cowns(prepare_read_head);
 #else
-        ret = T::prepare_process(prepare_proc_read_head, RW, L1D_LOCALITY);
+        ret = T::prepare_process(prepare_read_head, RW, L1D_LOCALITY);
 #endif
-        prepare_proc_read_head += ret;
+        prepare_read_head += ret;
       }
  
       for (i = 0; i < batch_sz; i++)
