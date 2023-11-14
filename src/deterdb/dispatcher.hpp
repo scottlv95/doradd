@@ -270,10 +270,10 @@ struct Indexer
   char* read_top;
 
   // inter-thread comm w/ the prefetcher
-  std::atomic<uint64_t>* idx_ready_req_cnt;
+  rigtorp::SPSCQueue<int>* ring;
 
-  Indexer(void* mmap_ret, std::atomic<uint64_t>* cnt) :
-    read_top(reinterpret_cast<char*>(mmap_ret)), idx_ready_req_cnt(cnt)
+  Indexer(void* mmap_ret, rigtorp::SPSCQueue<int>* ring_) :
+    read_top(reinterpret_cast<char*>(mmap_ret)), ring(ring_)
   {
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
     read_top += sizeof(uint32_t);
@@ -301,7 +301,7 @@ struct Indexer
         read_idx++;
       }
       
-      idx_ready_req_cnt->fetch_add(batch, std::memory_order_relaxed);
+      ring->push(batch);
     }
   }
 };
@@ -314,12 +314,13 @@ struct Prefetcher
   rigtorp::SPSCQueue<int>* ring;
 
 #if defined(ADAPT_BATCH) || defined(INDEXER)
-  std::atomic<uint64_t>* recvd_req_cnt;
+  rigtorp::SPSCQueue<int>* ring_indexer;
   uint64_t handled_req_cnt;
 
   Prefetcher(void* mmap_ret, rigtorp::SPSCQueue<int>* ring_, 
-    std::atomic<uint64_t>* cnt) :
-    read_top(reinterpret_cast<char*>(mmap_ret)), ring(ring_), recvd_req_cnt(cnt) 
+    rigtorp::SPSCQueue<int>* ring_indexer_) :
+    read_top(reinterpret_cast<char*>(mmap_ret)), ring(ring_), ring_indexer(
+        ring_indexer_) 
 #else
   
   Prefetcher(void* mmap_ret, rigtorp::SPSCQueue<int>* ring_) : 
@@ -330,7 +331,8 @@ struct Prefetcher
     read_top += sizeof(uint32_t);
   }
 
-#if defined(ADAPT_BATCH) || defined(INDEXER)
+//#if defined(ADAPT_BATCH) || defined(INDEXER)
+#if 0
   size_t check_avail_cnts()
   {
     uint64_t avail_cnt;
@@ -354,6 +356,7 @@ struct Prefetcher
   }
 #endif
 
+  // TODO: check adapt batch (since integrating indexer)
   void run() 
   {
     int ret;
@@ -375,10 +378,10 @@ struct Prefetcher
       }
 
 #if defined(ADAPT_BATCH) || defined(INDEXER)
-      batch_sz = check_avail_cnts();
-#else
-      batch_sz = BATCH_PREFETCHER;
+      if (!ring_indexer->front())
+        continue;
 #endif
+      batch_sz = BATCH_PREFETCHER;
 
 #ifdef TEST_TWO
       for (i = 0; i < batch_sz; i++)
@@ -401,6 +404,7 @@ struct Prefetcher
 
 #if defined(ADAPT_BATCH) || defined(INDEXER)
       ring->push(batch_sz);
+      ring_indexer->pop();
       handled_req_cnt += batch_sz;
 #else
       ring->push(ret);
@@ -519,7 +523,7 @@ struct Spawner
       if (!ring->front())
         continue;
 
-#if defined(ADAPT_BATCH) || defined(INDEXER)
+#if defined(ADAPT_BATCH)
       batch_sz = static_cast<size_t>(*ring->front());
 #else
       batch_sz = BATCH_SPAWNER;

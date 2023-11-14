@@ -32,7 +32,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     printf("Init and Run - Dispatcher Pipelines\n");
     //sched.add_external_event_source();
 
-#if defined(ADAPT_BATCH) || defined(INDEXER)
+#if defined(ADAPT_BATCH)
     std::atomic<uint64_t> req_cnt(0);
 #endif
 
@@ -89,14 +89,15 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 #else
 
   #ifdef INDEXER
-    Indexer<T> indexer(ret, &req_cnt);
+    rigtorp::SPSCQueue<int> ring_1(CHANNEL_SIZE_IDX_PREF);
+    Indexer<T> indexer(ret, &ring_1);
   #endif
 
     rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
 
   #if defined(ADAPT_BATCH) || defined(INDEXER)
-    Prefetcher<T> prefetcher(ret, &ring, &req_cnt);
-    #ifdef RPC_LATENCY
+    Prefetcher<T> prefetcher(ret, &ring, &ring_1);
+  #ifdef RPC_LATENCY
     // give init_time_log_arr to spawner. Needed for capturing in when.
     Spawner<T> spawner(ret, worker_cnt, counter_map, 
         counter_map_mutex, &ring, log_arr_addr);
@@ -124,7 +125,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
 #ifdef INDEXER
     std::thread indexer_thread([&]() mutable {
-        pin_thread(0);
+        pin_thread(3);
         std::this_thread::sleep_for(std::chrono::seconds(4));
         indexer.run();
     });
