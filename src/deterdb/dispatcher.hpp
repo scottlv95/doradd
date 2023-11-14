@@ -166,29 +166,18 @@ public:
 #else
     look_ahead = BATCH_SPAWNER; 
 #endif
-
-#ifdef PREFETCH
-  #ifndef NO_IDX_LOOKUP 
-#if 0
+    
     for (i = 0; i < look_ahead; i++)
     {
-      prefetch_ret = T::prepare_parse(prepare_proc_read_head);
+      prefetch_ret = T::prepare_cowns(prepare_proc_read_head);
       prepare_proc_read_head += prefetch_ret;
     }
-#endif
+#ifdef PREFETCH
     for (i = 0; i < look_ahead; i++)
     {
-      prefetch_ret = T::prepare_process(prepare_parse_read_head);
+      prefetch_ret = T::prefetch_cowns(prepare_parse_read_head);
       prepare_parse_read_head += prefetch_ret;
     }
-  #else
-    for (i = 0; i < look_ahead; i++)
-    {
-      prefetch_ret = T::prepare_process(prepare_proc_read_head, RW,
-        L1D_LOCALITY);
-      prepare_proc_read_head += prefetch_ret;
-    }
-  #endif
 #endif
 
     // dispatch 
