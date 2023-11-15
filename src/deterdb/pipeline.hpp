@@ -44,10 +44,10 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
     uint64_t log_arr_addr = (uint64_t)log_arr;
  
-    std::string log_dir = "./results/";
-    std::string log_suffix = "-latency.log";
-    std::string log_name = log_dir + gen_type + log_suffix;
-    FILE* log_fd = fopen(reinterpret_cast<const char*>(log_name.c_str()), "w");   
+    std::string res_log_dir = "./results/";
+    std::string res_log_suffix = "-latency.log";
+    std::string res_log_name = res_log_dir + gen_type + res_log_suffix;
+    FILE* res_log_fd = fopen(reinterpret_cast<const char*>(res_log_name.c_str()), "w");   
    
     RPCHandler rpc_handler(&req_cnt, gen_type, log_arr_addr);
   #else 
@@ -89,27 +89,31 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 #else
 
   #ifdef INDEXER
-    rigtorp::SPSCQueue<int> ring_1(CHANNEL_SIZE_IDX_PREF);
-    Indexer<T> indexer(ret, &ring_1);
+    rigtorp::SPSCQueue<int> ring_idx_pref(CHANNEL_SIZE_IDX_PREF);
+    Indexer<T> indexer(ret, &ring_idx_pref
+    #ifdef ADAPT_BATCH
+      , &req_cnt
+    #endif
+    );
   #endif
 
-    rigtorp::SPSCQueue<int> ring(CHANNEL_SIZE);
+    rigtorp::SPSCQueue<int> ring_pref_disp(CHANNEL_SIZE);
 
-  #if defined(ADAPT_BATCH) || defined(INDEXER)
-    Prefetcher<T> prefetcher(ret, &ring, &ring_1);
-  #ifdef RPC_LATENCY
+  #if defined(INDEXER)
+    Prefetcher<T> prefetcher(ret, &ring_pref_disp, &ring_idx_pref);
+    #ifdef RPC_LATENCY
     // give init_time_log_arr to spawner. Needed for capturing in when.
     Spawner<T> spawner(ret, worker_cnt, counter_map, 
-        counter_map_mutex, &ring, log_arr_addr);
+        counter_map_mutex, &ring_pref_disp, log_arr_addr);
     #else
     Spawner<T> spawner(ret, worker_cnt, counter_map, 
-        counter_map_mutex, &ring);
+        counter_map_mutex, &ring_pref_disp);
     #endif // RPC_LATENCY
   #else 
-    Prefetcher<T> prefetcher(ret, &ring);
+    Prefetcher<T> prefetcher(ret, &ring_pref_disp);
     Spawner<T> spawner(ret, worker_cnt, counter_map, 
-        counter_map_mutex, &ring);
-  #endif // ADAPT_BATCH
+        counter_map_mutex, &ring_pref_disp);
+  #endif // INDEXER 
 
     std::thread spawner_thread([&]() mutable {
         pin_thread(1);
@@ -133,8 +137,8 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
 #ifdef ADAPT_BATCH
     std::thread rpc_handler_thread([&]() mutable {
-      pin_thread(3);
-      std::this_thread::sleep_for(std::chrono::seconds(5));
+      pin_thread(0);
+      std::this_thread::sleep_for(std::chrono::seconds(6));
       rpc_handler.run();
     });
 #endif
@@ -158,15 +162,15 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
     for (const auto& entry : *log_map) {
       printf("flush entry --ing\n");
-      fprintf(log_fd, "flush entry --ing\n");
+      fprintf(res_log_fd, "flush entry --ing\n");
       if (entry.second) {
   #ifdef LOG_SCHED_OHEAD
         for (std::tuple<uint32_t, uint32_t> value_tuple : *(entry.second))
-          fprintf(log_fd, "%u %u\n", 
+          fprintf(res_log_fd, "%u %u\n", 
               std::get<0>(value_tuple), std::get<1>(value_tuple));
   #else
         for (auto value : *(entry.second)) 
-          fprintf(log_fd, "%u\n", value);                  
+          fprintf(res_log_fd, "%u\n", value);                  
   #endif // LOG_SCHED_OHEAD
       }
     }
