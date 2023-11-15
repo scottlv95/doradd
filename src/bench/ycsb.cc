@@ -31,7 +31,7 @@ public:
   static Index<YCSBRow>* index;
   static uint64_t cown_base_addr;
   
-#if defined(INDEXER) || defined(TEST_TWO)
+//#ifdef INDEXER
   // Indexer: read db and in-place update cown_ptr
   static int prepare_cowns(char* input)
   {
@@ -56,7 +56,7 @@ public:
     
     return sizeof(YCSBTransactionMarshalled);
   }
-#else
+//#else
 
   // prefetch row entry before accessing in parse()
   static int prepare_parse(const char* input)
@@ -105,7 +105,7 @@ public:
     return sizeof(YCSBTransactionMarshalled);
   }
   #endif // NO_IDX_LOOKUP
-#endif // INDEXER
+//#endif // INDEXER
 
 #ifdef RPC_LATENCY
   static int parse_and_process(const char* input, ts_type init_time)
