@@ -9,7 +9,7 @@
 #include <fstream>
 
 #define ROW_COUNT  10'000'000
-#define TX_COUNT   1'000'000
+#define TX_COUNT   1'000'000 // 4M for Caracal
 #define ROW_PER_TX 10
 #define NrMSBContentionKey 6
 
@@ -17,7 +17,7 @@ using Rand = foedus::assorted::ZipfianRandom;
 
 // Contention: 7 keys of 10 are chosen from 77 (2^7) set of 10M (2^24)
 // nr_lsb is 17 (24-7) to mask 7 keys into a fixed space.
-std::array<uint64_t, ROW_PER_TX> gen_keys(Rand* r, int contention)
+std::array<uint32_t, ROW_PER_TX> gen_keys(Rand* r, int contention)
 {
   int nr_lsb = 63 - __builtin_clzll(ROW_COUNT) - NrMSBContentionKey;
   size_t mask = 0;
@@ -26,7 +26,7 @@ std::array<uint64_t, ROW_PER_TX> gen_keys(Rand* r, int contention)
   int NrContKey = 0;
   if (contention) NrContKey = 7;
 
-  std::array<uint64_t, ROW_PER_TX> keys;
+  std::array<uint32_t, ROW_PER_TX> keys;
   for (int i = 0; i < ROW_PER_TX; i++) {
  again:
     keys[i] = r->next() % ROW_COUNT;
@@ -69,12 +69,12 @@ void gen_bin_txn(Rand* rand, std::ofstream* f, int contention)
 {
   auto keys = gen_keys(rand, contention);
   auto ws   = gen_write_set(contention);
-  int padding = 46;
+  int padding = 86;
 
   // pack
-  for (const uint64_t& key : keys) 
+  for (const uint32_t& key : keys) 
   {
-    for (size_t i = 0; i < sizeof(uint64_t); i++) 
+    for (size_t i = 0; i < sizeof(uint32_t); i++) 
     {
       uint8_t byte = (key >> (i * 8)) & 0xFF;
       f->write(reinterpret_cast<const char*>(&byte), sizeof(uint8_t));
@@ -136,8 +136,6 @@ int main(int argc, char** argv)
     gen_bin_txn(&rand, &outLog, contention);
   }
 
-  printf("counter is %d\n", counter);
-  printf("counter_1 is %d\n", counter_1);
   outLog.close();
   return 0;
 }
