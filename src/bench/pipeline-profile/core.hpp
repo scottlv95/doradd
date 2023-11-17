@@ -1,6 +1,5 @@
 #pragma once
 
-#include <atomic>
 #include <chrono>
 #include "../../deterdb/spscq.hpp"
 
@@ -10,21 +9,32 @@ using ts_type = std::chrono::time_point<std::chrono::system_clock>;
 constexpr static int BUF_SZ = 4;
 constexpr static thread_local int BATCH_SZ = 8;
 
+struct __attribute__((packed)) TxnMarshalled
+{
+  uint64_t value;
+  uint8_t pad[56];
+};
+static_assert(sizeof(TxnMarshalled) == 64);
+
 struct ReadTxn
 {
 public:
-  static void process(std::atomic<uint64_t>* data)
+  static int process(char* input)
   {
-    uint64_t _val = data->load(std::memory_order_relaxed);
+    auto txm = reinterpret_cast<TxnMarshalled*>(input);
+    uint64_t _val = txm->value;
+    return sizeof(TxnMarshalled);
   }
 };
 
 struct WriteTxn
 {
 public:
-  static void process(std::atomic<uint64_t>* data)
+  static int process(char* input)
   {
-    data->store(1, std::memory_order_relaxed);
+    auto txm = reinterpret_cast<TxnMarshalled*>(input);
+    txm->value = (uint64_t)1;
+    return sizeof(TxnMarshalled);
   }
 };
 
@@ -32,22 +42,44 @@ template<typename T>
 struct Worker
 {
 public:
+  int read_cnt;
+  int cnt;
   ringtype* inputRing;
   ringtype* outputRing;
-  std::atomic<uint64_t>* data;
+  char* read_top;
+  char* read_head;
 
-  Worker(ringtype* inputRing_, ringtype* outputRing_, std::atomic<uint64_t>* data_) :
-    inputRing(inputRing_), outputRing(outputRing_), data(data_) {}
-
-  void dispatch_one()
+  Worker(ringtype* inputRing_, ringtype* outputRing_, 
+    char* read_top_, int read_cnt_) :
+    inputRing(inputRing_), outputRing(outputRing_), 
+    read_top(read_top_), read_cnt(read_cnt_) 
   {
-    T::process(data); 
+    read_head = read_top;
+    cnt = 0; 
+  }
+
+  int dispatch_one()
+  {
+    return T::process(read_head); 
+  }
+
+  void dispatch_batch()
+  {
+    if (cnt > (read_cnt - BATCH_SZ)) {
+      read_head = read_top;
+      cnt = 0;
+    }
+
+    for (int i = 0; i < BATCH_SZ; i++)
+    {
+      int ret = this->dispatch_one();
+      read_head += ret;
+      cnt++;
+    }
   }
     
   virtual void run()
   {
-    int i;
-
     while(1)
     {
       if (!inputRing->front())
@@ -55,9 +87,7 @@ public:
 
       // fixed_batch has 15% perf gains than adapt_batch within the pipeline
       // BATCH_SZ = static_cast<size_t>(*inputRing->front());
-
-      for (i = 0; i < BATCH_SZ; i++)
-        this->dispatch_one();
+      dispatch_batch();
 
       outputRing->push(BATCH_SZ);
       inputRing->pop();
@@ -68,18 +98,14 @@ public:
 template<typename T>
 struct FirstCore : public Worker<T>
 {
-  FirstCore(ringtype* output, std::atomic<uint64_t>* data) : 
-    Worker<T>(nullptr, output, data) {} 
+  FirstCore(ringtype* output, char* read_top, int read_cnt) : 
+    Worker<T>(nullptr, output, read_top, read_cnt) {} 
 
   void run()
   {
-    int i;
-
     while (1) 
     {
-      for (i = 0; i < BATCH_SZ; i++)
-        this->dispatch_one();
-
+      this->dispatch_batch();
       this->outputRing->push(BATCH_SZ);       
     }
   }
@@ -90,8 +116,8 @@ struct LastCore : public Worker<T>
 {
   ts_type last_print;
 
-  LastCore(ringtype* input, std::atomic<uint64_t>* data) : 
-    Worker<T>(input, nullptr, data) {}
+  LastCore(ringtype* input, char* read_top, int read_cnt) : 
+    Worker<T>(input, nullptr, read_top, read_cnt) {}
   
   void run()
   {
@@ -103,9 +129,7 @@ struct LastCore : public Worker<T>
       if (!this->inputRing->front())
         continue;
       
-      for (i = 0; i < BATCH_SZ; i++)
-        this->dispatch_one();
-
+      this->dispatch_batch();
       this->inputRing->pop();
 
       if (tx_cnt++ >= 1'000'000) {
