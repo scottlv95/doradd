@@ -9,6 +9,7 @@
 #include <cassert>
 #include <stdlib.h> 
 #include <stdio.h>
+#include <mutex>
 
 #include "config.hpp"
 #include "spscq.hpp"

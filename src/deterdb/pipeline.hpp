@@ -10,6 +10,8 @@
 #include "pin-thread.hpp"
 #include "config.hpp"
 
+#define CHANNEL_SIZE_IDX_PREF 1000000
+
 template<typename T>
 void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 {
@@ -20,11 +22,11 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
 
   // init stats collectors for workers
-  counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
+  auto counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
   counter_map->reserve(worker_cnt);
-  log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
+  auto log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
   log_map->reserve(worker_cnt);
-  counter_map_mutex = new std::mutex();
+  auto counter_map_mutex = new std::mutex();
 
 
   // init and run dispatcher pipelines
