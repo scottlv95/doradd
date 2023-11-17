@@ -1,37 +1,56 @@
+#include <deque>
+#include <algorithm>
+
 #include "core.hpp"
 #include "../../deterdb/pin-thread.hpp"
-#include <immintrin.h>
+
+template<typename TxnType>
+void runPipeline(size_t cnt, std::atomic<uint64_t>* data)
+{
+  std::deque<ringtype*> rings(cnt+1);
+  
+  for (int i = 0; i < cnt + 1; i++)
+    rings[i] = new ringtype(BUF_SZ);
+
+  FirstCore<TxnType> firstCore(rings[0], data);
+  LastCore<TxnType> lastCore(rings[cnt], data);
+
+  std::thread lastCoreThread([&, cnt]() {
+    pin_thread(cnt + 1);
+    lastCore.run();
+  }); 
+
+  std::vector<std::thread> workerThreads(cnt);
+  for (int i = 0; i < cnt; i++)
+  {
+    workerThreads.emplace_back(std::move(
+      std::thread([&, i]() mutable {
+        pin_thread(i + 1);
+        Worker<TxnType> worker(rings[i], rings[i + 1], data);
+        worker.run();
+      })
+    ));
+  }
+
+  std::thread firstCoreThread([&]() {
+    pin_thread(0);
+    firstCore.run();
+  }); 
+
+  firstCoreThread.join();
+  for (auto& thread: workerThreads)
+    thread.join();
+  lastCoreThread.join();
+}
 
 int main()
 {
-  ringtype ring_1(BUF_SZ);
-  ringtype ring_2(BUF_SZ);
+  std::atomic<uint64_t>* data = reinterpret_cast<std::atomic<uint64_t>*>(
+    aligned_alloc(1024, 1024 * sizeof(std::atomic<uint64_t>)));
+  data->store(0, std::memory_order_relaxed);
 
-  std::atomic<uint64_t> data{0};
-  
-  FirstCore<ReadTxn> core_1(&ring_1, &data);
-  Worker<ReadTxn> core_2(&ring_1, &ring_2, &data);
-  LastCore<ReadTxn> core_3(&ring_2, &data);
-
-  std::thread thread_1([&]() mutable {
-    pin_thread(1);
-    std::this_thread::sleep_for(std::chrono::seconds(3));
-    core_1.run();
-  });
-  std::thread thread_2([&]() mutable {
-    pin_thread(2);
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-    core_2.run();
-  });
-  std::thread thread_3([&]() mutable {
-    pin_thread(3);
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    core_3.run();
-  });
-
-  thread_1.join();
-  thread_2.join();
-  thread_3.join();
+  using Txn = ReadTxn;
+  runPipeline<Txn>(8, data);
 
   return 0;
 }

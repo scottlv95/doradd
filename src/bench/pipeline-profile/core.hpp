@@ -7,8 +7,8 @@
 using ringtype = rigtorp::SPSCQueue<int>;
 using ts_type = std::chrono::time_point<std::chrono::system_clock>;
 
-constexpr static int BUF_SZ = 8;
-constexpr static int BATCH_SZ = 8;
+constexpr static int BUF_SZ = 4;
+constexpr static thread_local int BATCH_SZ = 8;
 
 struct ReadTxn
 {
@@ -46,20 +46,20 @@ public:
     
   virtual void run()
   {
-    int i, batch_sz;
+    int i;
 
     while(1)
     {
       if (!inputRing->front())
         continue;
 
-      // TODO: study the effects of adapt_batch and fixed_batch
-      batch_sz = static_cast<size_t>(*inputRing->front());
+      // fixed_batch has 15% perf gains than adapt_batch within the pipeline
+      // BATCH_SZ = static_cast<size_t>(*inputRing->front());
 
-      for (i = 0; i < batch_sz; i++)
+      for (i = 0; i < BATCH_SZ; i++)
         this->dispatch_one();
 
-      outputRing->push(batch_sz);
+      outputRing->push(BATCH_SZ);
       inputRing->pop();
     }
   }
@@ -91,23 +91,19 @@ struct LastCore : public Worker<T>
   ts_type last_print;
 
   LastCore(ringtype* input, std::atomic<uint64_t>* data) : 
-    Worker<T>(input, nullptr, data) 
-  {
-    last_print = std::chrono::system_clock::now();
-  }
+    Worker<T>(input, nullptr, data) {}
   
   void run()
   {
-    int i, batch_sz, tx_cnt = 0; 
+    int i, tx_cnt = 0;
+    last_print = std::chrono::system_clock::now();
 
     while (1) 
     {
       if (!this->inputRing->front())
         continue;
       
-      batch_sz = static_cast<size_t>(*this->inputRing->front());
-
-      for (i = 0; i < batch_sz; i++)
+      for (i = 0; i < BATCH_SZ; i++)
         this->dispatch_one();
 
       this->inputRing->pop();
