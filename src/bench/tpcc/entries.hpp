@@ -11,12 +11,12 @@ class Warehouse
 {
 public:
   uint32_t w_id;
-  std::string w_name;
-  std::string w_street_1;
-  std::string w_street_2;
-  std::string w_city;
-  std::string w_state;
-  std::string w_zip;
+  char w_name[16];
+  char w_street_1[32];
+  char w_street_2[32];
+  char w_city[32];
+  char w_state[2];
+  char w_zip[9];
   uint32_t w_tax;
   uint64_t w_ytd; // Warehouse balance
 
@@ -34,12 +34,12 @@ class District
 public:
   uint32_t d_id;
   uint32_t w_id;
-  std::string d_name;
-  std::string d_street_1;
-  std::string d_street_2;
-  std::string d_city;
-  std::string d_state;
-  std::string d_zip;
+  char d_name[16];
+  char d_street_1[32];
+  char d_street_2[32];
+  char d_city[32];
+  char d_state[2];
+  char d_zip[9];
   float d_tax;
   uint64_t d_ytd; // District balance
   uint64_t d_next_o_id; // Next order id
@@ -57,9 +57,9 @@ class Item
 {
 public:
   uint64_t i_id;
-  std::string i_name;
+  char i_name[32];
   float i_price;
-  std::string i_data;
+  char i_data[64];
   uint64_t i_im_id; // Image id
 
   // Constructor
@@ -77,24 +77,24 @@ public:
   uint64_t c_id;
   uint64_t c_d_id;
   uint64_t c_w_id;
-  std::string c_first;
-  std::string c_middle;
-  std::string c_last;
-  std::string c_street_1;
-  std::string c_street_2;
-  std::string c_city;
-  std::string c_state;
-  std::string c_zip;
-  std::string c_phone;
+  char c_first[32];
+  char c_middle[2];
+  char c_last[32];
+  char c_street_1[32];
+  char c_street_2[32];
+  char c_city[32];
+  char c_state[2];
+  char c_zip[9];
+  char c_phone[32];
+  char c_credit[2];
   uint64_t c_since;
-  std::string c_credit;
   uint64_t c_credit_lim;
   uint64_t c_discount;
   float c_balance;
   uint64_t c_ytd_payment;
   uint64_t c_payment_cnt;
   uint64_t c_delivery_cnt;
-  std::string c_data;
+  char c_data[500];
 
   Customer(uint64_t _c_w_id, uint64_t _c_d_id, uint64_t _c_id)
   : c_id(_c_id), c_d_id(_c_d_id), c_w_id(_c_w_id)
@@ -145,7 +145,7 @@ public:
   uint64_t ol_delivery_d;
   uint64_t ol_quantity;
   uint64_t ol_amount;
-  std::string ol_dist_info;
+  char ol_dist_info[32];
 
   // Constructor
   OrderLine(uint32_t _w_id, uint32_t _d_id, uint64_t _o_id, uint64_t _number)
@@ -181,20 +181,20 @@ public:
   uint64_t s_w_id;
   uint64_t s_i_id;
   uint64_t s_quantity;
-  std::string s_dist_01;
-  std::string s_dist_02;
-  std::string s_dist_03;
-  std::string s_dist_04;
-  std::string s_dist_05;
-  std::string s_dist_06;
-  std::string s_dist_07;
-  std::string s_dist_08;
-  std::string s_dist_09;
-  std::string s_dist_10;
+  char s_dist_01[32];
+  char s_dist_02[32];
+  char s_dist_03[32];
+  char s_dist_04[32];
+  char s_dist_05[32];
+  char s_dist_06[32];
+  char s_dist_07[32];
+  char s_dist_08[32];
+  char s_dist_09[32];
+  char s_dist_10[32];
   uint64_t s_ytd;
   uint64_t s_order_cnt;
   uint64_t s_remote_cnt;
-  std::string s_data;
+  char s_data[64];
 
   // Constructor
   Stock(uint64_t _w_id, uint64_t _i_id) : s_w_id(_w_id), s_i_id(_i_id) {}
@@ -215,7 +215,7 @@ public:
   uint64_t h_w_id;
   uint64_t h_date;
   float h_amount;
-  std::string h_data;
+  char h_data[32];
 
   History(uint32_t wid, uint64_t did, uint64_t cid)
   {
