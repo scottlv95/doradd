@@ -45,11 +45,11 @@ public:
   uint64_t d_next_o_id; // Next order id
 
   // Constructor
-  District(uint64_t wid, uint64_t did) : d_id(did), w_id(wid) {}
+  District(uint32_t wid, uint32_t did) : d_id(did), w_id(wid) {}
 
   uint64_t hash_key() const
   {
-    return ((w_id-1) * DISTRICTS_PER_WAREHOUSE) + (d_id-1);
+    return ((w_id - 1) * DISTRICTS_PER_WAREHOUSE) + (d_id - 1);
   }
 };
 
@@ -74,19 +74,19 @@ public:
 class Customer
 {
 public:
-  uint64_t c_id;
-  uint64_t c_d_id;
-  uint64_t c_w_id;
+  uint32_t c_id;
+  uint32_t c_d_id;
+  uint32_t c_w_id;
   char c_first[32];
-  char c_middle[2];
   char c_last[32];
   char c_street_1[32];
   char c_street_2[32];
   char c_city[32];
-  char c_state[2];
-  char c_zip[9];
   char c_phone[32];
+  char c_state[2];
   char c_credit[2];
+  char c_middle[2];
+  char c_zip[9];
   uint64_t c_since;
   uint64_t c_credit_lim;
   uint64_t c_discount;
@@ -102,8 +102,8 @@ public:
 
   uint64_t hash_key() const
   {
-    return ((c_w_id-1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
-      ((c_d_id-1) * CUSTOMERS_PER_DISTRICT) + (c_id-1);
+    return ((c_w_id - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
+      ((c_d_id - 1) * CUSTOMERS_PER_DISTRICT) + (c_id - 1);
   }
 };
 
@@ -114,7 +114,7 @@ public:
   uint64_t o_id;
   uint32_t o_d_id;
   uint32_t o_w_id;
-  uint64_t o_c_id;
+  uint32_t o_c_id;
   uint64_t o_entry_d;
   uint64_t o_carrier_id;
   uint32_t o_ol_cnt;
@@ -126,9 +126,10 @@ public:
 
   uint64_t hash_key() const
   {
-    return ((o_w_id-1) * DISTRICTS_PER_WAREHOUSE *
+    return ((o_w_id - 1) * DISTRICTS_PER_WAREHOUSE *
             (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
-      ((o_d_id-1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) + (o_id-1);
+      ((o_d_id - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      (o_id - 1);
   }
 };
 
@@ -154,23 +155,23 @@ public:
 
   uint64_t hash_key() const
   {
-    return ((ol_w_id-1) * DISTRICTS_PER_WAREHOUSE *
+    return ((ol_w_id - 1) * DISTRICTS_PER_WAREHOUSE *
             (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS) *
             MAX_OL_CNT) +
-      ((ol_d_id-1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS) *
+      ((ol_d_id - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS) *
        MAX_OL_CNT) +
-      ((ol_o_id-1) * MAX_OL_CNT) + ol_number-1;
+      ((ol_o_id - 1) * MAX_OL_CNT) + ol_number - 1;
   }
 };
 
 class NewOrder
 {
 public:
-  uint64_t no_o_id;
-  uint64_t no_d_id;
-  uint64_t no_w_id;
+  uint32_t no_o_id;
+  uint32_t no_d_id;
+  uint32_t no_w_id;
 
-  NewOrder(uint64_t wid, uint64_t did, uint64_t oid)
+  NewOrder(uint32_t wid, uint32_t did, uint32_t oid)
   : no_o_id(oid), no_d_id(did), no_w_id(wid)
   {}
 };
@@ -178,9 +179,13 @@ public:
 class Stock
 {
 public:
-  uint64_t s_w_id;
+  uint32_t s_w_id;
   uint64_t s_i_id;
   uint64_t s_quantity;
+  uint64_t s_ytd;
+  uint64_t s_order_cnt;
+  uint64_t s_remote_cnt;
+
   char s_dist_01[32];
   char s_dist_02[32];
   char s_dist_03[32];
@@ -191,17 +196,14 @@ public:
   char s_dist_08[32];
   char s_dist_09[32];
   char s_dist_10[32];
-  uint64_t s_ytd;
-  uint64_t s_order_cnt;
-  uint64_t s_remote_cnt;
   char s_data[64];
 
   // Constructor
-  Stock(uint64_t _w_id, uint64_t _i_id) : s_w_id(_w_id), s_i_id(_i_id) {}
+  Stock(uint32_t _w_id, uint64_t _i_id) : s_w_id(_w_id), s_i_id(_i_id) {}
 
   uint64_t hash_key() const
   {
-    return ((s_w_id-1) * STOCK_PER_WAREHOUSE) + (s_i_id-1);
+    return ((s_w_id - 1) * STOCK_PER_WAREHOUSE) + (s_i_id - 1);
   }
 };
 
@@ -211,13 +213,13 @@ public:
   uint32_t h_c_id;
   uint32_t h_c_d_id;
   uint32_t h_c_w_id;
-  uint64_t h_d_id;
-  uint64_t h_w_id;
+  uint32_t h_d_id;
+  uint32_t h_w_id;
   uint64_t h_date;
   float h_amount;
   char h_data[32];
 
-  History(uint32_t wid, uint64_t did, uint64_t cid)
+  History(uint32_t wid, uint32_t did, uint64_t cid)
   {
     h_c_id = cid;
     h_c_d_id = did;
@@ -228,6 +230,7 @@ public:
 
   uint64_t hash_key() const
   {
-    return ((h_c_w_id-1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) + ((h_c_d_id-1) * CUSTOMERS_PER_DISTRICT) + (h_c_id-1);
+    return ((h_c_w_id - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
+      ((h_c_d_id - 1) * CUSTOMERS_PER_DISTRICT) + (h_c_id - 1);
   }
 };
