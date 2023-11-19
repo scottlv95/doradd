@@ -3,6 +3,10 @@
 #include "generator.hpp"
 #include "db.hpp"
 #include "rand.hpp"
+#include <cpp/when.h>
+
+using namespace verona::rt;
+using namespace verona::cpp;
 
 
 class TPCCGenerator {
@@ -12,12 +16,13 @@ class TPCCGenerator {
     Database* db;
 
    public:
-    TPCCGenerator(Database* _db, uint32_t _num_warehouses = 1) : db(_db), num_warehouses(_num_warehouses) {}
+    TPCCGenerator(Database* _db) : db(_db), num_warehouses(NUM_WAREHOUSES) {}
 
     // TPC-C Reference
     // https://www.tpc.org/TPC_Documents_Current_Versions/pdf/tpc-c_v5.11.0.pdf
     // Ref: page 65
     void generateWarehouses() {
+        std::cout << "Generating warehouses ..." << std::endl;
 
         for (uint64_t w_id = 1; w_id <= num_warehouses; w_id++) 
         {
@@ -32,17 +37,18 @@ class TPCCGenerator {
             _warehouse.w_zip = r.generateRandomString(9);
             _warehouse.w_ytd = 300000;
 
-            db->warehouse_table.add(_warehouse.hash_key(), _warehouse);
+            db->warehouse_table.insert_row(_warehouse.hash_key(), make_cown<Warehouse>(_warehouse));
         }
 
         return;
     }
 
     void generateDistricts() {
+        std::cout << "Generating districts ..." << std::endl;
         
         for (uint32_t w_id = 1; w_id <= num_warehouses; w_id++)
         {
-            for (uint32_t d_id = 1; d_id <= DISTRICTS_PER_WAREHOUSE; d_id)
+            for (uint32_t d_id = 1; d_id <= DISTRICTS_PER_WAREHOUSE; d_id ++)
             {
                 District _district = District(w_id, d_id);
 
@@ -56,7 +62,7 @@ class TPCCGenerator {
                 _district.d_ytd = 300000;
                 _district.d_next_o_id = 3001;
 
-                db->district_table.add(_district.hash_key(), _district);
+                db->district_table.insert_row(_district.hash_key(), make_cown<District>(_district));
             }
         }
         
@@ -65,6 +71,8 @@ class TPCCGenerator {
 
     void generateCustomerAndHistory()
     {
+        std::cout << "Generating customers and history ..." << std::endl;
+
         for (uint32_t w_id = 1; w_id <= num_warehouses; w_id++)
         {
             for (uint32_t d_id = 1; d_id <= DISTRICTS_PER_WAREHOUSE; d_id++)
@@ -76,7 +84,7 @@ class TPCCGenerator {
                     _customer.c_middle = "OE";
 
                     if (c_id <= 1000) {
-                        _customer.c_last = r.getCustomerLastName(c_id);
+                        _customer.c_last = r.getCustomerLastName(c_id - 1);
                     }
                     else {
                         _customer.c_last = r.getNonUniformCustomerLastNameLoad();
@@ -98,14 +106,15 @@ class TPCCGenerator {
                     _customer.c_since = r.GetCurrentTime();
                     _customer.c_middle = "OE";
                     _customer.c_data = r.generateRandomString(300, 500);
-                    db->customer_table.add(_customer.hash_key(), _customer);
+                    db->customer_table.insert_row(_customer.hash_key(), make_cown<Customer>(_customer));
 
                     // History
                     History _history = History(w_id, d_id, c_id);
                     _history.h_amount = 10.00;
                     _history.h_data = r.generateRandomString(12, 24);
                     _history.h_date = r.GetCurrentTime();
-                    db->history_table.add(_history.hash_key(), _history);
+                    
+                    db->history_table.insert_row(_history.hash_key(), make_cown<History>(_history));
                 }
             }
         }
@@ -113,7 +122,9 @@ class TPCCGenerator {
     }
 
     void generateItems()
-    {
+    {   
+        std::cout << "Generating items ..." << std::endl;
+
         for (uint32_t i_id = 1; i_id <= NUM_ITEMS; i_id++) 
         {
             Item _item = Item(i_id);
@@ -131,12 +142,14 @@ class TPCCGenerator {
                 _item.i_data = first_part + "ORIGINAL" + last_part;
             }
 
-            db->item_table.add(_item.hash_key(), _item);
+            db->item_table.insert_row(_item.hash_key(), make_cown<Item>(_item));
         }
     }
 
     void generateStocks()
     {
+        std::cout << "Generating stocks ..." << std::endl;
+
         for (uint32_t w_id = 1; w_id <= num_warehouses; w_id++)
         {
             for (uint32_t i_id = 1; i_id <= NUM_ITEMS; i_id++)
@@ -167,13 +180,15 @@ class TPCCGenerator {
                     _stock.s_data = first_part + "ORIGINAL" + last_part;
                 }
 
-                db->stock_table.add(_stock.hash_key(), _stock);
+                db->stock_table.insert_row(_stock.hash_key(), make_cown<Stock>(_stock));
             }
         }
     }
 
 
-    void generateOrdersAndOrderLines(){
+    void generateOrdersAndOrderLines()
+    {
+        std::cout << "Generating orders and order lines ..." << std::endl;
 
         for (uint32_t w_id = 1; w_id <= num_warehouses; w_id++)
         {
@@ -200,10 +215,10 @@ class TPCCGenerator {
                         _order_line.ol_delivery_d = (_order.o_id > 2100) ? _order.o_entry_d : 0;
                         _order_line.ol_dist_info = r.generateRandomString(24);
 
-                        db->order_line_table.add(_order_line.hash_key(), _order_line);
+                        db->order_line_table.insert_row(_order_line.hash_key(), make_cown<OrderLine>(_order_line));
                     }                  
 
-                    db->order_table.add(_order.hash_key(), _order);
+                    db->order_table.insert_row(_order.hash_key(), make_cown<Order>(_order));
                 }
             }
         }

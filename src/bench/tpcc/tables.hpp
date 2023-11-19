@@ -7,66 +7,57 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <array>
 
 #include "entries.hpp"
 
 using namespace verona::rt;
 using namespace verona::cpp;
 
-template <typename> struct is_tuple: std::false_type {};
-template <typename ...T> struct is_tuple<std::tuple<T...>>: std::true_type {};
 
-
-// Variadic template to generate hash from multiple uint64_ts
-template<typename... Args>
-uint64_t my_hash(Args... args)
+template<typename Key, typename T, uint64_t DB_SIZE>
+struct Table
 {
-  uint64_t seed = 0;
-  ((seed ^= args + 0x9e3779b9 + (seed << 6) + (seed >> 2)), ...);
-  return seed;
-}
+private:
+  std::array<cown_ptr<T>, DB_SIZE> map;
+  uint64_t cnt = 0;
 
-template <typename Key, typename Value>
-class Table {
-   public:
-    Table() : db() {}
+public:
+  Table() : map(std::array<cown_ptr<T>, DB_SIZE>()) {}
 
-    Key add(Key key, Value& val) {
-        cown_ptr<Value> c = make_cown<Value>(val);
-        db.insert(std::make_pair(key, c));
-        return key;
+  cown_ptr<T>* get_row_addr(uint64_t key)
+  {
+    return &map[key];
+  }
+
+  cown_ptr<Row<T>>&& get_row(uint64_t key)
+  {
+    return std::move(map[key]);
+  }
+
+  uint64_t insert_row(Key key, cown_ptr<T> r)
+  {
+    if (cnt < DB_SIZE)
+    {
+        map[key] = r;
+        return cnt++;
     }
-
-    cown_ptr<Value>* get_row_addr(Key key) {
-        auto it = db.find(key);
-        if (it != db.end()) {
-            return &it->second;
-        }
-        return nullptr;
+    else
+    {
+      throw std::out_of_range("Index is full");
     }
-
-    std::optional<cown_ptr<Value>> get(Key key) {
-        auto it = db.find(key);
-        if (it != db.end()) {
-            return it->second;
-        }
-        return std::nullopt;
-    }
-
-    inline uint64_t get_size() const { return db.size(); }
-
-   private:
-    std::unordered_map<uint64_t, cown_ptr<Value>> db;
+  }
 };
+
 
 // ========================
 // === WAREHOUSE TABLE ====
 // primary key: w_id
 // ========================
 
-class WarehouseTable : public Table<uint64_t, Warehouse> {
+class WarehouseTable : public Table<uint64_t, Warehouse, TSIZE_WAREHOUSE> {
    public:
-    WarehouseTable() : Table<uint64_t, Warehouse>() {}
+    WarehouseTable() : Table<uint64_t, Warehouse, TSIZE_WAREHOUSE> () {}
 };
 
 // =======================
@@ -74,9 +65,9 @@ class WarehouseTable : public Table<uint64_t, Warehouse> {
 // primary key: (w_id, d_id)
 // =======================
 
-class DistrictTable : public Table<uint64_t, District> {
+class DistrictTable : public Table<uint64_t, District, TSIZE_DISTRICT> {
    public:
-    DistrictTable() : Table<uint64_t, District>() {}
+    DistrictTable() : Table<uint64_t, District, TSIZE_DISTRICT> () {}
 };
 
 // =======================
@@ -84,9 +75,9 @@ class DistrictTable : public Table<uint64_t, District> {
 // primary key: i_id
 // =======================
 
-class ItemTable : public Table<uint64_t, Item> {
+class ItemTable : public Table<uint64_t, Item, TSIZE_ITEM> {
    public:
-    ItemTable() : Table<uint64_t, Item>() {}
+    ItemTable() : Table<uint64_t, Item, TSIZE_ITEM> () {}
 };
 
 // =======================
@@ -94,9 +85,9 @@ class ItemTable : public Table<uint64_t, Item> {
 // primary key: (w_id, d_id, c_id)
 // =======================
 
-class CustomerTable : public Table<uint64_t, Customer> {
+class CustomerTable : public Table<uint64_t, Customer, TSIZE_CUSTOMER> {
    public:
-    CustomerTable() : Table<uint64_t, Customer>() {}
+    CustomerTable() : Table<uint64_t, Customer, TSIZE_CUSTOMER> () {}
 };
 
 // ====================
@@ -105,9 +96,9 @@ class CustomerTable : public Table<uint64_t, Customer> {
 // desc: individual items of each order
 // ===================
 
-class OrderLineTable : public Table<uint64_t, OrderLine> {
+class OrderLineTable : public Table<uint64_t, OrderLine, TSIZE_ORDER_LINE> {
    public:
-    OrderLineTable() : Table<uint64_t, OrderLine>() {}
+    OrderLineTable() : Table<uint64_t, OrderLine, TSIZE_ORDER_LINE> () {}
 };
 
 // ====================
@@ -115,9 +106,9 @@ class OrderLineTable : public Table<uint64_t, OrderLine> {
 // primary key: (w_id, i_id)
 // ====================
 
-class StockTable : public Table<uint64_t, Stock> {
+class StockTable : public Table<uint64_t, Stock, TSIZE_STOCK> {
    public:
-    StockTable() : Table<uint64_t, Stock>() {}
+    StockTable() : Table<uint64_t, Stock, TSIZE_STOCK> () {}
 };
 
 // ====================
@@ -126,9 +117,9 @@ class StockTable : public Table<uint64_t, Stock> {
 // desc: orders placed
 // ====================
 
-class OrderTable : public Table<uint64_t, Order> {
+class OrderTable : public Table<uint64_t, Order, TSIZE_ORDER> {
    public:
-    OrderTable() : Table<uint64_t, Order>() {}
+    OrderTable() : Table<uint64_t, Order, TSIZE_ORDER> () {}
 };
 
 // ====================
@@ -137,9 +128,9 @@ class OrderTable : public Table<uint64_t, Order> {
 // desc: new orders
 // ====================
 
-class NewOrderTable : public Table<uint64_t, NewOrder> {
+class NewOrderTable : public Table<uint64_t, NewOrder, TSIZE_NEW_ORDER> {
    public:
-    NewOrderTable() : Table<uint64_t, NewOrder>() {}
+    NewOrderTable() : Table<uint64_t, NewOrder, TSIZE_NEW_ORDER> () {}
 };
 
 // ====================
@@ -148,7 +139,7 @@ class NewOrderTable : public Table<uint64_t, NewOrder> {
 // desc: history of payments
 // ====================
 
-class HistoryTable : public Table<uint64_t, History> {
+class HistoryTable : public Table<uint64_t, History, TSIZE_HISTORY> {
    public:
-    HistoryTable() : Table<uint64_t, History>() {}
+    HistoryTable() : Table<uint64_t, History, TSIZE_HISTORY> () {}
 };
