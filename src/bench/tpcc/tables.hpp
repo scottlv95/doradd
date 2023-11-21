@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <array>
+#include <atomic>
 
 #include "entries.hpp"
 
@@ -67,6 +68,7 @@ class WarehouseTable : public Table<uint64_t, Warehouse, TSIZE_WAREHOUSE> {
 
 class DistrictTable : public Table<uint64_t, District, TSIZE_DISTRICT> {
    public:
+    std::atomic<uint32_t> order_id = 0;
     DistrictTable() : Table<uint64_t, District, TSIZE_DISTRICT> () {}
 };
 
