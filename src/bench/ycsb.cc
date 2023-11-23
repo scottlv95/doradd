@@ -1,10 +1,17 @@
 #include <thread>
 #include <unordered_map>
 
-#include "db.hpp" 
+#include "db.hpp"
+#include "pipeline.hpp"
 #include "txcounter.hpp"
 #include "constants.hpp"
 #include "pipeline.hpp"
+#include <cpp/when.h>
+
+
+using namespace verona::rt;
+using namespace verona::cpp;
+
 
 struct YCSBRow
 {
