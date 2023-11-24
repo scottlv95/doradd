@@ -7,7 +7,7 @@
 #include <string>
 #include <verona.h>
 
-class Warehouse
+class __attribute__((packed)) Warehouse
 {
 public:
   uint32_t w_id;
@@ -15,10 +15,10 @@ public:
   char w_street_1[32];
   char w_street_2[32];
   char w_city[32];
-  char w_state[2];
-  char w_zip[9];
   uint32_t w_tax;
   uint64_t w_ytd; // Warehouse balance
+  char w_state[2];
+  char w_zip[9];
 
   // Constructor
   Warehouse(uint32_t _w_id) : w_id(_w_id) {}
@@ -27,9 +27,14 @@ public:
   {
     return w_id - 1;
   }
+
+  static uint64_t hash_key(uint32_t wid)
+  {
+    return wid - 1;
+  }
 } __attribute__((aligned(256)));
 
-class District
+class __attribute__((packed)) District
 {
 public:
   uint32_t d_id;
@@ -51,9 +56,15 @@ public:
   {
     return ((w_id - 1) * DISTRICTS_PER_WAREHOUSE) + (d_id - 1);
   }
+
+  static uint64_t hash_key(uint32_t wid, uint32_t did)
+  {
+    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE) + (did - 1);
+  }
+
 } __attribute__((aligned(256)));
 
-class Item
+class __attribute__((packed)) Item
 {
 public:
   uint64_t i_id;
@@ -69,9 +80,15 @@ public:
   {
     return i_id - 1;
   }
+
+  static uint64_t hash_key(uint32_t iid)
+  {
+    return iid - 1;
+  }
+
 } __attribute__((aligned(128)));
 
-class Customer
+class __attribute__((packed)) Customer
 {
 public:
   uint32_t c_id;
@@ -105,10 +122,17 @@ public:
     return ((c_w_id - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
       ((c_d_id - 1) * CUSTOMERS_PER_DISTRICT) + (c_id - 1);
   }
+
+  static uint64_t hash_key(uint32_t wid, uint32_t did, uint32_t cid)
+  {
+    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
+      ((did - 1) * CUSTOMERS_PER_DISTRICT) + (cid - 1);
+  }
+
 } __attribute__((aligned(1024)));
 
 // Primary Key: (O_W_ID, O_D_ID, O_ID)
-class Order
+class __attribute__((packed)) Order
 {
 public:
   uint64_t o_id;
@@ -131,10 +155,19 @@ public:
       ((o_d_id - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
       (o_id - 1);
   }
+
+  static uint64_t hash_key(uint32_t wid, uint32_t did, uint32_t oid)
+  {
+    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE *
+            (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      ((did - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      (oid - 1);
+  }
+
 } __attribute__((aligned(64)));
 
 // Order line means
-class OrderLine
+class __attribute__((packed)) OrderLine
 {
 public:
   uint64_t ol_o_id;
@@ -162,9 +195,21 @@ public:
        MAX_OL_CNT) +
       ((ol_o_id - 1) * MAX_OL_CNT) + ol_number - 1;
   }
+
+  static uint64_t hash_key(
+    uint32_t wid, uint32_t did, uint32_t oid, uint32_t number)
+  {
+    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE *
+            (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS) *
+            MAX_OL_CNT) +
+      ((did - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS) *
+       MAX_OL_CNT) +
+      ((oid - 1) * MAX_OL_CNT) + number - 1;
+  }
+
 } __attribute__((aligned(128)));
 
-class NewOrder
+class __attribute__((packed)) NewOrder
 {
 public:
   uint32_t no_o_id;
@@ -205,9 +250,15 @@ public:
   {
     return ((s_w_id - 1) * STOCK_PER_WAREHOUSE) + (s_i_id - 1);
   }
+
+  static uint64_t hash_key(uint32_t wid, uint32_t iid)
+  {
+    return ((wid - 1) * STOCK_PER_WAREHOUSE) + (iid - 1);
+  }
+
 } __attribute__((aligned(512)));
 
-class History
+class __attribute__((packed)) History
 {
 public:
   uint32_t h_c_id;
@@ -233,4 +284,11 @@ public:
     return ((h_c_w_id - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
       ((h_c_d_id - 1) * CUSTOMERS_PER_DISTRICT) + (h_c_id - 1);
   }
+
+  static uint64_t hash_key(uint32_t wid, uint32_t did, uint32_t cid)
+  {
+    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
+      ((did - 1) * CUSTOMERS_PER_DISTRICT) + (cid - 1);
+  }
+
 } __attribute__((aligned(128)));
