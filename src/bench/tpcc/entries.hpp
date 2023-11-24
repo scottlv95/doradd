@@ -27,7 +27,7 @@ public:
   {
     return w_id - 1;
   }
-};
+} __attribute__((aligned(256)));
 
 class District
 {
@@ -51,7 +51,7 @@ public:
   {
     return ((w_id - 1) * DISTRICTS_PER_WAREHOUSE) + (d_id - 1);
   }
-};
+} __attribute__((aligned(256)));
 
 class Item
 {
@@ -69,7 +69,7 @@ public:
   {
     return i_id - 1;
   }
-};
+} __attribute__((aligned(128)));
 
 class Customer
 {
@@ -105,7 +105,7 @@ public:
     return ((c_w_id - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
       ((c_d_id - 1) * CUSTOMERS_PER_DISTRICT) + (c_id - 1);
   }
-};
+} __attribute__((aligned(1024)));
 
 // Primary Key: (O_W_ID, O_D_ID, O_ID)
 class Order
@@ -131,7 +131,7 @@ public:
       ((o_d_id - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
       (o_id - 1);
   }
-};
+} __attribute__((aligned(64)));
 
 // Order line means
 class OrderLine
@@ -162,7 +162,7 @@ public:
        MAX_OL_CNT) +
       ((ol_o_id - 1) * MAX_OL_CNT) + ol_number - 1;
   }
-};
+} __attribute__((aligned(128)));
 
 class NewOrder
 {
@@ -174,7 +174,7 @@ public:
   NewOrder(uint32_t wid, uint32_t did, uint32_t oid)
   : no_o_id(oid), no_d_id(did), no_w_id(wid)
   {}
-};
+} __attribute__((aligned(32)));
 
 class Stock
 {
@@ -205,7 +205,7 @@ public:
   {
     return ((s_w_id - 1) * STOCK_PER_WAREHOUSE) + (s_i_id - 1);
   }
-};
+} __attribute__((aligned(512)));
 
 class History
 {
@@ -233,4 +233,4 @@ public:
     return ((h_c_w_id - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
       ((h_c_d_id - 1) * CUSTOMERS_PER_DISTRICT) + (h_c_id - 1);
   }
-};
+} __attribute__((aligned(128)));
