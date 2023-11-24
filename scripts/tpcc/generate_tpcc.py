@@ -7,8 +7,9 @@ import rand
 import constants
 from scaleparameters import ScaleParameters, makeWithScaleFactor
 from datetime import datetime
+import binascii
 
-TX_COUNT = 1000
+TX_COUNT = 32
 
 def makeWarehouseId(scaleParameters: ScaleParameters):
     w_id = rand.number(scaleParameters.starting_warehouse, scaleParameters.ending_warehouse)
@@ -135,53 +136,58 @@ def generate_struct(type, params):
 
     struct = bytearray()
 
-    struct.append(type.to_bytes(1, 'little')[0])
-    for i in range(0, 15):
-        struct.extend((0).to_bytes(4, 'little'))
+    struct.append(type.to_bytes(1, 'big')[0])
 
-    for i in range(0, 15):
-        struct.extend((0).to_bytes(8, 'little'))
+    for i in range(30):
+        struct.extend((0).to_bytes(8, 'big'))
 
-    print(len(struct))
-
-    struct.extend(params['w_id'].to_bytes(4, 'little'))
-    struct.extend(params['d_id'].to_bytes(4, 'little'))
-    struct.extend(params['c_id'].to_bytes(4, 'little'))
-    struct.extend(params['ol_cnt'].to_bytes(4, 'little'))
-    struct.extend(params['o_entry_d'].to_bytes(4, 'little'))
+    struct.extend(pack('I', params['w_id']))
+    struct.extend(pack('I', params['d_id']))
+    struct.extend(pack('I', params['c_id']))
+    struct.extend(pack('I', params['ol_cnt']))
+    struct.extend(pack('I', params['o_entry_d']))
 
     for i in range(0, 15):
         if i < len(params['i_ids']):
-            struct.extend(params['i_ids'][i].to_bytes(4, 'little'))
+            struct.extend(pack('I', params['i_ids'][i]))
         else:
-            struct.extend((0).to_bytes(4, 'little'))
+            struct.extend(pack('I', 0))
 
     for i in range(0, 15):
         if i < len(params['i_w_ids']):
-            struct.extend(params['i_w_ids'][i].to_bytes(4, 'little'))
+            struct.extend(pack('I', params['i_w_ids'][i]))
         else:
-            struct.extend((0).to_bytes(4, 'little'))
+            struct.extend(pack('I', 0))
 
     for i in range(0, 15):
         if i < len(params['i_qtys']):
-            struct.extend(params['i_qtys'][i].to_bytes(4, 'little'))
+            struct.extend(pack('I', params['i_qtys'][i]))
         else:
-            struct.extend((0).to_bytes(4, 'little'))
+            struct.extend(pack('I', 0))
 
-    struct.extend((len(params['i_ids'])).to_bytes(4, 'little'))
-    struct.extend((len(params['i_ids'])).to_bytes(4, 'little'))
+    # Check we're in 50th row
+    assert(len(struct) == 50 * 4 + 30 * 8 + 1)
+
+    struct.extend(pack('I', len(params['i_ids'])))
+    struct.extend(pack('I', len(params['i_ids'])))
     
     if type == 1:
-        struct.extend(params['h_amount'].to_bytes(8, 'little'))
-        struct.extend(params['c_w_id'].to_bytes(4, 'little'))
-        struct.extend(params['c_d_id'].to_bytes(4, 'little'))
-        struct.extend((0).to_bytes(4, 'little'))
-        struct.extend(params['h_date'].to_bytes(4, 'little'))
+        # struct.extend(params['h_amount'].to_bytes(8, 'big'))
+        # struct.extend(params['c_w_id'].to_bytes(4, 'big'))
+        # struct.extend(params['c_d_id'].to_bytes(4, 'big'))
+        # struct.extend((0).to_bytes(4, 'big'))
+        # struct.extend(params['h_date'].to_bytes(4, 'big'))
+        struct.extend(pack('Q', params['h_amount']))
+        struct.extend(pack('I', params['c_w_id']))
+        struct.extend(pack('I', params['c_d_id']))
+        struct.extend(pack('I', 0))
+        struct.extend(pack('I', params['h_date']))       
 
     # Padding
     curr_len = len(struct)
     for i in range(0, 512 - curr_len):
-        struct.extend((0).to_bytes(1, 'little'))
+        # struct.extend((0).to_bytes(1, 'big'))
+        struct.extend(pack('B', 0))
 
     assert(len(struct) == 512)
     return struct
@@ -192,7 +198,7 @@ if __name__ == "__main__":
     aparser = argparse.ArgumentParser(description='Generate tpcc transactions.')
     aparser.add_argument('--scalefactor', default=1, type=float, metavar='SF',
                         help='Benchmark scale factor')
-    aparser.add_argument('--warehouses', default=4, type=int, metavar='W',help='Number of Warehouses')
+    aparser.add_argument('--warehouses', default=1, type=int, metavar='W',help='Number of Warehouses')
 
     args = vars(aparser.parse_args())
     scaleparameters = makeWithScaleFactor(args['warehouses'], args['scalefactor'])
@@ -209,5 +215,5 @@ if __name__ == "__main__":
             else:
                 ss = generateNewOrderParams(scaleparameters)
                 ss = generate_struct(0, ss)
-                
+            
             f.write(ss)
