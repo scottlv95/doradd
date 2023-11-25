@@ -40,10 +40,9 @@ static_assert(sizeof(YCSBTransactionMarshalled) == 128);
 struct __attribute__((packed)) TPCCTransactionMarshalled
 {
   uint8_t txn_type; // 0 for NewOrder, 1 for Payment
-  uint32_t indices[ROWS_PER_TX];
-  uint64_t cown_ptrs[ROWS_PER_TX];
-  uint32_t params[96];
-}__attribute__((aligned(512)));
+  uint64_t cown_ptrs[30];
+  uint32_t params[65];
+} __attribute__((aligned(512)));
 static_assert(sizeof(TPCCTransactionMarshalled) == 512);
 
 struct TPCCTransaction
@@ -58,6 +57,8 @@ public:
   static Database* index;
   static uint64_t cown_base_addr;
 
+#define INDEXER
+
 #if defined(INDEXER) || defined(TEST_TWO)
   // Indexer: read db and in-place update cown_ptr
   static int prepare_cowns(char* input)
@@ -68,49 +69,60 @@ public:
     if (txm->txn_type == 0)
     {
       // Warehouse
-      txm->cown_ptrs[0] =
-        index->warehouse_table.get_row_addr(txm->indices[0])->get_base_addr();
+      // txm->cown_ptrs[0] =
+      //   index->warehouse_table.get_row_addr(txm->params[0])->get_base_addr();
+      txm->cown_ptrs[0] = (uint64_t)index->warehouse_table.get_row_addr(txm->params[0]);
+      // txm->cown_ptrs[0] = w->get_base_addr();
 
-      // District
+
+      // // District
       txm->cown_ptrs[1] =
         index->district_table
-          .get_row_addr(txm->indices[1])->get_base_addr();
-      
-      // Customer
-      txm->cown_ptrs[2] =
-        index->customer_table
-          .get_row_addr(txm->indices[2])->get_base_addr();
-        
+          .get_row_addr(District::hash_key(txm->params[0], txm->params[1]))
+          ->get_base_addr();
+
+      // // Customer
+      txm->cown_ptrs[2] = index->customer_table
+                            .get_row_addr(Customer::hash_key(
+                              txm->params[0], txm->params[1], txm->params[2]))
+                            ->get_base_addr();
+
       // Stock
       for (int i = 0; i < txm->params[50]; i++)
       {
         txm->cown_ptrs[3 + i] =
           index->stock_table
-            .get_row_addr(txm->indices[3 + i])->get_base_addr();
+            .get_row_addr(Stock::hash_key(
+              txm->params[20 + i], txm->params[5 + i])) // i_w_id, i_id
+            ->get_base_addr();
       }
 
       // Item
       for (int i = 0; i < txm->params[50]; i++)
       {
         txm->cown_ptrs[18 + i] =
-          index->item_table.get_row_addr(txm->indices[18 + i])->get_base_addr();
+          index->item_table.get_row_addr(Item::hash_key(txm->params[5 + i]))
+            ->get_base_addr();
       }
     }
     else if (txm->txn_type == 1)
     {
       // Warehouse
       txm->cown_ptrs[0] =
-        index->warehouse_table.get_row_addr(txm->indices[0])->get_base_addr();
+        index->warehouse_table.get_row_addr(Warehouse::hash_key(txm->params[0]))
+          ->get_base_addr();
 
       // District
       txm->cown_ptrs[1] =
-        index->district_table
-          .get_row_addr(txm->indices[1])->get_base_addr();
+        index->district_table.get_row_addr(
+          District::hash_key(txm->params[0], txm->params[1]))
+          ->get_base_addr();
 
       // Customer
       txm->cown_ptrs[2] =
-        index->customer_table
-          .get_row_addr(txm->indices[2])->get_base_addr();
+        index->customer_table.get_row_addr(
+          Customer::hash_key(txm->params[0], txm->params[1], txm->params[2]))
+          ->get_base_addr();
     }
     else
     {
@@ -139,53 +151,53 @@ public:
     const TPCCTransactionMarshalled* txm =
       reinterpret_cast<const TPCCTransactionMarshalled*>(input);
 
-    if (txm->txn_type == 0)
-    {
-      // Warehouse
-      auto* entry = index->warehouse_table.get_row_addr(txm->indices[0]);
-      __builtin_prefetch(entry, 0, 1);
+    // if (txm->txn_type == 0)
+    // {
+    //   // Warehouse
+    //   auto* entry = index->warehouse_table.get_row_addr(txm->indices[0]);
+    //   __builtin_prefetch(entry, 0, 1);
 
-      // District
-      auto* entry_d = index->district_table.get_row_addr(txm->indices[1]);
-      __builtin_prefetch(entry_d, 0, 1);
+    //   // District
+    //   auto* entry_d = index->district_table.get_row_addr(txm->indices[1]);
+    //   __builtin_prefetch(entry_d, 0, 1);
 
-      // Customer
-      auto* entry_c = index->customer_table.get_row_addr(txm->indices[2]);
-      __builtin_prefetch(entry_c, 0, 1);
+    //   // Customer
+    //   auto* entry_c = index->customer_table.get_row_addr(txm->indices[2]);
+    //   __builtin_prefetch(entry_c, 0, 1);
 
-      // Stock
-      for (int i = 0; i < txm->params[50]; i++)
-      {
-        auto* entry_s = index->stock_table.get_row_addr(txm->indices[3 + i]);
-        __builtin_prefetch(entry_s, 0, 1);
-      }
+    //   // Stock
+    //   for (int i = 0; i < txm->params[50]; i++)
+    //   {
+    //     auto* entry_s = index->stock_table.get_row_addr(txm->indices[3 + i]);
+    //     __builtin_prefetch(entry_s, 0, 1);
+    //   }
 
-      // Item
-      for (int i = 0; i < txm->params[50]; i++)
-      {
-        auto* entry_i = index->item_table.get_row_addr(txm->indices[18 + i]);
-        __builtin_prefetch(entry_i, 0, 1);
-      }
-    }
-    else if (txm->txn_type == 1)
-    {
-      // Warehouse
-      auto* entry_w = index->warehouse_table.get_row_addr(txm->indices[0]);
-      __builtin_prefetch(entry_w, 0, 1);
+    //   // Item
+    //   for (int i = 0; i < txm->params[50]; i++)
+    //   {
+    //     auto* entry_i = index->item_table.get_row_addr(txm->indices[18 + i]);
+    //     __builtin_prefetch(entry_i, 0, 1);
+    //   }
+    // }
+    // else if (txm->txn_type == 1)
+    // {
+    //   // Warehouse
+    //   auto* entry_w = index->warehouse_table.get_row_addr(txm->indices[0]);
+    //   __builtin_prefetch(entry_w, 0, 1);
 
-      // District
-      auto* entry_d = index->district_table.get_row_addr(txm->indices[1]);
-      __builtin_prefetch(entry_d, 0, 1);
+    //   // District
+    //   auto* entry_d = index->district_table.get_row_addr(txm->indices[1]);
+    //   __builtin_prefetch(entry_d, 0, 1);
 
-      // Customer
-      auto* entry_c = index->customer_table.get_row_addr(txm->indices[2]);
-      __builtin_prefetch(entry_c, 0, 1);
-    }
-    else
-    {
-      // No
-      assert(false);
-    }
+    //   // Customer
+    //   auto* entry_c = index->customer_table.get_row_addr(txm->indices[2]);
+    //   __builtin_prefetch(entry_c, 0, 1);
+    // }
+    // else
+    // {
+    //   // No
+    //   assert(false);
+    // }
 
     return sizeof(TPCCTransactionMarshalled);
   }
@@ -273,61 +285,74 @@ public:
     if (txm->txn_type == 0)
     {
       // Warehouse
-      cown_ptr<Warehouse> w = get_cown_ptr_from_addr<Warehouse>(reinterpret_cast<void *>(txm->cown_ptrs[0])); 
-      cown_ptr<District> d = get_cown_ptr_from_addr<District>(reinterpret_cast<void *>(txm->cown_ptrs[1]));
-      cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(reinterpret_cast<void *>(txm->cown_ptrs[2]));
-      cown_ptr<Stock> s[15];
-      for (int i = 0; i < txm->params[50]; i++)
-      {
-        s[i] = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void *>(txm->cown_ptrs[3 + i]));
-      }
-      cown_ptr<Item> it[15];
-      for (int i = 0; i < txm->params[50]; i++)
-      {
-        it[i] = get_cown_ptr_from_addr<Item>(reinterpret_cast<void *>(txm->cown_ptrs[18 + i]));
-      }
+      // cown_ptr<Warehouse> w = get_cown_ptr_from_addr<Warehouse>(
+      //   reinterpret_cast<void*>(txm->cown_ptrs[0]));
+      // cown_ptr<District> d = get_cown_ptr_from_addr<District>(
+      //   reinterpret_cast<void*>(txm->cown_ptrs[1]));
+      // cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(
+      //   reinterpret_cast<void*>(txm->cown_ptrs[2]));
+      // cown_ptr<Stock> s[15];
+      // for (int i = 0; i < txm->params[50]; i++)
+      // {
+      //   s[i] = get_cown_ptr_from_addr<Stock>(
+      //     reinterpret_cast<void*>(txm->cown_ptrs[3 + i]));
+      // }
+      // cown_ptr<Item> it[15];
+      // for (int i = 0; i < txm->params[50]; i++)
+      // {
+      //   it[i] = get_cown_ptr_from_addr<Item>(
+      //     reinterpret_cast<void*>(txm->cown_ptrs[18 + i]));
+      // }
 
       // TODO: downstream cown_ptr
     }
     else if (txm->txn_type == 1)
     {
-        cown_ptr<Warehouse> w = get_cown_ptr_from_addr<Warehouse>(reinterpret_cast<void *>(txm->cown_ptrs[0]));
-        cown_ptr<District> d = get_cown_ptr_from_addr<District>(reinterpret_cast<void *>(txm->cown_ptrs[1]));
-        cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(reinterpret_cast<void *>(txm->cown_ptrs[2]));
-        uint32_t h_amount = txm->params[52];
+      cown_ptr<Warehouse> w = 
+        reinterpret_cast<cown_ptr<Warehouse>>(txm->cown_ptrs[0]);
+      // cown_ptr<District> d = get_cown_ptr_from_addr<District>(
+      //   reinterpret_cast<void*>(txm->cown_ptrs[1]));
+      // cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(
+      //   reinterpret_cast<void*>(txm->cown_ptrs[2]));
+      // uint32_t h_amount = txm->params[52];
 
-        when(w,d,c) << [=](auto _w, auto _d, auto _c) mutable {
-            // Update warehouse balance
-            _w->w_ytd += h_amount;
+      when(w) << [=](auto _w) mutable {
 
-            // Update district balance
-            _d->d_ytd += h_amount;
+      //     printf("Processing Payment\n");
+          // Update warehouse balance
+          // _w->w_ytd += h_amount;
 
-            // Update customer balance (case 1)
-            _c->c_balance -= h_amount;
-            _c->c_ytd_payment += h_amount;
-            _c->c_payment_cnt += 1;
+          // // Update district balance
+          // _d->d_ytd += h_amount;
 
-            // == Not implemented in Caracal's evaluation ==
-            // Customer Credit Information
-            // if (_c->c_credit == "BC") {
-            //     std::string c_data = _c->c_data;
-            //     c_data += std::to_string(c_id) + " " + std::to_string(c_d_id) + " " + std::to_string(c_w_id) + " " +
-            //               std::to_string(d_id) + " " + std::to_string(w_id) + " " + std::to_string(h_amount) + " | ";
-            //     if (c_data.length() > 500) {
-            //         c_data = c_data.substr(0, 500);
-            //     }
-            //     _c->c_data = c_data;
-            // }
+          // // Update customer balance (case 1)
+          // _c->c_balance -= h_amount;
+          // _c->c_ytd_payment += h_amount;
+          // _c->c_payment_cnt += 1;
 
-            // == Not implemented in Caracal's evaluation ==
-            // Update history
-            // History h = History(w_id, d_id, c_id);
-            // h.h_data = _w->w_name + "    " + _d->d_name;
-            // history_table.add(std::make_tuple(w_id, d_id, c_id), h);
-        };
+          // == Not implemented in Caracal's evaluation ==
+          // Customer Credit Information
+          // if (_c->c_credit == "BC") {
+          //     std::string c_data = _c->c_data;
+          //     c_data += std::to_string(c_id) + " " +
+          // std::to_string(c_d_id) + " " + std::to_string(c_w_id) + " " +
+          //               std::to_string(d_id) + " " + std::to_string(w_id)
+          // + " " + std::to_string(h_amount) + " | ";
+          //     if (c_data.length() > 500) {
+          //         c_data = c_data.substr(0, 500);
+          //     }
+          //     _c->c_data = c_data;
+          // }
+
+          // == Not implemented in Caracal's evaluation ==
+          // Update history
+          // History h = History(w_id, d_id, c_id);
+          // h.h_data = _w->w_name + "    " + _d->d_name;
+          // history_table.add(std::make_tuple(w_id, d_id, c_id), h);
+      };
     }
-    else {
+    else
+    {
       assert(false);
     }
 
@@ -346,16 +371,16 @@ std::mutex* counter_map_mutex;
 
 int main(int argc, char** argv)
 {
-  // if (argc != 8 || strcmp(argv[1], "-n") != 0 || strcmp(argv[3], "-l") != 0)
-  // {
-  //   fprintf(
-  //     stderr,
-  //     "Usage: ./program -n core_cnt -l look_ahead"
-  //     " <dispatcher_input_file> -i <inter_arrival>\n");
-  //   return -1;
-  // }
+  if (argc != 8 || strcmp(argv[1], "-n") != 0 || strcmp(argv[3], "-l") != 0)
+  {
+    fprintf(
+      stderr,
+      "Usage: ./program -n core_cnt -l look_ahead"
+      " <dispatcher_input_file> -i <inter_arrival>\n");
+    return -1;
+  }
 
-  uint8_t core_cnt = 3;
+  uint8_t core_cnt = 1;
   // uint8_t core_cnt = atoi(argv[2]);
   // uint8_t max_core = std::thread::hardware_concurrency();
   // assert(1 < core_cnt && core_cnt <= max_core);
@@ -363,54 +388,29 @@ int main(int argc, char** argv)
   // size_t look_ahead = atoi(argv[4]);
   // assert(8 <= look_ahead && look_ahead <= 128);
 
+  char* input_file = argv[5];
+  char* gen_file = argv[7];
+
   // Create rows (cowns) with huge pages and via static allocation
   TPCCTransaction::index = new Database();
- 
-  // uint64_t cown_prev_addr = 0;
-  // uint8_t* cown_arr_addr =
-  //   static_cast<uint8_t*>(aligned_alloc_hpage(1024 * DB_SIZE));
 
-  // TPCCTransaction::cown_base_addr = (uint64_t)cown_arr_addr;
-  // for (int i = 0; i < DB_SIZE; i++)
-  // {
-  //   cown_ptr<Row<YCSBRow>> cown_r = make_cown_custom<Row<YCSBRow>>(
-  //       reinterpret_cast<void *>(cown_arr_addr + (uint64_t)1024 * i));
-
-  //   if (i > 0)
-  //     assert((cown_r.get_base_addr() - cown_prev_addr) == 1024);
-  //   cown_prev_addr = cown_r.get_base_addr();
-
-  //   TPCCTransaction::index->insert_row(cown_r);
-  // }
-
-  uint32_t num_warehouses = 1;
-  TPCCGenerator gen(TPCCTransaction::index);
-
+#define HUGE_PAGES
 #ifdef HUGE_PAGES
   // Big table to store all tpcc related stuff
-  uint8_t* tpcc_arr_addr =
-    static_cast<uint8_t*>(aligned_alloc_hpage(
-      sizeof(Warehouse) * TSIZE_WAREHOUSE +
-      sizeof(District) * TSIZE_DISTRICT +
-      sizeof(Customer) * TSIZE_CUSTOMER +
-      sizeof(Stock) * TSIZE_STOCK +
-      sizeof(Item) * TSIZE_ITEM +
-      sizeof(History) * TSIZE_HISTORY +
-      sizeof(Order) * TSIZE_ORDER +
-      sizeof(OrderLine) * TSIZE_ORDER_LINE +
-      sizeof(NewOrder) * TSIZE_NEW_ORDER));
-  uint8_t* tpcc_arr_addr_end = tpcc_arr_addr +
-    sizeof(Warehouse) * TSIZE_WAREHOUSE +
-    sizeof(District) * TSIZE_DISTRICT +
-    sizeof(Customer) * TSIZE_CUSTOMER +
-    sizeof(Stock) * TSIZE_STOCK +
-    sizeof(Item) * TSIZE_ITEM +
-    sizeof(History) * TSIZE_HISTORY +
-    sizeof(Order) * TSIZE_ORDER +
-    sizeof(OrderLine) * TSIZE_ORDER_LINE +
-    sizeof(NewOrder) * TSIZE_NEW_ORDER;
-  uint64_t tpcc_cown_base_addr = (uint64_t)tpcc_arr_addr;
+  void* tpcc_arr_addr = static_cast<void*>(aligned_alloc_hpage(
+    sizeof(Warehouse) * TSIZE_WAREHOUSE + sizeof(District) * TSIZE_DISTRICT +
+    sizeof(Customer) * TSIZE_CUSTOMER + sizeof(Stock) * TSIZE_STOCK +
+    sizeof(Item) * TSIZE_ITEM + sizeof(History) * TSIZE_HISTORY +
+    sizeof(Order) * TSIZE_ORDER + sizeof(OrderLine) * TSIZE_ORDER_LINE +
+    sizeof(NewOrder) * TSIZE_NEW_ORDER));
+
+  // Begin address
+  printf("tpcc_arr_addr: %p\n", tpcc_arr_addr);
+  
+  
 #endif
+
+  TPCCGenerator gen(TPCCTransaction::index, tpcc_arr_addr);
 
   gen.generateWarehouses();
   gen.generateDistricts();
@@ -419,7 +419,7 @@ int main(int argc, char** argv)
   gen.generateStocks();
   gen.generateOrdersAndOrderLines();
 
-  build_pipelines<TPCCTransaction>(core_cnt - 1, argv[5], argv[7]);
+  build_pipelines<TPCCTransaction>(core_cnt - 1, input_file, gen_file);
 
   // Cleanup
   delete TPCCTransaction::index;
