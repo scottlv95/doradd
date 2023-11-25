@@ -37,13 +37,13 @@ static_assert(sizeof(YCSBTransactionMarshalled) == 128);
 // 55 c_last
 // 56 h_date
 // rest: unused
-struct __attribute__((packed)) TPCCTransactionMarshalled
+struct TPCCTransactionMarshalled
 {
   uint8_t txn_type; // 0 for NewOrder, 1 for Payment
   uint64_t cown_ptrs[30];
   uint32_t params[65];
-} __attribute__((aligned(512)));
-static_assert(sizeof(TPCCTransactionMarshalled) == 512);
+  uint8_t padding[11];
+} __attribute__((packed));
 
 struct TPCCTransaction
 {
@@ -65,21 +65,27 @@ public:
   {
     auto txm = reinterpret_cast<TPCCTransactionMarshalled*>(input);
 
+    printf("txm->txn_type: %d\n", txm->txn_type);
+    printf("warehouse: %d\n", txm->params[0]);
+    printf("district: %d\n", txm->params[1]);
+    printf("customer: %d\n", txm->params[2]);
+
+
     // New Order
     if (txm->txn_type == 0)
     {
       // Warehouse
       // txm->cown_ptrs[0] =
       //   index->warehouse_table.get_row_addr(txm->params[0])->get_base_addr();
-      txm->cown_ptrs[0] = (uint64_t)index->warehouse_table.get_row_addr(txm->params[0]);
-      // txm->cown_ptrs[0] = w->get_base_addr();
-
+      txm->cown_ptrs[0] = index->warehouse_table
+                            .get_row_addr(Warehouse::hash_key(txm->params[0]))
+                            ->get_base_addr();
 
       // // District
-      txm->cown_ptrs[1] =
-        index->district_table
-          .get_row_addr(District::hash_key(txm->params[0], txm->params[1]))
-          ->get_base_addr();
+      txm->cown_ptrs[1] = index->district_table
+                            .get_row_addr(District::hash_key(
+                              txm->params[0], txm->params[1]))
+                            ->get_base_addr();
 
       // // Customer
       txm->cown_ptrs[2] = index->customer_table
@@ -137,7 +143,7 @@ public:
   {
     auto txm = reinterpret_cast<const TPCCTransactionMarshalled*>(input);
 
-    for (int i = 0; i < txm->params[51]; i++)
+    for (int i = 0; i < 30; i++)
       __builtin_prefetch(
         reinterpret_cast<const void*>(txm->cown_ptrs[i] + 32), 1, 3);
 
@@ -281,12 +287,19 @@ public:
     const TPCCTransactionMarshalled* txm =
       reinterpret_cast<const TPCCTransactionMarshalled*>(input);
 
+    int a = 0;
+    auto bb = make_cown<int>(a);
+
+    when(bb) << [](auto) {
+      printf("bb\n");
+    };
+
     // New Order
     if (txm->txn_type == 0)
     {
       // Warehouse
-      // cown_ptr<Warehouse> w = get_cown_ptr_from_addr<Warehouse>(
-      //   reinterpret_cast<void*>(txm->cown_ptrs[0]));
+      cown_ptr<Warehouse> w = get_cown_ptr_from_addr<Warehouse>(
+        reinterpret_cast<void*>(txm->cown_ptrs[0]));
       // cown_ptr<District> d = get_cown_ptr_from_addr<District>(
       //   reinterpret_cast<void*>(txm->cown_ptrs[1]));
       // cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(
@@ -303,22 +316,25 @@ public:
       //   it[i] = get_cown_ptr_from_addr<Item>(
       //     reinterpret_cast<void*>(txm->cown_ptrs[18 + i]));
       // }
+      when(w) << [](auto){
+          printf("Processing Payment\n");
+      };
+
 
       // TODO: downstream cown_ptr
     }
     else if (txm->txn_type == 1)
     {
-      cown_ptr<Warehouse> w = 
-        reinterpret_cast<cown_ptr<Warehouse>>(txm->cown_ptrs[0]);
+      cown_ptr<Warehouse> w = get_cown_ptr_from_addr<Warehouse>(
+        reinterpret_cast<void*>(txm->cown_ptrs[0]));
       // cown_ptr<District> d = get_cown_ptr_from_addr<District>(
       //   reinterpret_cast<void*>(txm->cown_ptrs[1]));
       // cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(
       //   reinterpret_cast<void*>(txm->cown_ptrs[2]));
       // uint32_t h_amount = txm->params[52];
 
-      when(w) << [=](auto _w) mutable {
-
-      //     printf("Processing Payment\n");
+      when(w) << [=](auto){
+          printf("Processing Payment\n");
           // Update warehouse balance
           // _w->w_ytd += h_amount;
 
@@ -380,7 +396,7 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  uint8_t core_cnt = 1;
+  uint8_t core_cnt = 2;
   // uint8_t core_cnt = atoi(argv[2]);
   // uint8_t max_core = std::thread::hardware_concurrency();
   // assert(1 < core_cnt && core_cnt <= max_core);
@@ -402,12 +418,7 @@ int main(int argc, char** argv)
     sizeof(Customer) * TSIZE_CUSTOMER + sizeof(Stock) * TSIZE_STOCK +
     sizeof(Item) * TSIZE_ITEM + sizeof(History) * TSIZE_HISTORY +
     sizeof(Order) * TSIZE_ORDER + sizeof(OrderLine) * TSIZE_ORDER_LINE +
-    sizeof(NewOrder) * TSIZE_NEW_ORDER));
-
-  // Begin address
-  printf("tpcc_arr_addr: %p\n", tpcc_arr_addr);
-  
-  
+    sizeof(NewOrder) * TSIZE_NEW_ORDER));  
 #endif
 
   TPCCGenerator gen(TPCCTransaction::index, tpcc_arr_addr);
