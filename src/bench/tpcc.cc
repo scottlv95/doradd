@@ -59,13 +59,13 @@ public:
 
 #if defined(INDEXER) || defined(TEST_TWO)
   // Indexer: read db and in-place update cown_ptr
-
   static int prepare_cowns(char* input)
   {
     auto txm = reinterpret_cast<TPCCTransactionMarshalled*>(input);
 
-    //printf("params are %u, %u, %u\n", txm->params[0], txm->params[1], txm->params[2]);
-    // New Order
+    // printf("params are %u, %u, %u\n", txm->params[0], txm->params[1],
+    // txm->params[2]);
+    //  New Order
     if (txm->txn_type == 0)
     {
       // Warehouse
@@ -281,11 +281,6 @@ public:
     const TPCCTransactionMarshalled* txm =
       reinterpret_cast<const TPCCTransactionMarshalled*>(input);
 
-    int a = 0;
-    auto bb = make_cown<int>(a);
-
-    when(bb) << [](auto) { printf("bb\n"); };
-
     // New Order
     if (txm->txn_type == 0)
     {
@@ -294,21 +289,154 @@ public:
         reinterpret_cast<void*>(txm->cown_ptrs[0]));
       cown_ptr<District> d = get_cown_ptr_from_addr<District>(
         reinterpret_cast<void*>(txm->cown_ptrs[1]));
-      // cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(
-      //   reinterpret_cast<void*>(txm->cown_ptrs[2]));
-      // cown_ptr<Stock> s[15];
-      // for (int i = 0; i < txm->params[50]; i++)
-      // {
-      //   s[i] = get_cown_ptr_from_addr<Stock>(
-      //     reinterpret_cast<void*>(txm->cown_ptrs[3 + i]));
-      // }
-      // cown_ptr<Item> it[15];
-      // for (int i = 0; i < txm->params[50]; i++)
-      // {
-      //   it[i] = get_cown_ptr_from_addr<Item>(
-      //     reinterpret_cast<void*>(txm->cown_ptrs[18 + i]));
-      // }
-      when(w, d) << [=](auto, auto) { printf("Processing new order\n"); };
+      cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(
+        reinterpret_cast<void*>(txm->cown_ptrs[2]));
+
+      uint32_t item_number = txm->params[50];
+
+      switch (item_number)
+      {
+        case 1:
+        {
+          auto s0 = get_cown_ptr_from_addr<Stock>(
+            reinterpret_cast<void*>(txm->cown_ptrs[3]));
+          auto i0 = get_cown_ptr_from_addr<Item>(
+            reinterpret_cast<void*>(txm->cown_ptrs[18]));
+
+          when(w, d, c, s0, i0)
+            << [=](auto _w, auto _d, auto _c, auto _s0, auto _i0) {
+                 // Update warehouse balance
+                 _w->w_ytd += txm->params[52];
+
+                 // Update district balance
+                 _d->d_ytd += txm->params[52];
+
+                 // Update customer balance (case 1)
+                 _c->c_balance -= txm->params[52];
+                 _c->c_ytd_payment += txm->params[52];
+                 _c->c_payment_cnt += 1;
+
+                 // Update stock
+                 _s0->s_quantity -= txm->params[35];
+                 if (_s0->s_quantity < 10)
+                   _s0->s_quantity += 91;
+                 _s0->s_ytd += txm->params[35];
+                 _s0->s_order_cnt += 1;
+                 if (txm->params[51] == 1)
+                   _s0->s_remote_cnt += 1;
+
+                 // Insert order line
+                 OrderLine ol0 =
+                   OrderLine(txm->params[0], txm->params[1], txm->params[3], 0);
+                 ol0.ol_i_id = txm->params[5];
+                 ol0.ol_supply_w_id = txm->params[20];
+                 ol0.ol_quantity = txm->params[35];
+                 ol0.ol_amount = txm->params[35] * _i0->i_price;
+                 ol0.ol_dist_info = _s0->s_dist_01;
+                 _d->order_line_table.add(
+                   OrderLine::hash_key(
+                     txm->params[0], txm->params[1], txm->params[3], 0),
+                   ol0);
+
+                 // Insert new order
+                 NewOrder no =
+                   NewOrder(txm->params[0], txm->params[1], txm->params[3]);
+                 _d->new_order_table.add(
+                   NewOrder::hash_key(
+                     txm->params[0], txm->params[1], txm->params[3]),
+                   no);
+
+                 printf("Processing new order\n");
+               };
+        }
+        case 2:
+        {
+          auto s0 = get_cown_ptr_from_addr<Stock>(
+            reinterpret_cast<void*>(txm->cown_ptrs[3]));
+          auto s1 = get_cown_ptr_from_addr<Stock>(
+            reinterpret_cast<void*>(txm->cown_ptrs[4]));
+
+          auto i0 = get_cown_ptr_from_addr<Item>(
+            reinterpret_cast<void*>(txm->cown_ptrs[18]));
+          auto i1 = get_cown_ptr_from_addr<Item>(
+            reinterpret_cast<void*>(txm->cown_ptrs[19]));
+
+          when(w, d, c, s0, s1, i0, i1) << [=](
+                                             auto _w,
+                                             auto _d,
+                                             auto _c,
+                                             auto _s0,
+                                             auto _s1,
+                                             auto _i0,
+                                             auto _i1) {
+            // Update warehouse balance
+            _w->w_ytd += txm->params[52];
+
+            // Update district balance
+            _d->d_ytd += txm->params[52];
+
+            // Update customer balance (case 1)
+            _c->c_balance -= txm->params[52];
+            _c->c_ytd_payment += txm->params[52];
+            _c->c_payment_cnt += 1;
+
+            // Update stock
+            _s0->s_quantity -= txm->params[35];
+            if (_s0->s_quantity < 10)
+              _s0->s_quantity += 91;
+            _s0->s_ytd += txm->params[35];
+            _s0->s_order_cnt += 1;
+            if (txm->params[51] == 1)
+              _s0->s_remote_cnt += 1;
+
+            _s1->s_quantity -= txm->params[36];
+            if (_s1->s_quantity < 10)
+              _s1->s_quantity += 91;
+            _s1->s_ytd += txm->params[36];
+            _s1->s_order_cnt += 1;
+            if (txm->params[51] == 1)
+              _s1->s_remote_cnt += 1;
+
+            // Insert order line
+            OrderLine ol0 =
+              OrderLine(txm->params[0], txm->params[1], txm->params[3], 0);
+            ol0.ol_i_id = txm->params[5];
+            ol0.ol_supply_w_id = txm->params[20];
+            ol0.ol_quantity = txm->params[35];
+            ol0.ol_amount = txm->params[35] * _i0->i_price;
+            ol0.ol_dist_info = _s0->s_dist_01;
+
+            OrderLine ol1 =
+              OrderLine(txm->params[0], txm->params[1], txm->params[3], 1);
+            ol1.ol_i_id = txm->params[6];
+            ol1.ol_supply_w_id = txm->params[21];
+            ol1.ol_quantity = txm->params[36];
+            ol1.ol_amount = txm->params[36] * _i1->i_price;
+            ol1.ol_dist_info = _s1->s_dist_01;
+
+            _d->order_line_table.add(
+              OrderLine::hash_key(
+                txm->params[0], txm->params[1], txm->params[3], 0),
+              ol0);
+            _d->order_line_table.add(
+              OrderLine::hash_key(
+                txm->params[0], txm->params[1], txm->params[3], 1),
+              ol1);
+
+            // Insert new order
+            NewOrder no =
+              NewOrder(txm->params[0], txm->params[1], txm->params[3]);
+            _d->new_order_table.add(
+              NewOrder::hash_key(
+                txm->params[0], txm->params[1], txm->params[3]),
+              no);
+
+            printf("Processing new order\n");
+          };
+        }
+        default:
+          break;
+      }
 
       // TODO: downstream cown_ptr
     }
@@ -316,44 +444,24 @@ public:
     {
       cown_ptr<Warehouse> w = get_cown_ptr_from_addr<Warehouse>(
         reinterpret_cast<void*>(txm->cown_ptrs[0]));
-      // cown_ptr<District> d = get_cown_ptr_from_addr<District>(
-      //   reinterpret_cast<void*>(txm->cown_ptrs[1]));
-      // cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(
-      //   reinterpret_cast<void*>(txm->cown_ptrs[2]));
-      // uint32_t h_amount = txm->params[52];
+      cown_ptr<District> d = get_cown_ptr_from_addr<District>(
+        reinterpret_cast<void*>(txm->cown_ptrs[1]));
+      cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(
+        reinterpret_cast<void*>(txm->cown_ptrs[2]));
+      uint32_t h_amount = txm->params[52];
 
-      when(w) << [=](auto) {
-        printf("Processing Payment\n");
+      when(w, d, c) << [=](auto _w, auto _d, auto _c) {
         // Update warehouse balance
-        // _w->w_ytd += h_amount;
+        _w->w_ytd += h_amount;
 
-        // // Update district balance
-        // _d->d_ytd += h_amount;
+        // Update district balance
+        _d->d_ytd += h_amount;
 
-        // // Update customer balance (case 1)
-        // _c->c_balance -= h_amount;
-        // _c->c_ytd_payment += h_amount;
-        // _c->c_payment_cnt += 1;
-
-        // == Not implemented in Caracal's evaluation ==
-        // Customer Credit Information
-        // if (_c->c_credit == "BC") {
-        //     std::string c_data = _c->c_data;
-        //     c_data += std::to_string(c_id) + " " +
-        // std::to_string(c_d_id) + " " + std::to_string(c_w_id) + " " +
-        //               std::to_string(d_id) + " " + std::to_string(w_id)
-        // + " " + std::to_string(h_amount) + " | ";
-        //     if (c_data.length() > 500) {
-        //         c_data = c_data.substr(0, 500);
-        //     }
-        //     _c->c_data = c_data;
-        // }
-
-        // == Not implemented in Caracal's evaluation ==
-        // Update history
-        // History h = History(w_id, d_id, c_id);
-        // h.h_data = _w->w_name + "    " + _d->d_name;
-        // history_table.add(std::make_tuple(w_id, d_id, c_id), h);
+        // Update customer balance (case 1)
+        _c->c_balance -= h_amount;
+        _c->c_ytd_payment += h_amount;
+        _c->c_payment_cnt += 1;
+        printf("Processing Payment done\n");
       };
     }
     else
@@ -401,7 +509,7 @@ int main(int argc, char** argv)
 
 #define HUGE_PAGES
 #ifdef HUGE_PAGES
-#if 0
+#  if 0
   // Big table to store all tpcc related stuff
   void* tpcc_arr_addr_warehouse = static_cast<void*>(
     aligned_alloc_hpage(sizeof(Warehouse) * TSIZE_WAREHOUSE));
@@ -421,14 +529,14 @@ int main(int argc, char** argv)
     aligned_alloc_hpage(sizeof(OrderLine) * TSIZE_ORDER_LINE));
   void* tpcc_arr_addr_new_order =
     static_cast<void*>(aligned_alloc_hpage(sizeof(NewOrder) * TSIZE_NEW_ORDER));
-#else
+#  else
   // Big table to store all tpcc related stuff
-  void* tpcc_arr_addr_warehouse = static_cast<void*>(
-    aligned_alloc_hpage(1024 * TSIZE_WAREHOUSE));
+  void* tpcc_arr_addr_warehouse =
+    static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_WAREHOUSE));
   void* tpcc_arr_addr_district =
     static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_DISTRICT));
   void* tpcc_arr_addr_customer =
-    static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_CUSTOMER));
+    static_cast<void*>(aligned_alloc_hpage(2 * 1024 * TSIZE_CUSTOMER));
   void* tpcc_arr_addr_stock =
     static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_STOCK));
   void* tpcc_arr_addr_item =
@@ -437,11 +545,11 @@ int main(int argc, char** argv)
     static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_HISTORY));
   void* tpcc_arr_addr_order =
     static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_ORDER));
-  void* tpcc_arr_addr_order_line = static_cast<void*>(
-    aligned_alloc_hpage(1024 * TSIZE_ORDER_LINE));
+  void* tpcc_arr_addr_order_line =
+    static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_ORDER_LINE));
   void* tpcc_arr_addr_new_order =
     static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_NEW_ORDER));
-#endif
+#  endif
 #endif
 
   TPCCGenerator gen(
