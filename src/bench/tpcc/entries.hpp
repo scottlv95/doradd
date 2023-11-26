@@ -188,23 +188,12 @@ public:
 
   uint64_t hash_key() const
   {
-    return ((ol_w_id - 1) * DISTRICTS_PER_WAREHOUSE *
-            (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS) *
-            MAX_OL_CNT) +
-      ((ol_d_id - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS) *
-       MAX_OL_CNT) +
-      ((ol_o_id - 1) * MAX_OL_CNT) + ol_number - 1;
+    return (Order::hash_key(ol_w_id, ol_d_id, ol_o_id) * 15) + (ol_number - 1);
   }
 
-  static uint64_t hash_key(
-    uint32_t wid, uint32_t did, uint32_t oid, uint32_t number)
+  static uint64_t hash_key(uint32_t wid, uint32_t did, uint32_t oid, uint32_t number)
   {
-    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE *
-            (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS) *
-            MAX_OL_CNT) +
-      ((did - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS) *
-       MAX_OL_CNT) +
-      ((oid - 1) * MAX_OL_CNT) + number - 1;
+    return (Order::hash_key(wid, did, oid) * 15) + (number - 1);
   }
 
 } __attribute__((aligned(128)));
@@ -219,6 +208,23 @@ public:
   NewOrder(uint32_t wid, uint32_t did, uint32_t oid)
   : no_o_id(oid), no_d_id(did), no_w_id(wid)
   {}
+
+  uint64_t hash_key() const
+  {
+    return ((no_w_id - 1) * DISTRICTS_PER_WAREHOUSE *
+            (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      ((no_d_id - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      (no_o_id - 1);
+  }
+
+  static uint64_t hash_key(uint32_t wid, uint32_t did, uint32_t oid)
+  {
+    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE *
+            (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      ((did - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      (oid - 1);
+  }
+
 } __attribute__((aligned(32)));
 
 class Stock

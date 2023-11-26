@@ -305,6 +305,8 @@ public:
 
           when(w, d, c, s0, i0)
             << [=](auto _w, auto _d, auto _c, auto _s0, auto _i0) {
+                 printf("Processing new order\n");
+
                  // Update warehouse balance
                  _w->w_ytd += txm->params[52];
 
@@ -326,120 +328,45 @@ public:
                    _s0->s_remote_cnt += 1;
 
                  // Insert order line
+                 // ===================
                  OrderLine ol0 =
                    OrderLine(txm->params[0], txm->params[1], txm->params[3], 0);
                  ol0.ol_i_id = txm->params[5];
                  ol0.ol_supply_w_id = txm->params[20];
                  ol0.ol_quantity = txm->params[35];
                  ol0.ol_amount = txm->params[35] * _i0->i_price;
-                 ol0.ol_dist_info = _s0->s_dist_01;
-                 _d->order_line_table.add(
-                   OrderLine::hash_key(
-                     txm->params[0], txm->params[1], txm->params[3], 0),
+
+                 cown_ptr<OrderLine> ol0_cown = make_cown_custom<OrderLine>(
+                   (void*)(TPCCTransaction::index->order_line_table.start_addr +
+                           (ol0.hash_key() * 1024)),
                    ol0);
 
+                 TPCCTransaction::index->order_line_table.insert_row(
+                   ol0.hash_key(), ol0_cown);
+                 // ==================
+
                  // Insert new order
+                 // ===================
                  NewOrder no =
                    NewOrder(txm->params[0], txm->params[1], txm->params[3]);
-                 _d->new_order_table.add(
-                   NewOrder::hash_key(
-                     txm->params[0], txm->params[1], txm->params[3]),
+                 cown_ptr<NewOrder> no_cown = make_cown_custom<NewOrder>(
+                   (void*)(TPCCTransaction::index->new_order_table.start_addr +
+                           (no.hash_key() * 1024)),
                    no);
 
-                 printf("Processing new order\n");
+                 TPCCTransaction::index->new_order_table.insert_row(
+                   no.hash_key(), no_cown);
+                 // ==================
                };
         }
-        case 2:
-        {
-          auto s0 = get_cown_ptr_from_addr<Stock>(
-            reinterpret_cast<void*>(txm->cown_ptrs[3]));
-          auto s1 = get_cown_ptr_from_addr<Stock>(
-            reinterpret_cast<void*>(txm->cown_ptrs[4]));
 
-          auto i0 = get_cown_ptr_from_addr<Item>(
-            reinterpret_cast<void*>(txm->cown_ptrs[18]));
-          auto i1 = get_cown_ptr_from_addr<Item>(
-            reinterpret_cast<void*>(txm->cown_ptrs[19]));
-
-          when(w, d, c, s0, s1, i0, i1) << [=](
-                                             auto _w,
-                                             auto _d,
-                                             auto _c,
-                                             auto _s0,
-                                             auto _s1,
-                                             auto _i0,
-                                             auto _i1) {
-            // Update warehouse balance
-            _w->w_ytd += txm->params[52];
-
-            // Update district balance
-            _d->d_ytd += txm->params[52];
-
-            // Update customer balance (case 1)
-            _c->c_balance -= txm->params[52];
-            _c->c_ytd_payment += txm->params[52];
-            _c->c_payment_cnt += 1;
-
-            // Update stock
-            _s0->s_quantity -= txm->params[35];
-            if (_s0->s_quantity < 10)
-              _s0->s_quantity += 91;
-            _s0->s_ytd += txm->params[35];
-            _s0->s_order_cnt += 1;
-            if (txm->params[51] == 1)
-              _s0->s_remote_cnt += 1;
-
-            _s1->s_quantity -= txm->params[36];
-            if (_s1->s_quantity < 10)
-              _s1->s_quantity += 91;
-            _s1->s_ytd += txm->params[36];
-            _s1->s_order_cnt += 1;
-            if (txm->params[51] == 1)
-              _s1->s_remote_cnt += 1;
-
-            // Insert order line
-            OrderLine ol0 =
-              OrderLine(txm->params[0], txm->params[1], txm->params[3], 0);
-            ol0.ol_i_id = txm->params[5];
-            ol0.ol_supply_w_id = txm->params[20];
-            ol0.ol_quantity = txm->params[35];
-            ol0.ol_amount = txm->params[35] * _i0->i_price;
-            ol0.ol_dist_info = _s0->s_dist_01;
-
-            OrderLine ol1 =
-              OrderLine(txm->params[0], txm->params[1], txm->params[3], 1);
-            ol1.ol_i_id = txm->params[6];
-            ol1.ol_supply_w_id = txm->params[21];
-            ol1.ol_quantity = txm->params[36];
-            ol1.ol_amount = txm->params[36] * _i1->i_price;
-            ol1.ol_dist_info = _s1->s_dist_01;
-
-            _d->order_line_table.add(
-              OrderLine::hash_key(
-                txm->params[0], txm->params[1], txm->params[3], 0),
-              ol0);
-            _d->order_line_table.add(
-              OrderLine::hash_key(
-                txm->params[0], txm->params[1], txm->params[3], 1),
-              ol1);
-
-            // Insert new order
-            NewOrder no =
-              NewOrder(txm->params[0], txm->params[1], txm->params[3]);
-            _d->new_order_table.add(
-              NewOrder::hash_key(
-                txm->params[0], txm->params[1], txm->params[3]),
-              no);
-
-            printf("Processing new order\n");
-          };
-        }
         default:
+        {
           break;
+        }
       }
-
-      // TODO: downstream cown_ptr
     }
+
     else if (txm->txn_type == 1)
     {
       cown_ptr<Warehouse> w = get_cown_ptr_from_addr<Warehouse>(
@@ -493,7 +420,7 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  uint8_t core_cnt = 2;
+  uint8_t core_cnt = 3;
   // uint8_t core_cnt = atoi(argv[2]);
   // uint8_t max_core = std::thread::hardware_concurrency();
   // assert(1 < core_cnt && core_cnt <= max_core);
@@ -557,12 +484,28 @@ int main(int argc, char** argv)
     tpcc_arr_addr_warehouse,
     tpcc_arr_addr_district,
     tpcc_arr_addr_customer,
+    tpcc_arr_addr_history,
     tpcc_arr_addr_stock,
     tpcc_arr_addr_item,
-    tpcc_arr_addr_history,
     tpcc_arr_addr_order,
     tpcc_arr_addr_order_line,
     tpcc_arr_addr_new_order);
+
+  TPCCTransaction::index->warehouse_table.start_addr =
+    (void*)tpcc_arr_addr_warehouse;
+  TPCCTransaction::index->district_table.start_addr =
+    (void*)tpcc_arr_addr_district;
+  TPCCTransaction::index->customer_table.start_addr =
+    (void*)tpcc_arr_addr_customer;
+  TPCCTransaction::index->stock_table.start_addr = (void*)tpcc_arr_addr_stock;
+  TPCCTransaction::index->item_table.start_addr = (void*)tpcc_arr_addr_item;
+  TPCCTransaction::index->history_table.start_addr =
+    (void*)tpcc_arr_addr_history;
+  TPCCTransaction::index->order_table.start_addr = (void*)tpcc_arr_addr_order;
+  TPCCTransaction::index->order_line_table.start_addr =
+    (void*)tpcc_arr_addr_order_line;
+  TPCCTransaction::index->new_order_table.start_addr =
+    (void*)tpcc_arr_addr_new_order;
 
   gen.generateWarehouses();
   gen.generateDistricts();

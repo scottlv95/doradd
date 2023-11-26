@@ -24,6 +24,8 @@ private:
   uint64_t cnt = 0;
 
 public:
+  void * start_addr = 0;
+
   Table() : map(std::array<cown_ptr<T>, DB_SIZE>()) {}
 
   cown_ptr<T>* get_row_addr(uint64_t key)

@@ -35,11 +35,12 @@ public:
     void* _tpcc_arr_addr_district,
     void* _tpcc_arr_addr_customer,
     void* _tpcc_arr_addr_history,
-    void* _tpcc_arr_addr_order,
-    void* _tpcc_arr_addr_new_order,
-    void* _tpcc_arr_addr_order_line,
+    void* _tpcc_arr_addr_stock
     void* _tpcc_arr_addr_item,
-    void* _tpcc_arr_addr_stock)
+    void* _tpcc_arr_addr_order,
+    void* _tpcc_arr_addr_order_line,
+    void* _tpcc_arr_addr_new_order,
+    )
   : db(_db),
     tpcc_arr_addr(_tpcc_arr_addr_warehouse),
     num_warehouses(NUM_WAREHOUSES)
@@ -95,7 +96,7 @@ public:
       _warehouse.w_ytd = 300000;
 
       void* row_addr =
-        //warehouse_table_addr + (sizeof(Warehouse) * _warehouse.hash_key());
+        // warehouse_table_addr + (sizeof(Warehouse) * _warehouse.hash_key());
         warehouse_table_addr + (uint64_t)(1024 * _warehouse.hash_key());
 
       db->warehouse_table.insert_row(
@@ -148,7 +149,7 @@ public:
         _district.d_next_o_id = 3001;
 
         void* row_addr =
-          //district_table_addr + (sizeof(District) * _district.hash_key());
+          // district_table_addr + (sizeof(District) * _district.hash_key());
           district_table_addr + (uint64_t)(1024 * _district.hash_key());
 
         db->district_table.insert_row(
@@ -433,20 +434,16 @@ public:
               r.generateRandomString(24).c_str(),
               sizeof(_order_line.ol_dist_info));
 
-            void* row_addr = order_line_table_addr +
-              (1024 *
-               ((w_id - 1) * DISTRICTS_PER_WAREHOUSE *
-                  INITIAL_ORDERS_PER_DISTRICT +
-                (d_id - 1) * INITIAL_ORDERS_PER_DISTRICT +
-                (o_id - 1) * _order.o_ol_cnt + (ol_number - 1)));
+            uint64_t hash_key = _order_line.hash_key();
+
+            void* row_addr = static_cast<void*>(
+              order_line_table_addr + (1024 * hash_key));
 
             db->order_line_table.insert_row(
-              _order_line.hash_key(),
-              make_cown_custom<OrderLine>(row_addr, _order_line));
+              hash_key, make_cown_custom<OrderLine>(row_addr, _order_line));
           }
 
-          void* row_addr =
-            order_table_addr + (1024 * _order.hash_key());
+          void* row_addr = order_table_addr + (1024 * _order.hash_key());
 
           db->order_table.insert_row(
             _order.hash_key(), make_cown_custom<Order>(row_addr, _order));
