@@ -57,8 +57,6 @@ public:
   static Database* index;
   static uint64_t cown_base_addr;
 
-#define INDEXER
-
 #if defined(INDEXER) || defined(TEST_TWO)
   // Indexer: read db and in-place update cown_ptr
 
@@ -66,6 +64,7 @@ public:
   {
     auto txm = reinterpret_cast<TPCCTransactionMarshalled*>(input);
 
+    //printf("params are %u, %u, %u\n", txm->params[0], txm->params[1], txm->params[2]);
     // New Order
     if (txm->txn_type == 0)
     {
@@ -402,6 +401,7 @@ int main(int argc, char** argv)
 
 #define HUGE_PAGES
 #ifdef HUGE_PAGES
+#if 0
   // Big table to store all tpcc related stuff
   void* tpcc_arr_addr_warehouse = static_cast<void*>(
     aligned_alloc_hpage(sizeof(Warehouse) * TSIZE_WAREHOUSE));
@@ -421,6 +421,27 @@ int main(int argc, char** argv)
     aligned_alloc_hpage(sizeof(OrderLine) * TSIZE_ORDER_LINE));
   void* tpcc_arr_addr_new_order =
     static_cast<void*>(aligned_alloc_hpage(sizeof(NewOrder) * TSIZE_NEW_ORDER));
+#else
+  // Big table to store all tpcc related stuff
+  void* tpcc_arr_addr_warehouse = static_cast<void*>(
+    aligned_alloc_hpage(1024 * TSIZE_WAREHOUSE));
+  void* tpcc_arr_addr_district =
+    static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_DISTRICT));
+  void* tpcc_arr_addr_customer =
+    static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_CUSTOMER));
+  void* tpcc_arr_addr_stock =
+    static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_STOCK));
+  void* tpcc_arr_addr_item =
+    static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_ITEM));
+  void* tpcc_arr_addr_history =
+    static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_HISTORY));
+  void* tpcc_arr_addr_order =
+    static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_ORDER));
+  void* tpcc_arr_addr_order_line = static_cast<void*>(
+    aligned_alloc_hpage(1024 * TSIZE_ORDER_LINE));
+  void* tpcc_arr_addr_new_order =
+    static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_NEW_ORDER));
+#endif
 #endif
 
   TPCCGenerator gen(

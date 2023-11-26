@@ -95,7 +95,8 @@ public:
       _warehouse.w_ytd = 300000;
 
       void* row_addr =
-        warehouse_table_addr + (sizeof(Warehouse) * _warehouse.hash_key());
+        //warehouse_table_addr + (sizeof(Warehouse) * _warehouse.hash_key());
+        warehouse_table_addr + (uint64_t)(1024 * _warehouse.hash_key());
 
       db->warehouse_table.insert_row(
         _warehouse.hash_key(),
@@ -147,7 +148,8 @@ public:
         _district.d_next_o_id = 3001;
 
         void* row_addr =
-          district_table_addr + (sizeof(District) * _district.hash_key());
+          //district_table_addr + (sizeof(District) * _district.hash_key());
+          district_table_addr + (uint64_t)(1024 * _district.hash_key());
 
         db->district_table.insert_row(
           _district.hash_key(),
