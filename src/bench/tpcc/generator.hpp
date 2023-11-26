@@ -237,7 +237,7 @@ public:
           _customer.c_since = r.GetCurrentTime();
 
           void* row_addr =
-            customer_table_addr + (sizeof(Customer) * _customer.hash_key());
+            customer_table_addr + (2 * 1024 * _customer.hash_key());
 
           db->customer_table.insert_row(
             _customer.hash_key(),
@@ -254,7 +254,7 @@ public:
           _history.h_date = r.GetCurrentTime();
 
           void* history_row_addr =
-            history_table_addr + (sizeof(History) * _history.hash_key());
+            history_table_addr + (1024 * _history.hash_key());
 
           db->history_table.insert_row(
             _history.hash_key(),
@@ -302,7 +302,7 @@ public:
           sizeof(_item.i_data));
       }
 
-      void* row_addr = item_table_addr + (sizeof(Item) * _item.hash_key());
+      void* row_addr = item_table_addr + (1024 * _item.hash_key());
 
       db->item_table.insert_row(
         _item.hash_key(), make_cown_custom<Item>(row_addr, _item));
@@ -389,7 +389,7 @@ public:
             sizeof(_stock.s_data));
         }
 
-        void* row_addr = stock_table_addr + (sizeof(Stock) * _stock.hash_key());
+        void* row_addr = stock_table_addr + (1024 * _stock.hash_key());
 
         db->stock_table.insert_row(
           _stock.hash_key(), make_cown_custom<Stock>(row_addr, _stock));
@@ -434,7 +434,7 @@ public:
               sizeof(_order_line.ol_dist_info));
 
             void* row_addr = order_line_table_addr +
-              (sizeof(OrderLine) *
+              (1024 *
                ((w_id - 1) * DISTRICTS_PER_WAREHOUSE *
                   INITIAL_ORDERS_PER_DISTRICT +
                 (d_id - 1) * INITIAL_ORDERS_PER_DISTRICT +
@@ -446,7 +446,7 @@ public:
           }
 
           void* row_addr =
-            order_table_addr + (sizeof(Order) * _order.hash_key());
+            order_table_addr + (1024 * _order.hash_key());
 
           db->order_table.insert_row(
             _order.hash_key(), make_cown_custom<Order>(row_addr, _order));
