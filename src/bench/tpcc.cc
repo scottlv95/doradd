@@ -61,15 +61,10 @@ public:
 
 #if defined(INDEXER) || defined(TEST_TWO)
   // Indexer: read db and in-place update cown_ptr
+
   static int prepare_cowns(char* input)
   {
     auto txm = reinterpret_cast<TPCCTransactionMarshalled*>(input);
-
-    printf("txm->txn_type: %d\n", txm->txn_type);
-    printf("warehouse: %d\n", txm->params[0]);
-    printf("district: %d\n", txm->params[1]);
-    printf("customer: %d\n", txm->params[2]);
-
 
     // New Order
     if (txm->txn_type == 0)
@@ -82,10 +77,10 @@ public:
                             ->get_base_addr();
 
       // // District
-      txm->cown_ptrs[1] = index->district_table
-                            .get_row_addr(District::hash_key(
-                              txm->params[0], txm->params[1]))
-                            ->get_base_addr();
+      txm->cown_ptrs[1] =
+        index->district_table
+          .get_row_addr(District::hash_key(txm->params[0], txm->params[1]))
+          ->get_base_addr();
 
       // // Customer
       txm->cown_ptrs[2] = index->customer_table
@@ -114,21 +109,21 @@ public:
     else if (txm->txn_type == 1)
     {
       // Warehouse
-      txm->cown_ptrs[0] =
-        index->warehouse_table.get_row_addr(Warehouse::hash_key(txm->params[0]))
-          ->get_base_addr();
+      txm->cown_ptrs[0] = index->warehouse_table
+                            .get_row_addr(Warehouse::hash_key(txm->params[0]))
+                            ->get_base_addr();
 
       // District
       txm->cown_ptrs[1] =
-        index->district_table.get_row_addr(
-          District::hash_key(txm->params[0], txm->params[1]))
+        index->district_table
+          .get_row_addr(District::hash_key(txm->params[0], txm->params[1]))
           ->get_base_addr();
 
       // Customer
-      txm->cown_ptrs[2] =
-        index->customer_table.get_row_addr(
-          Customer::hash_key(txm->params[0], txm->params[1], txm->params[2]))
-          ->get_base_addr();
+      txm->cown_ptrs[2] = index->customer_table
+                            .get_row_addr(Customer::hash_key(
+                              txm->params[0], txm->params[1], txm->params[2]))
+                            ->get_base_addr();
     }
     else
     {
@@ -290,9 +285,7 @@ public:
     int a = 0;
     auto bb = make_cown<int>(a);
 
-    when(bb) << [](auto) {
-      printf("bb\n");
-    };
+    when(bb) << [](auto) { printf("bb\n"); };
 
     // New Order
     if (txm->txn_type == 0)
@@ -300,8 +293,8 @@ public:
       // Warehouse
       cown_ptr<Warehouse> w = get_cown_ptr_from_addr<Warehouse>(
         reinterpret_cast<void*>(txm->cown_ptrs[0]));
-      // cown_ptr<District> d = get_cown_ptr_from_addr<District>(
-      //   reinterpret_cast<void*>(txm->cown_ptrs[1]));
+      cown_ptr<District> d = get_cown_ptr_from_addr<District>(
+        reinterpret_cast<void*>(txm->cown_ptrs[1]));
       // cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(
       //   reinterpret_cast<void*>(txm->cown_ptrs[2]));
       // cown_ptr<Stock> s[15];
@@ -316,10 +309,7 @@ public:
       //   it[i] = get_cown_ptr_from_addr<Item>(
       //     reinterpret_cast<void*>(txm->cown_ptrs[18 + i]));
       // }
-      when(w) << [](auto){
-          printf("Processing Payment\n");
-      };
-
+      when(w, d) << [=](auto, auto) { printf("Processing new order\n"); };
 
       // TODO: downstream cown_ptr
     }
@@ -333,38 +323,38 @@ public:
       //   reinterpret_cast<void*>(txm->cown_ptrs[2]));
       // uint32_t h_amount = txm->params[52];
 
-      when(w) << [=](auto){
-          printf("Processing Payment\n");
-          // Update warehouse balance
-          // _w->w_ytd += h_amount;
+      when(w) << [=](auto) {
+        printf("Processing Payment\n");
+        // Update warehouse balance
+        // _w->w_ytd += h_amount;
 
-          // // Update district balance
-          // _d->d_ytd += h_amount;
+        // // Update district balance
+        // _d->d_ytd += h_amount;
 
-          // // Update customer balance (case 1)
-          // _c->c_balance -= h_amount;
-          // _c->c_ytd_payment += h_amount;
-          // _c->c_payment_cnt += 1;
+        // // Update customer balance (case 1)
+        // _c->c_balance -= h_amount;
+        // _c->c_ytd_payment += h_amount;
+        // _c->c_payment_cnt += 1;
 
-          // == Not implemented in Caracal's evaluation ==
-          // Customer Credit Information
-          // if (_c->c_credit == "BC") {
-          //     std::string c_data = _c->c_data;
-          //     c_data += std::to_string(c_id) + " " +
-          // std::to_string(c_d_id) + " " + std::to_string(c_w_id) + " " +
-          //               std::to_string(d_id) + " " + std::to_string(w_id)
-          // + " " + std::to_string(h_amount) + " | ";
-          //     if (c_data.length() > 500) {
-          //         c_data = c_data.substr(0, 500);
-          //     }
-          //     _c->c_data = c_data;
-          // }
+        // == Not implemented in Caracal's evaluation ==
+        // Customer Credit Information
+        // if (_c->c_credit == "BC") {
+        //     std::string c_data = _c->c_data;
+        //     c_data += std::to_string(c_id) + " " +
+        // std::to_string(c_d_id) + " " + std::to_string(c_w_id) + " " +
+        //               std::to_string(d_id) + " " + std::to_string(w_id)
+        // + " " + std::to_string(h_amount) + " | ";
+        //     if (c_data.length() > 500) {
+        //         c_data = c_data.substr(0, 500);
+        //     }
+        //     _c->c_data = c_data;
+        // }
 
-          // == Not implemented in Caracal's evaluation ==
-          // Update history
-          // History h = History(w_id, d_id, c_id);
-          // h.h_data = _w->w_name + "    " + _d->d_name;
-          // history_table.add(std::make_tuple(w_id, d_id, c_id), h);
+        // == Not implemented in Caracal's evaluation ==
+        // Update history
+        // History h = History(w_id, d_id, c_id);
+        // h.h_data = _w->w_name + "    " + _d->d_name;
+        // history_table.add(std::make_tuple(w_id, d_id, c_id), h);
       };
     }
     else
@@ -413,15 +403,37 @@ int main(int argc, char** argv)
 #define HUGE_PAGES
 #ifdef HUGE_PAGES
   // Big table to store all tpcc related stuff
-  void* tpcc_arr_addr = static_cast<void*>(aligned_alloc_hpage(
-    sizeof(Warehouse) * TSIZE_WAREHOUSE + sizeof(District) * TSIZE_DISTRICT +
-    sizeof(Customer) * TSIZE_CUSTOMER + sizeof(Stock) * TSIZE_STOCK +
-    sizeof(Item) * TSIZE_ITEM + sizeof(History) * TSIZE_HISTORY +
-    sizeof(Order) * TSIZE_ORDER + sizeof(OrderLine) * TSIZE_ORDER_LINE +
-    sizeof(NewOrder) * TSIZE_NEW_ORDER));  
+  void* tpcc_arr_addr_warehouse = static_cast<void*>(
+    aligned_alloc_hpage(sizeof(Warehouse) * TSIZE_WAREHOUSE));
+  void* tpcc_arr_addr_district =
+    static_cast<void*>(aligned_alloc_hpage(sizeof(District) * TSIZE_DISTRICT));
+  void* tpcc_arr_addr_customer =
+    static_cast<void*>(aligned_alloc_hpage(sizeof(Customer) * TSIZE_CUSTOMER));
+  void* tpcc_arr_addr_stock =
+    static_cast<void*>(aligned_alloc_hpage(sizeof(Stock) * TSIZE_STOCK));
+  void* tpcc_arr_addr_item =
+    static_cast<void*>(aligned_alloc_hpage(sizeof(Item) * TSIZE_ITEM));
+  void* tpcc_arr_addr_history =
+    static_cast<void*>(aligned_alloc_hpage(sizeof(History) * TSIZE_HISTORY));
+  void* tpcc_arr_addr_order =
+    static_cast<void*>(aligned_alloc_hpage(sizeof(Order) * TSIZE_ORDER));
+  void* tpcc_arr_addr_order_line = static_cast<void*>(
+    aligned_alloc_hpage(sizeof(OrderLine) * TSIZE_ORDER_LINE));
+  void* tpcc_arr_addr_new_order =
+    static_cast<void*>(aligned_alloc_hpage(sizeof(NewOrder) * TSIZE_NEW_ORDER));
 #endif
 
-  TPCCGenerator gen(TPCCTransaction::index, tpcc_arr_addr);
+  TPCCGenerator gen(
+    TPCCTransaction::index,
+    tpcc_arr_addr_warehouse,
+    tpcc_arr_addr_district,
+    tpcc_arr_addr_customer,
+    tpcc_arr_addr_stock,
+    tpcc_arr_addr_item,
+    tpcc_arr_addr_history,
+    tpcc_arr_addr_order,
+    tpcc_arr_addr_order_line,
+    tpcc_arr_addr_new_order);
 
   gen.generateWarehouses();
   gen.generateDistricts();

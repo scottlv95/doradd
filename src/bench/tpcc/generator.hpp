@@ -29,30 +29,30 @@ protected:
   void* stock_table_addr;
 
 public:
-  TPCCGenerator(Database* _db, void* _tpcc_arr_addr)
-  : db(_db), tpcc_arr_addr(_tpcc_arr_addr), num_warehouses(NUM_WAREHOUSES)
+  TPCCGenerator(
+    Database* _db,
+    void* _tpcc_arr_addr_warehouse,
+    void* _tpcc_arr_addr_district,
+    void* _tpcc_arr_addr_customer,
+    void* _tpcc_arr_addr_history,
+    void* _tpcc_arr_addr_order,
+    void* _tpcc_arr_addr_new_order,
+    void* _tpcc_arr_addr_order_line,
+    void* _tpcc_arr_addr_item,
+    void* _tpcc_arr_addr_stock)
+  : db(_db),
+    tpcc_arr_addr(_tpcc_arr_addr_warehouse),
+    num_warehouses(NUM_WAREHOUSES)
   {
-    warehouse_table_addr = tpcc_arr_addr;
-    district_table_addr =
-      warehouse_table_addr + (sizeof(Warehouse) * num_warehouses);
-    customer_table_addr = district_table_addr +
-      (sizeof(District) * num_warehouses * DISTRICTS_PER_WAREHOUSE);
-    history_table_addr = customer_table_addr +
-      (sizeof(Customer) * num_warehouses * DISTRICTS_PER_WAREHOUSE *
-       CUSTOMERS_PER_DISTRICT);
-    order_table_addr = history_table_addr +
-      (sizeof(History) * num_warehouses * DISTRICTS_PER_WAREHOUSE *
-       CUSTOMERS_PER_DISTRICT);
-    new_order_table_addr = order_table_addr +
-      (sizeof(Order) * num_warehouses * DISTRICTS_PER_WAREHOUSE *
-       INITIAL_ORDERS_PER_DISTRICT);
-    order_line_table_addr = new_order_table_addr +
-      (sizeof(NewOrder) * num_warehouses * DISTRICTS_PER_WAREHOUSE *
-       INITIAL_ORDERS_PER_DISTRICT);
-    item_table_addr = order_line_table_addr +
-      (sizeof(OrderLine) * num_warehouses * DISTRICTS_PER_WAREHOUSE *
-       INITIAL_ORDERS_PER_DISTRICT);
-    stock_table_addr = item_table_addr + (sizeof(Item) * NUM_ITEMS);
+    warehouse_table_addr = _tpcc_arr_addr_warehouse;
+    district_table_addr = _tpcc_arr_addr_district;
+    customer_table_addr = _tpcc_arr_addr_customer;
+    history_table_addr = _tpcc_arr_addr_history;
+    order_table_addr = _tpcc_arr_addr_order;
+    new_order_table_addr = _tpcc_arr_addr_new_order;
+    order_line_table_addr = _tpcc_arr_addr_order_line;
+    item_table_addr = _tpcc_arr_addr_item;
+    stock_table_addr = _tpcc_arr_addr_stock;
   }
 
   // TPC-C Reference
@@ -94,7 +94,8 @@ public:
 
       _warehouse.w_ytd = 300000;
 
-      void* row_addr = warehouse_table_addr + (sizeof(Warehouse) * (w_id - 1));
+      void* row_addr =
+        warehouse_table_addr + (sizeof(Warehouse) * _warehouse.hash_key());
 
       db->warehouse_table.insert_row(
         _warehouse.hash_key(),
@@ -108,6 +109,7 @@ public:
   {
     std::cout << "Generating districts ..." << std::endl;
 
+    uint64_t counter = 0;
     for (uint32_t w_id = 1; w_id <= num_warehouses; w_id++)
     {
       for (uint32_t d_id = 1; d_id <= DISTRICTS_PER_WAREHOUSE; d_id++)
@@ -144,15 +146,17 @@ public:
         _district.d_ytd = 300000;
         _district.d_next_o_id = 3001;
 
-        void* row_addr = district_table_addr +
-          (sizeof(District) *
-           ((w_id - 1) * DISTRICTS_PER_WAREHOUSE + (d_id - 1)));
+        void* row_addr =
+          district_table_addr + (sizeof(District) * _district.hash_key());
 
         db->district_table.insert_row(
           _district.hash_key(),
           make_cown_custom<District>(row_addr, _district));
+
+        counter++;
       }
     }
+    assert(counter == num_warehouses * DISTRICTS_PER_WAREHOUSE);
 
     return;
   }
@@ -230,10 +234,8 @@ public:
 
           _customer.c_since = r.GetCurrentTime();
 
-          void* row_addr = customer_table_addr +
-            (sizeof(Customer) *
-             ((w_id - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT +
-              (d_id - 1) * CUSTOMERS_PER_DISTRICT + (c_id - 1)));
+          void* row_addr =
+            customer_table_addr + (sizeof(Customer) * _customer.hash_key());
 
           db->customer_table.insert_row(
             _customer.hash_key(),
@@ -249,10 +251,8 @@ public:
 
           _history.h_date = r.GetCurrentTime();
 
-          void* history_row_addr = history_table_addr +
-            (sizeof(History) *
-             ((w_id - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT +
-              (d_id - 1) * CUSTOMERS_PER_DISTRICT + (c_id - 1)));
+          void* history_row_addr =
+            history_table_addr + (sizeof(History) * _history.hash_key());
 
           db->history_table.insert_row(
             _history.hash_key(),
@@ -300,7 +300,7 @@ public:
           sizeof(_item.i_data));
       }
 
-      void* row_addr = item_table_addr + (sizeof(Item) * (i_id - 1));
+      void* row_addr = item_table_addr + (sizeof(Item) * _item.hash_key());
 
       db->item_table.insert_row(
         _item.hash_key(), make_cown_custom<Item>(row_addr, _item));
@@ -387,8 +387,7 @@ public:
             sizeof(_stock.s_data));
         }
 
-        void* row_addr = stock_table_addr +
-          (sizeof(Stock) * ((w_id - 1) * NUM_ITEMS + (i_id - 1)));
+        void* row_addr = stock_table_addr + (sizeof(Stock) * _stock.hash_key());
 
         db->stock_table.insert_row(
           _stock.hash_key(), make_cown_custom<Stock>(row_addr, _stock));
@@ -444,11 +443,8 @@ public:
               make_cown_custom<OrderLine>(row_addr, _order_line));
           }
 
-          void* row_addr = order_table_addr +
-            (sizeof(Order) *
-             ((w_id - 1) * DISTRICTS_PER_WAREHOUSE *
-                INITIAL_ORDERS_PER_DISTRICT +
-              (d_id - 1) * INITIAL_ORDERS_PER_DISTRICT + (o_id - 1)));
+          void* row_addr =
+            order_table_addr + (sizeof(Order) * _order.hash_key());
 
           db->order_table.insert_row(
             _order.hash_key(), make_cown_custom<Order>(row_addr, _order));
