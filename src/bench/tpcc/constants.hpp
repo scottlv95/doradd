@@ -3,8 +3,8 @@
 #include <stdint.h>
 #include <cstdint>
 
-const uint64_t NUM_TRANSACTIONS = 1000000;
-const uint32_t MAX_ORDER_TRANSACTIONS = 1000;
+const uint64_t NUM_TPCC_TRANSACTIONS = 1000;
+const uint64_t MAX_ORDER_TRANSACTIONS = (NUM_TPCC_TRANSACTIONS / 3) * 2;
 
 const uint32_t NUM_WAREHOUSES = 1;
 const uint8_t MONEY_DECIMALS = 2;

@@ -34,15 +34,14 @@ public:
     void* _tpcc_arr_addr_warehouse,
     void* _tpcc_arr_addr_district,
     void* _tpcc_arr_addr_customer,
-    void* _tpcc_arr_addr_history,
-    void* _tpcc_arr_addr_stock
+    void* _tpcc_arr_addr_stock,
     void* _tpcc_arr_addr_item,
+    void* _tpcc_arr_addr_history,
     void* _tpcc_arr_addr_order,
     void* _tpcc_arr_addr_order_line,
-    void* _tpcc_arr_addr_new_order,
+    void* _tpcc_arr_addr_new_order
     )
   : db(_db),
-    tpcc_arr_addr(_tpcc_arr_addr_warehouse),
     num_warehouses(NUM_WAREHOUSES)
   {
     warehouse_table_addr = _tpcc_arr_addr_warehouse;
