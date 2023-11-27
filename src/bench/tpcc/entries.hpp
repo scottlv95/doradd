@@ -19,6 +19,7 @@ public:
   uint64_t w_ytd; // Warehouse balance
   char w_state[2];
   char w_zip[9];
+  uint32_t magic = 123;
 
   // Constructor
   Warehouse(uint32_t _w_id) : w_id(_w_id) {}
@@ -48,6 +49,7 @@ public:
   float d_tax;
   uint64_t d_ytd; // District balance
   uint64_t d_next_o_id; // Next order id
+  uint32_t magic = 324;
 
   // Constructor
   District(uint32_t wid, uint32_t did) : d_id(did), w_id(wid) {}
@@ -113,20 +115,18 @@ public:
   uint64_t c_delivery_cnt;
   char c_data[500];
 
-  Customer(uint64_t _c_w_id, uint64_t _c_d_id, uint64_t _c_id)
-  : c_id(_c_id), c_d_id(_c_d_id), c_w_id(_c_w_id)
-  {}
+  Customer(uint64_t _c_w_id, uint64_t _c_d_id, uint64_t _c_id) : c_id(_c_id), c_d_id(_c_d_id), c_w_id(_c_w_id) {}
 
   uint64_t hash_key() const
   {
-    return ((c_w_id - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
-      ((c_d_id - 1) * CUSTOMERS_PER_DISTRICT) + (c_id - 1);
+    return ((c_w_id - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) + ((c_d_id - 1) * CUSTOMERS_PER_DISTRICT) +
+      (c_id - 1);
   }
 
   static uint64_t hash_key(uint32_t wid, uint32_t did, uint32_t cid)
   {
-    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
-      ((did - 1) * CUSTOMERS_PER_DISTRICT) + (cid - 1);
+    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) + ((did - 1) * CUSTOMERS_PER_DISTRICT) +
+      (cid - 1);
   }
 
 } __attribute__((aligned(1024)));
@@ -144,24 +144,18 @@ public:
   uint32_t o_ol_cnt;
   uint32_t o_all_local;
 
-  Order(uint32_t wid, uint32_t did, uint64_t oid)
-  : o_id(oid), o_d_id(did), o_w_id(wid)
-  {}
+  Order(uint32_t wid, uint32_t did, uint64_t oid) : o_id(oid), o_d_id(did), o_w_id(wid) {}
 
   uint64_t hash_key() const
   {
-    return ((o_w_id - 1) * DISTRICTS_PER_WAREHOUSE *
-            (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
-      ((o_d_id - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
-      (o_id - 1);
+    return ((o_w_id - 1) * DISTRICTS_PER_WAREHOUSE * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      ((o_d_id - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) + (o_id - 1);
   }
 
   static uint64_t hash_key(uint32_t wid, uint32_t did, uint32_t oid)
   {
-    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE *
-            (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
-      ((did - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
-      (oid - 1);
+    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      ((did - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) + (oid - 1);
   }
 
 } __attribute__((aligned(64)));
@@ -196,7 +190,7 @@ public:
     return (Order::hash_key(wid, did, oid) * 15) + (number - 1);
   }
 
-} __attribute__((aligned(128)));
+} __attribute__((aligned(256)));
 
 class __attribute__((packed)) NewOrder
 {
@@ -205,24 +199,18 @@ public:
   uint32_t no_d_id;
   uint32_t no_w_id;
 
-  NewOrder(uint32_t wid, uint32_t did, uint32_t oid)
-  : no_o_id(oid), no_d_id(did), no_w_id(wid)
-  {}
+  NewOrder(uint32_t wid, uint32_t did, uint32_t oid) : no_o_id(oid), no_d_id(did), no_w_id(wid) {}
 
   uint64_t hash_key() const
   {
-    return ((no_w_id - 1) * DISTRICTS_PER_WAREHOUSE *
-            (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
-      ((no_d_id - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
-      (no_o_id - 1);
+    return ((no_w_id - 1) * DISTRICTS_PER_WAREHOUSE * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      ((no_d_id - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) + (no_o_id - 1);
   }
 
   static uint64_t hash_key(uint32_t wid, uint32_t did, uint32_t oid)
   {
-    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE *
-            (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
-      ((did - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
-      (oid - 1);
+    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) +
+      ((did - 1) * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS)) + (oid - 1);
   }
 
 } __attribute__((aligned(32)));
@@ -293,8 +281,8 @@ public:
 
   static uint64_t hash_key(uint32_t wid, uint32_t did, uint32_t cid)
   {
-    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) +
-      ((did - 1) * CUSTOMERS_PER_DISTRICT) + (cid - 1);
+    return ((wid - 1) * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT) + ((did - 1) * CUSTOMERS_PER_DISTRICT) +
+      (cid - 1);
   }
 
 } __attribute__((aligned(128)));

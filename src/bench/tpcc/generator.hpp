@@ -94,13 +94,11 @@ public:
 
       _warehouse.w_ytd = 300000;
 
-      void* row_addr =
-        // warehouse_table_addr + (sizeof(Warehouse) * _warehouse.hash_key());
-        warehouse_table_addr + (uint64_t)(1024 * _warehouse.hash_key());
+      uint32_t warehouse_hash_key = _warehouse.hash_key();
 
-      db->warehouse_table.insert_row(
-        _warehouse.hash_key(),
-        make_cown_custom<Warehouse>(row_addr, _warehouse));
+      void* row_addr = (void *)(warehouse_table_addr + (uint64_t)(1024 * warehouse_hash_key));
+      cown_ptr<Warehouse> w = make_cown_custom<Warehouse>(row_addr, _warehouse);
+      db->warehouse_table.insert_row(warehouse_hash_key, w);
     }
 
     return;

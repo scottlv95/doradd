@@ -33,9 +33,9 @@ public:
     return &map[key];
   }
 
-  cown_ptr<T>& get_row(uint64_t key)
+  cown_ptr<T>&& get_row(uint64_t key)
   {
-    return map[key];
+    return std::move(map[key]);
   }
 
   uint64_t insert_row(Key key, cown_ptr<T> r)
