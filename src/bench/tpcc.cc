@@ -38,36 +38,64 @@ using namespace verona::cpp;
 
 // Macros for getting cown pointers
 #define GET_COWN_PTR_STOCK_1() auto s1 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[3]));
-#define GET_COWN_PTR_STOCK_2() GET_COWN_PTR_STOCK_1() auto s2 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[4]));
-#define GET_COWN_PTR_STOCK_3() GET_COWN_PTR_STOCK_2() auto s3 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[5]));
-#define GET_COWN_PTR_STOCK_4() GET_COWN_PTR_STOCK_3() auto s4 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[6]));
-#define GET_COWN_PTR_STOCK_5() GET_COWN_PTR_STOCK_4() auto s5 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[7]));
-#define GET_COWN_PTR_STOCK_6() GET_COWN_PTR_STOCK_5() auto s6 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[8]));
-#define GET_COWN_PTR_STOCK_7() GET_COWN_PTR_STOCK_6() auto s7 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[9]));
-#define GET_COWN_PTR_STOCK_8() GET_COWN_PTR_STOCK_7() auto s8 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[10]));
-#define GET_COWN_PTR_STOCK_9() GET_COWN_PTR_STOCK_8() auto s9 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[11]));
-#define GET_COWN_PTR_STOCK_10() GET_COWN_PTR_STOCK_9() auto s10 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[12]));
-#define GET_COWN_PTR_STOCK_11() GET_COWN_PTR_STOCK_10() auto s11 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[13]));
-#define GET_COWN_PTR_STOCK_12() GET_COWN_PTR_STOCK_11() auto s12 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[14]));
-#define GET_COWN_PTR_STOCK_13() GET_COWN_PTR_STOCK_12() auto s13 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[15]));
-#define GET_COWN_PTR_STOCK_14() GET_COWN_PTR_STOCK_13() auto s14 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[16]));
-#define GET_COWN_PTR_STOCK_15() GET_COWN_PTR_STOCK_14() auto s15 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[17]));
+#define GET_COWN_PTR_STOCK_2() \
+  GET_COWN_PTR_STOCK_1() auto s2 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[4]));
+#define GET_COWN_PTR_STOCK_3() \
+  GET_COWN_PTR_STOCK_2() auto s3 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[5]));
+#define GET_COWN_PTR_STOCK_4() \
+  GET_COWN_PTR_STOCK_3() auto s4 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[6]));
+#define GET_COWN_PTR_STOCK_5() \
+  GET_COWN_PTR_STOCK_4() auto s5 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[7]));
+#define GET_COWN_PTR_STOCK_6() \
+  GET_COWN_PTR_STOCK_5() auto s6 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[8]));
+#define GET_COWN_PTR_STOCK_7() \
+  GET_COWN_PTR_STOCK_6() auto s7 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[9]));
+#define GET_COWN_PTR_STOCK_8() \
+  GET_COWN_PTR_STOCK_7() auto s8 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[10]));
+#define GET_COWN_PTR_STOCK_9() \
+  GET_COWN_PTR_STOCK_8() auto s9 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[11]));
+#define GET_COWN_PTR_STOCK_10() \
+  GET_COWN_PTR_STOCK_9() auto s10 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[12]));
+#define GET_COWN_PTR_STOCK_11() \
+  GET_COWN_PTR_STOCK_10() auto s11 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[13]));
+#define GET_COWN_PTR_STOCK_12() \
+  GET_COWN_PTR_STOCK_11() auto s12 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[14]));
+#define GET_COWN_PTR_STOCK_13() \
+  GET_COWN_PTR_STOCK_12() auto s13 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[15]));
+#define GET_COWN_PTR_STOCK_14() \
+  GET_COWN_PTR_STOCK_13() auto s14 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[16]));
+#define GET_COWN_PTR_STOCK_15() \
+  GET_COWN_PTR_STOCK_14() auto s15 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[17]));
 
 #define GET_COWN_PTR_ITEM_1() auto i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));
-#define GET_COWN_PTR_ITEM_2() GET_COWN_PTR_ITEM_1() auto i2 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[19]));
-#define GET_COWN_PTR_ITEM_3() GET_COWN_PTR_ITEM_2() auto i3 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[20]));
-#define GET_COWN_PTR_ITEM_4() GET_COWN_PTR_ITEM_3() auto i4 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[21]));
-#define GET_COWN_PTR_ITEM_5() GET_COWN_PTR_ITEM_4() auto i5 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[22]));
-#define GET_COWN_PTR_ITEM_6() GET_COWN_PTR_ITEM_5() auto i6 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[23]));
-#define GET_COWN_PTR_ITEM_7() GET_COWN_PTR_ITEM_6() auto i7 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[24]));
-#define GET_COWN_PTR_ITEM_8() GET_COWN_PTR_ITEM_7() auto i8 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[25]));
-#define GET_COWN_PTR_ITEM_9() GET_COWN_PTR_ITEM_8() auto i9 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[26]));
-#define GET_COWN_PTR_ITEM_10() GET_COWN_PTR_ITEM_9() auto i10 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[27]));
-#define GET_COWN_PTR_ITEM_11() GET_COWN_PTR_ITEM_10() auto i11 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[28]));
-#define GET_COWN_PTR_ITEM_12() GET_COWN_PTR_ITEM_11() auto i12 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[29]));
-#define GET_COWN_PTR_ITEM_13() GET_COWN_PTR_ITEM_12() auto i13 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[30]));
-#define GET_COWN_PTR_ITEM_14() GET_COWN_PTR_ITEM_13() auto i14 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[31]));
-#define GET_COWN_PTR_ITEM_15() GET_COWN_PTR_ITEM_14() auto i15 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[32]));
+#define GET_COWN_PTR_ITEM_2() \
+  GET_COWN_PTR_ITEM_1() auto i2 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[19]));
+#define GET_COWN_PTR_ITEM_3() \
+  GET_COWN_PTR_ITEM_2() auto i3 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[20]));
+#define GET_COWN_PTR_ITEM_4() \
+  GET_COWN_PTR_ITEM_3() auto i4 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[21]));
+#define GET_COWN_PTR_ITEM_5() \
+  GET_COWN_PTR_ITEM_4() auto i5 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[22]));
+#define GET_COWN_PTR_ITEM_6() \
+  GET_COWN_PTR_ITEM_5() auto i6 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[23]));
+#define GET_COWN_PTR_ITEM_7() \
+  GET_COWN_PTR_ITEM_6() auto i7 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[24]));
+#define GET_COWN_PTR_ITEM_8() \
+  GET_COWN_PTR_ITEM_7() auto i8 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[25]));
+#define GET_COWN_PTR_ITEM_9() \
+  GET_COWN_PTR_ITEM_8() auto i9 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[26]));
+#define GET_COWN_PTR_ITEM_10() \
+  GET_COWN_PTR_ITEM_9() auto i10 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[27]));
+#define GET_COWN_PTR_ITEM_11() \
+  GET_COWN_PTR_ITEM_10() auto i11 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[28]));
+#define GET_COWN_PTR_ITEM_12() \
+  GET_COWN_PTR_ITEM_11() auto i12 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[29]));
+#define GET_COWN_PTR_ITEM_13() \
+  GET_COWN_PTR_ITEM_12() auto i13 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[30]));
+#define GET_COWN_PTR_ITEM_14() \
+  GET_COWN_PTR_ITEM_13() auto i14 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[31]));
+#define GET_COWN_PTR_ITEM_15() \
+  GET_COWN_PTR_ITEM_14() auto i15 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[32]));
 
 // Macros for updating stocks and inserting order lines
 #define UPDATE_STOCK_AND_INSERT_ORDER_LINE(_INDEX) \
@@ -317,8 +345,9 @@ public:
 
     for (int i = 0; i < tmx->number_of_rows; i++)
     {
-      __builtin_prefetch(
-        reinterpret_cast<const void*>(cown_base_addr + (uint64_t)(1024 * txm->indices[i]) + 32), rw, locality);
+      __builtin_prefetch(reinterpret_cast<const void*>(cown_base_addr + (uint64_t)(1024 * txm->indices[i]) + 32),
+      rw,
+      locality);
     }
 
     return sizeof(TPCCTransactionMarshalled);
@@ -364,7 +393,6 @@ public:
       {
         case 1:
         {
-
           GET_COWN_PTR_STOCK_1();
           GET_COWN_PTR_ITEM_1();
 
@@ -438,7 +466,7 @@ public:
                  uint32_t amount = 0;
 
                  // ===== Update the order line and stock ====
-                UPDATE_STOCK_AND_OL3();
+                 UPDATE_STOCK_AND_OL3();
                  // ==========================================
 
                  NEWORDER_END();
@@ -451,20 +479,10 @@ public:
           GET_COWN_PTR_STOCK_4();
           GET_COWN_PTR_ITEM_4();
 
-          when(w, d, c, s1, s2, s3, s4, i1, i2, i3, i4) << [=](
-                                                             auto _w,
-                                                             auto _d,
-                                                             auto _c,
-                                                             auto _s1,
-                                                             auto _s2,
-                                                             auto _s3,
-                                                             auto _s4,
-                                                             auto _i1,
-                                                             auto _i2,
-                                                             auto _i3,
-                                                             auto _i4) {
-            assert(_d->magic == 324);
+          when(w, d, c, s1, s2, s3, s4, i1, i2, i3, i4) << [=](auto _w,auto _d,auto _c,auto _s1,auto _s2,auto _s3,
+          auto _s4,auto _i1,auto _i2,auto _i3,auto _i4) {
 
+            assert(_d->magic == 324);
             NEWORDER_START();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -489,22 +507,10 @@ public:
           GET_COWN_PTR_STOCK_5();
           GET_COWN_PTR_ITEM_5();
 
-          when(w, d, c, s1, s2, s3, s4, s5, i1, i2, i3, i4, i5) << [=](
-                                                                     auto _w,
-                                                                     auto _d,
-                                                                     auto _c,
-                                                                     auto _s1,
-                                                                     auto _s2,
-                                                                     auto _s3,
-                                                                     auto _s4,
-                                                                     auto _s5,
-                                                                     auto _i1,
-                                                                     auto _i2,
-                                                                     auto _i3,
-                                                                     auto _i4,
-                                                                     auto _i5) {
-            assert(_d->magic == 324);
+          when(w, d, c, s1, s2, s3, s4, s5, i1, i2, i3, i4, i5) << [=](auto _w,auto _d,auto _c,auto _s1,auto _s2,
+          auto _s3,auto _s4,auto _s5,auto _i1,auto _i2,auto _i3,auto _i4,auto _i5) {
 
+            assert(_d->magic == 324);
             NEWORDER_START();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -528,22 +534,9 @@ public:
           GET_COWN_PTR_STOCK_6();
           GET_COWN_PTR_ITEM_7();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, i1, i2, i3, i4, i5, i6) << [=](
-                                                                             auto _w,
-                                                                             auto _d,
-                                                                             auto _c,
-                                                                             auto _s1,
-                                                                             auto _s2,
-                                                                             auto _s3,
-                                                                             auto _s4,
-                                                                             auto _s5,
-                                                                             auto _s6,
-                                                                             auto _i1,
-                                                                             auto _i2,
-                                                                             auto _i3,
-                                                                             auto _i4,
-                                                                             auto _i5,
-                                                                             auto _i6) {
+          when(w, d, c, s1, s2, s3, s4, s5, s6, i1, i2, i3, i4, i5, i6) << [=](auto _w, auto _d, auto _c, auto _s1, 
+          auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6) 
+          {
             assert(_d->magic == 324);
 
             NEWORDER_START();
@@ -569,25 +562,9 @@ public:
           GET_COWN_PTR_STOCK_7();
           GET_COWN_PTR_ITEM_7();
 
-
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, i1, i2, i3, i4, i5, i6, i7) << [=](
-                                                                                     auto _w,
-                                                                                     auto _d,
-                                                                                     auto _c,
-                                                                                     auto _s1,
-                                                                                     auto _s2,
-                                                                                     auto _s3,
-                                                                                     auto _s4,
-                                                                                     auto _s5,
-                                                                                     auto _s6,
-                                                                                     auto _s7,
-                                                                                     auto _i1,
-                                                                                     auto _i2,
-                                                                                     auto _i3,
-                                                                                     auto _i4,
-                                                                                     auto _i5,
-                                                                                     auto _i6,
-                                                                                     auto _i7) {
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, i1, i2, i3, i4, i5, i6, i7) << 
+          [=](auto _w,auto _d,auto _c,auto _s1,auto _s2,auto _s3,auto _s4,auto _s5,auto _s6,auto _s7,
+          auto _i1,auto _i2,auto _i3,auto _i4,auto _i5,auto _i6,auto _i7) {
             assert(_d->magic == 324);
 
             NEWORDER_START();
@@ -613,28 +590,11 @@ public:
           GET_COWN_PTR_STOCK_8();
           GET_COWN_PTR_ITEM_8();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, i1, i2, i3, i4, i5, i6, i7, i8) << [=](
-                                                                                             auto _w,
-                                                                                             auto _d,
-                                                                                             auto _c,
-                                                                                             auto _s1,
-                                                                                             auto _s2,
-                                                                                             auto _s3,
-                                                                                             auto _s4,
-                                                                                             auto _s5,
-                                                                                             auto _s6,
-                                                                                             auto _s7,
-                                                                                             auto _s8,
-                                                                                             auto _i1,
-                                                                                             auto _i2,
-                                                                                             auto _i3,
-                                                                                             auto _i4,
-                                                                                             auto _i5,
-                                                                                             auto _i6,
-                                                                                             auto _i7,
-                                                                                             auto _i8) {
-            assert(_d->magic == 324);
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, i1, i2, i3, i4, i5, i6, i7, i8) << 
+          [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, auto _s8,
+           auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8) {
 
+            assert(_d->magic == 324);
             NEWORDER_START();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -658,30 +618,11 @@ public:
           GET_COWN_PTR_STOCK_9();
           GET_COWN_PTR_ITEM_9();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, i1, i2, i3, i4, i5, i6, i7, i8, i9) << [=](
-                                                                                                     auto _w,
-                                                                                                     auto _d,
-                                                                                                     auto _c,
-                                                                                                     auto _s1,
-                                                                                                     auto _s2,
-                                                                                                     auto _s3,
-                                                                                                     auto _s4,
-                                                                                                     auto _s5,
-                                                                                                     auto _s6,
-                                                                                                     auto _s7,
-                                                                                                     auto _s8,
-                                                                                                     auto _s9,
-                                                                                                     auto _i1,
-                                                                                                     auto _i2,
-                                                                                                     auto _i3,
-                                                                                                     auto _i4,
-                                                                                                     auto _i5,
-                                                                                                     auto _i6,
-                                                                                                     auto _i7,
-                                                                                                     auto _i8,
-                                                                                                     auto _i9) {
-            assert(_d->magic == 324);
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, i1, i2, i3, i4, i5, i6, i7, i8, i9) << 
+          [=](auto _w,auto _d,auto _c,auto _s1,auto _s2,auto _s3,auto _s4,auto _s5,auto _s6,auto _s7,auto _s8,
+          auto _s9,auto _i1,auto _i2,auto _i3,auto _i4,auto _i5,auto _i6,auto _i7,auto _i8,auto _i9) {
 
+            assert(_d->magic == 324);
             NEWORDER_START();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -706,46 +647,29 @@ public:
           GET_COWN_PTR_STOCK_10();
           GET_COWN_PTR_ITEM_10();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10) << [=](
-                                                                                                     auto _w,
-                                                                                                     auto _d,
-                                                                                                     auto _c,
-                                                                                                     auto _s1,
-                                                                                                     auto _s2,
-                                                                                                     auto _s3,
-                                                                                                     auto _s4,
-                                                                                                     auto _s5,
-                                                                                                     auto _s6,
-                                                                                                     auto _s7,
-                                                                                                     auto _s8,
-                                                                                                     auto _s9, auto _s10,
-                                                                                                     auto _i1,
-                                                                                                     auto _i2,
-                                                                                                     auto _i3,
-                                                                                                     auto _i4,
-                                                                                                     auto _i5,
-                                                                                                     auto _i6,
-                                                                                                     auto _i7,
-                                                                                                     auto _i8,
-                                                                                                     auto _i9, auto _i10) {
-            assert(_d->magic == 324);
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10) << 
+          [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, auto _s8,
+           auto _s9, auto _s10, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, 
+           auto _i9, auto _i10) {
 
-            NEWORDER_START();
+                 assert(_d->magic == 324);
 
-            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
-            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
-            _d->d_next_o_id += 1;
-            uint64_t order_hash_key = o.hash_key();
-            uint64_t neworder_hash_key = no.hash_key();
+                 NEWORDER_START();
 
-            uint32_t amount = 0;
+                 Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 _d->d_next_o_id += 1;
+                 uint64_t order_hash_key = o.hash_key();
+                 uint64_t neworder_hash_key = no.hash_key();
 
-            // ===== Update the order line and stock ====
-            UPDATE_STOCK_AND_OL10();
-            // ==========================================
+                 uint32_t amount = 0;
 
-            NEWORDER_END();
-          };
+                 // ===== Update the order line and stock ====
+                 UPDATE_STOCK_AND_OL10();
+                 // ==========================================
+
+                 NEWORDER_END();
+               };
           break;
         }
         case 11:
@@ -753,46 +677,28 @@ public:
           GET_COWN_PTR_STOCK_11();
           GET_COWN_PTR_ITEM_11();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11) << [=](
-                                                                                                     auto _w,
-                                                                                                     auto _d,
-                                                                                                     auto _c,
-                                                                                                     auto _s1,
-                                                                                                     auto _s2,
-                                                                                                     auto _s3,
-                                                                                                     auto _s4,
-                                                                                                     auto _s5,
-                                                                                                     auto _s6,
-                                                                                                     auto _s7,
-                                                                                                     auto _s8,
-                                                                                                     auto _s9, auto _s10, auto _s11,
-                                                                                                     auto _i1,
-                                                                                                     auto _i2,
-                                                                                                     auto _i3,
-                                                                                                     auto _i4,
-                                                                                                     auto _i5,
-                                                                                                     auto _i6,
-                                                                                                     auto _i7,
-                                                                                                     auto _i8,
-                                                                                                     auto _i9, auto _i10, auto _i11) {
-            assert(_d->magic == 324);
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11) 
+          << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7,
+           auto _s8, auto _s9, auto _s10, auto _s11, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, 
+           auto _i7, auto _i8, auto _i9, auto _i10, auto _i11) {
 
-            NEWORDER_START();
+                 assert(_d->magic == 324);
+                 NEWORDER_START();
 
-            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
-            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
-            _d->d_next_o_id += 1;
-            uint64_t order_hash_key = o.hash_key();
-            uint64_t neworder_hash_key = no.hash_key();
+                 Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 _d->d_next_o_id += 1;
+                 uint64_t order_hash_key = o.hash_key();
+                 uint64_t neworder_hash_key = no.hash_key();
 
-            uint32_t amount = 0;
+                 uint32_t amount = 0;
 
-            // ===== Update the order line and stock ====
-            UPDATE_STOCK_AND_OL11();
-            // ==========================================
+                 // ===== Update the order line and stock ====
+                 UPDATE_STOCK_AND_OL11();
+                 // ==========================================
 
-            NEWORDER_END();
-          };
+                 NEWORDER_END();
+               };
           break;
         }
         case 12:
@@ -800,46 +706,27 @@ public:
           GET_COWN_PTR_STOCK_12();
           GET_COWN_PTR_ITEM_12();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12) << [=](
-                                                                                                     auto _w,
-                                                                                                     auto _d,
-                                                                                                     auto _c,
-                                                                                                     auto _s1,
-                                                                                                     auto _s2,
-                                                                                                     auto _s3,
-                                                                                                     auto _s4,
-                                                                                                     auto _s5,
-                                                                                                     auto _s6,
-                                                                                                     auto _s7,
-                                                                                                     auto _s8,
-                                                                                                     auto _s9, auto _s10, auto _s11, auto _s12,
-                                                                                                     auto _i1,
-                                                                                                     auto _i2,
-                                                                                                     auto _i3,
-                                                                                                     auto _i4,
-                                                                                                     auto _i5,
-                                                                                                     auto _i6,
-                                                                                                     auto _i7,
-                                                                                                     auto _i8,
-                                                                                                     auto _i9, auto _i10, auto _i11, auto _i12) {
-            assert(_d->magic == 324);
+          when(w,d,c,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12)
+          << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
+          auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, 
+          auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12) {
 
-            NEWORDER_START();
+                 assert(_d->magic == 324);
+                 NEWORDER_START();
 
-            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
-            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
-            _d->d_next_o_id += 1;
-            uint64_t order_hash_key = o.hash_key();
-            uint64_t neworder_hash_key = no.hash_key();
+                 Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 _d->d_next_o_id += 1;
+                 uint64_t order_hash_key = o.hash_key();
+                 uint64_t neworder_hash_key = no.hash_key();
 
-            uint32_t amount = 0;
+                 uint32_t amount = 0;
 
-            // ===== Update the order line and stock ====
-            UPDATE_STOCK_AND_OL12();
-            // ==========================================
-
-            NEWORDER_END();
-          };
+                 // ===== Update the order line and stock ====
+                 UPDATE_STOCK_AND_OL12();
+                 // ==========================================
+                 NEWORDER_END();
+               };
           break;
         }
         case 13:
@@ -847,45 +734,28 @@ public:
           GET_COWN_PTR_STOCK_13();
           GET_COWN_PTR_ITEM_13();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13) << [=](
-                                                                                                     auto _w,
-                                                                                                     auto _d,
-                                                                                                     auto _c,
-                                                                                                     auto _s1,
-                                                                                                     auto _s2,
-                                                                                                     auto _s3,
-                                                                                                     auto _s4,
-                                                                                                     auto _s5,
-                                                                                                     auto _s6,
-                                                                                                     auto _s7,
-                                                                                                     auto _s8,
-                                                                                                     auto _s9, auto _s10, auto _s11, auto _s12, auto _s13,
-                                                                                                     auto _i1,
-                                                                                                     auto _i2,
-                                                                                                     auto _i3,
-                                                                                                     auto _i4,
-                                                                                                     auto _i5,
-                                                                                                     auto _i6,
-                                                                                                     auto _i7,
-                                                                                                     auto _i8,
-                                                                                                     auto _i9, auto _i10, auto _i11, auto _i12, auto _i13) {
-            assert(_d->magic == 324);
-//printf("processing case 13\n");
-            NEWORDER_START();
+          when(w,d,c,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13)
+           << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
+           auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _i1, auto _i2, auto _i3, auto _i4, 
+           auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12, auto _i13) {
 
-            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
-            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
-            _d->d_next_o_id += 1;
-            uint64_t order_hash_key = o.hash_key();
-            uint64_t neworder_hash_key = no.hash_key();
-            uint32_t amount = 0;
+                 assert(_d->magic == 324);
+                 // printf("processing case 13\n");
+                 NEWORDER_START();
 
-            // ===== Update the order line and stock ====
-            UPDATE_STOCK_AND_OL13();
-            // ==========================================
+                 Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 _d->d_next_o_id += 1;
+                 uint64_t order_hash_key = o.hash_key();
+                 uint64_t neworder_hash_key = no.hash_key();
+                 uint32_t amount = 0;
 
-            NEWORDER_END();
-          };
+                 // ===== Update the order line and stock ====
+                 UPDATE_STOCK_AND_OL13();
+                 // ==========================================
+
+                 NEWORDER_END();
+               };
           break;
         }
         case 14:
@@ -893,46 +763,29 @@ public:
           GET_COWN_PTR_STOCK_14();
           GET_COWN_PTR_ITEM_14();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14) << [=](
-                                                                                                     auto _w,
-                                                                                                     auto _d,
-                                                                                                     auto _c,
-                                                                                                     auto _s1,
-                                                                                                     auto _s2,
-                                                                                                     auto _s3,
-                                                                                                     auto _s4,
-                                                                                                     auto _s5,
-                                                                                                     auto _s6,
-                                                                                                     auto _s7,
-                                                                                                     auto _s8,
-                                                                                                     auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _s14,
-                                                                                                     auto _i1,
-                                                                                                     auto _i2,
-                                                                                                     auto _i3,
-                                                                                                     auto _i4,
-                                                                                                     auto _i5,
-                                                                                                     auto _i6,
-                                                                                                     auto _i7,
-                                                                                                     auto _i8,
-                                                                                                     auto _i9, auto _i10, auto _i11, auto _i12, auto _i13, auto _i14) {
-            assert(_d->magic == 324);
+          when(w,d,c,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13,i14) 
+            << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
+            auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _s14, auto _i1, auto _i2, auto _i3, 
+            auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12, auto _i13, 
+            auto _i14) {
 
-            NEWORDER_START();
+                 assert(_d->magic == 324);
+                 NEWORDER_START();
 
-            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
-            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
-            _d->d_next_o_id += 1;
-            uint64_t order_hash_key = o.hash_key();
-            uint64_t neworder_hash_key = no.hash_key();
+                 Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 _d->d_next_o_id += 1;
+                 uint64_t order_hash_key = o.hash_key();
+                 uint64_t neworder_hash_key = no.hash_key();
 
-            uint32_t amount = 0;
+                 uint32_t amount = 0;
 
-            // ===== Update the order line and stock ====
-            UPDATE_STOCK_AND_OL14();
-            // ==========================================
+                 // ===== Update the order line and stock ====
+                 UPDATE_STOCK_AND_OL14();
+                 // ==========================================
 
-            NEWORDER_END();
-          };
+                 NEWORDER_END();
+               };
           break;
         }
         case 15:
@@ -940,46 +793,31 @@ public:
           GET_COWN_PTR_STOCK_15();
           GET_COWN_PTR_ITEM_15();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14, i15) << [=](
-                                                                                                     auto _w,
-                                                                                                     auto _d,
-                                                                                                     auto _c,
-                                                                                                     auto _s1,
-                                                                                                     auto _s2,
-                                                                                                     auto _s3,
-                                                                                                     auto _s4,
-                                                                                                     auto _s5,
-                                                                                                     auto _s6,
-                                                                                                     auto _s7,
-                                                                                                     auto _s8,
-                                                                                                     auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _s14, auto _s15,
-                                                                                                     auto _i1,
-                                                                                                     auto _i2,
-                                                                                                     auto _i3,
-                                                                                                     auto _i4,
-                                                                                                     auto _i5,
-                                                                                                     auto _i6,
-                                                                                                     auto _i7,
-                                                                                                     auto _i8,
-                                                                                                     auto _i9, auto _i10, auto _i11, auto _i12, auto _i13, auto _i14, auto _i15) {
-            assert(_d->magic == 324);
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, i1, i2, i3, i4, i5, i6, i7, 
+          i8, i9, i10, i11, i12, i13, i14, i15)
+            << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
+            auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _s14, auto _s15, auto _i1, auto _i2, 
+            auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12,
+            auto _i13, auto _i14, auto _i15) {
 
-            NEWORDER_START();
+                 assert(_d->magic == 324);
 
-            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
-            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
-            _d->d_next_o_id += 1;
-            uint64_t order_hash_key = o.hash_key();
-            uint64_t neworder_hash_key = no.hash_key();
+                 NEWORDER_START();
 
-            uint32_t amount = 0;
+                 Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+                 _d->d_next_o_id += 1;
+                 uint64_t order_hash_key = o.hash_key();
+                 uint64_t neworder_hash_key = no.hash_key();
 
-            // ===== Update the order line and stock ====
-            UPDATE_STOCK_AND_OL15();
-            // ==========================================
+                 uint32_t amount = 0;
 
-            NEWORDER_END();
-          };
+                 // ===== Update the order line and stock ====
+                 UPDATE_STOCK_AND_OL15();
+                 // ==========================================
+
+                 NEWORDER_END();
+               };
           break;
         }
         default:
@@ -997,7 +835,7 @@ public:
       uint32_t h_amount = txm->params[52];
 
       when(w, d, c) << [=](auto _w, auto _d, auto _c) {
-        //printf("processing payment\n");
+        // printf("processing payment\n");
         assert(_w->magic == 123);
         assert(_d->magic == 324);
         // Update warehouse balance
@@ -1034,10 +872,9 @@ int main(int argc, char** argv)
 {
   if (argc != 8 || strcmp(argv[1], "-n") != 0 || strcmp(argv[3], "-l") != 0)
   {
-    fprintf(
-      stderr,
-      "Usage: ./program -n core_cnt -l look_ahead"
-      " <dispatcher_input_file> -i <inter_arrival>\n");
+    fprintf(stderr,
+            "Usage: ./program -n core_cnt -l look_ahead"
+            " <dispatcher_input_file> -i <inter_arrival>\n");
     return -1;
   }
 
@@ -1091,17 +928,16 @@ int main(int argc, char** argv)
 #  endif
 #endif
 
-  TPCCGenerator gen(
-    TPCCTransaction::index,
-    tpcc_arr_addr_warehouse,
-    tpcc_arr_addr_district,
-    tpcc_arr_addr_customer,
-    tpcc_arr_addr_stock,
-    tpcc_arr_addr_item,
-    tpcc_arr_addr_history,
-    tpcc_arr_addr_order,
-    tpcc_arr_addr_order_line,
-    tpcc_arr_addr_new_order);
+  TPCCGenerator gen(TPCCTransaction::index,
+ tpcc_arr_addr_warehouse,
+ tpcc_arr_addr_district,
+ tpcc_arr_addr_customer,
+ tpcc_arr_addr_stock,
+ tpcc_arr_addr_item,
+ tpcc_arr_addr_history,
+ tpcc_arr_addr_order,
+ tpcc_arr_addr_order_line,
+ tpcc_arr_addr_new_order);
 
   TPCCTransaction::index->warehouse_table.start_addr = (void*)tpcc_arr_addr_warehouse;
   TPCCTransaction::index->district_table.start_addr = (void*)tpcc_arr_addr_district;
