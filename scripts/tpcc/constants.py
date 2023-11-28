@@ -94,8 +94,8 @@ MAX_CARRIER_ID = 10
 NULL_CARRIER_ID = 0
 #  o_id < than this value, carrier != null, >= -> carrier == null
 NULL_CARRIER_LOWER_BOUND = 2101
-MIN_OL_CNT = 1
-MAX_OL_CNT = 2
+MIN_OL_CNT = 5
+MAX_OL_CNT = 15
 INITIAL_ALL_LOCAL = 1
 INITIAL_ORDERS_PER_DISTRICT = 3000
 
