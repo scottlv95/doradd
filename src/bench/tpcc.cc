@@ -37,65 +37,65 @@ using namespace verona::cpp;
   }
 
 // Macros for getting cown pointers
-#define GET_COWN_PTR_STOCK_1() auto s1 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[3]));
+#define GET_COWN_PTR_STOCK_1() auto&& s1 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[3]));
 #define GET_COWN_PTR_STOCK_2() \
-  GET_COWN_PTR_STOCK_1() auto s2 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[4]));
+  GET_COWN_PTR_STOCK_1() auto&& s2 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[4]));
 #define GET_COWN_PTR_STOCK_3() \
-  GET_COWN_PTR_STOCK_2() auto s3 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[5]));
+  GET_COWN_PTR_STOCK_2() auto&& s3 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[5]));
 #define GET_COWN_PTR_STOCK_4() \
-  GET_COWN_PTR_STOCK_3() auto s4 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[6]));
+  GET_COWN_PTR_STOCK_3() auto&& s4 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[6]));
 #define GET_COWN_PTR_STOCK_5() \
-  GET_COWN_PTR_STOCK_4() auto s5 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[7]));
+  GET_COWN_PTR_STOCK_4() auto&& s5 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[7]));
 #define GET_COWN_PTR_STOCK_6() \
-  GET_COWN_PTR_STOCK_5() auto s6 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[8]));
+  GET_COWN_PTR_STOCK_5() auto&& s6 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[8]));
 #define GET_COWN_PTR_STOCK_7() \
-  GET_COWN_PTR_STOCK_6() auto s7 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[9]));
+  GET_COWN_PTR_STOCK_6() auto&& s7 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[9]));
 #define GET_COWN_PTR_STOCK_8() \
-  GET_COWN_PTR_STOCK_7() auto s8 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[10]));
+  GET_COWN_PTR_STOCK_7() auto&& s8 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[10]));
 #define GET_COWN_PTR_STOCK_9() \
-  GET_COWN_PTR_STOCK_8() auto s9 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[11]));
+  GET_COWN_PTR_STOCK_8() auto&& s9 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[11]));
 #define GET_COWN_PTR_STOCK_10() \
-  GET_COWN_PTR_STOCK_9() auto s10 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[12]));
+  GET_COWN_PTR_STOCK_9() auto&& s10 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[12]));
 #define GET_COWN_PTR_STOCK_11() \
-  GET_COWN_PTR_STOCK_10() auto s11 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[13]));
+  GET_COWN_PTR_STOCK_10() auto&& s11 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[13]));
 #define GET_COWN_PTR_STOCK_12() \
-  GET_COWN_PTR_STOCK_11() auto s12 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[14]));
+  GET_COWN_PTR_STOCK_11() auto&& s12 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[14]));
 #define GET_COWN_PTR_STOCK_13() \
-  GET_COWN_PTR_STOCK_12() auto s13 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[15]));
+  GET_COWN_PTR_STOCK_12() auto&& s13 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[15]));
 #define GET_COWN_PTR_STOCK_14() \
-  GET_COWN_PTR_STOCK_13() auto s14 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[16]));
+  GET_COWN_PTR_STOCK_13() auto&& s14 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[16]));
 #define GET_COWN_PTR_STOCK_15() \
-  GET_COWN_PTR_STOCK_14() auto s15 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[17]));
+  GET_COWN_PTR_STOCK_14() auto&& s15 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[17]));
 
-#define GET_COWN_PTR_ITEM_1() auto i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));
+#define GET_COWN_PTR_ITEM_1() auto&& i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));
 #define GET_COWN_PTR_ITEM_2() \
-  GET_COWN_PTR_ITEM_1() auto i2 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[19]));
+  GET_COWN_PTR_ITEM_1() auto&& i2 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[19]));
 #define GET_COWN_PTR_ITEM_3() \
-  GET_COWN_PTR_ITEM_2() auto i3 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[20]));
+  GET_COWN_PTR_ITEM_2() auto&& i3 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[20]));
 #define GET_COWN_PTR_ITEM_4() \
-  GET_COWN_PTR_ITEM_3() auto i4 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[21]));
+  GET_COWN_PTR_ITEM_3() auto&& i4 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[21]));
 #define GET_COWN_PTR_ITEM_5() \
-  GET_COWN_PTR_ITEM_4() auto i5 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[22]));
+  GET_COWN_PTR_ITEM_4() auto&& i5 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[22]));
 #define GET_COWN_PTR_ITEM_6() \
-  GET_COWN_PTR_ITEM_5() auto i6 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[23]));
+  GET_COWN_PTR_ITEM_5() auto&& i6 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[23]));
 #define GET_COWN_PTR_ITEM_7() \
-  GET_COWN_PTR_ITEM_6() auto i7 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[24]));
+  GET_COWN_PTR_ITEM_6() auto&& i7 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[24]));
 #define GET_COWN_PTR_ITEM_8() \
-  GET_COWN_PTR_ITEM_7() auto i8 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[25]));
+  GET_COWN_PTR_ITEM_7() auto&& i8 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[25]));
 #define GET_COWN_PTR_ITEM_9() \
-  GET_COWN_PTR_ITEM_8() auto i9 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[26]));
+  GET_COWN_PTR_ITEM_8() auto&& i9 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[26]));
 #define GET_COWN_PTR_ITEM_10() \
-  GET_COWN_PTR_ITEM_9() auto i10 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[27]));
+  GET_COWN_PTR_ITEM_9() auto&& i10 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[27]));
 #define GET_COWN_PTR_ITEM_11() \
-  GET_COWN_PTR_ITEM_10() auto i11 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[28]));
+  GET_COWN_PTR_ITEM_10() auto&& i11 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[28]));
 #define GET_COWN_PTR_ITEM_12() \
-  GET_COWN_PTR_ITEM_11() auto i12 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[29]));
+  GET_COWN_PTR_ITEM_11() auto&& i12 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[29]));
 #define GET_COWN_PTR_ITEM_13() \
-  GET_COWN_PTR_ITEM_12() auto i13 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[30]));
+  GET_COWN_PTR_ITEM_12() auto&& i13 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[30]));
 #define GET_COWN_PTR_ITEM_14() \
-  GET_COWN_PTR_ITEM_13() auto i14 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[31]));
+  GET_COWN_PTR_ITEM_13() auto&& i14 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[31]));
 #define GET_COWN_PTR_ITEM_15() \
-  GET_COWN_PTR_ITEM_14() auto i15 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[32]));
+  GET_COWN_PTR_ITEM_14() auto&& i15 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[32]));
 
 // Macros for updating stocks and inserting order lines
 #define UPDATE_STOCK_AND_INSERT_ORDER_LINE(_INDEX) \
