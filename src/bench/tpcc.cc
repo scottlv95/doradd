@@ -60,10 +60,11 @@ using namespace verona::cpp;
 struct TPCCTransactionMarshalled
 {
   uint8_t txn_type; // 0 for NewOrder, 1 for Payment
-  uint64_t cown_ptrs[30];
   uint32_t params[65];
-  uint8_t padding[11];
+  uint64_t cown_ptrs[33];
+  uint8_t padding[51];
 } __attribute__((packed));
+// new - 64*9 = 576
 
 struct TPCCTransaction
 {
@@ -112,6 +113,7 @@ public:
       }
 
       // Item
+      assert(txm->params[50] <= 15);
       for (int i = 0; i < txm->params[50]; i++)
       {
         txm->cown_ptrs[18 + i] = index->item_table.get_row_addr(Item::hash_key(txm->params[5 + i]))->get_base_addr();
@@ -305,7 +307,6 @@ public:
       cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(reinterpret_cast<void*>(txm->cown_ptrs[2]));
       uint32_t item_number = txm->params[50];
 
-      assert(item_number == 1);
       switch (item_number)
       {
         case 1:
@@ -314,6 +315,7 @@ public:
           auto i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));
 
           when(w, d, c, s1, i1) << [=](auto _w, auto _d, auto _c, auto _s1, auto _i1) {
+            printf("processing new order case 1\n");
             assert(_d->magic == 324);
 
             NEWORDER_START();
@@ -797,6 +799,570 @@ public:
           break;
         }
 
+        case 10:
+        {
+          auto s1 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[3]));
+          auto s2 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[4]));
+          auto s3 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[5]));
+          auto s4 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[6]));
+          auto s5 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[7]));
+          auto s6 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[8]));
+          auto s7 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[9]));
+          auto s8 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[10]));
+          auto s9 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[11]));
+          auto s10 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[12]));
+          auto i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));
+          auto i2 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[19]));
+          auto i3 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[20]));
+          auto i4 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[21]));
+          auto i5 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[22]));
+          auto i6 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[23]));
+          auto i7 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[24]));
+          auto i8 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[25]));
+          auto i9 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[26]));
+          auto i10 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[27]));
+
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10) << [=](
+                                                                                                     auto _w,
+                                                                                                     auto _d,
+                                                                                                     auto _c,
+                                                                                                     auto _s1,
+                                                                                                     auto _s2,
+                                                                                                     auto _s3,
+                                                                                                     auto _s4,
+                                                                                                     auto _s5,
+                                                                                                     auto _s6,
+                                                                                                     auto _s7,
+                                                                                                     auto _s8,
+                                                                                                     auto _s9, auto _s10,
+                                                                                                     auto _i1,
+                                                                                                     auto _i2,
+                                                                                                     auto _i3,
+                                                                                                     auto _i4,
+                                                                                                     auto _i5,
+                                                                                                     auto _i6,
+                                                                                                     auto _i7,
+                                                                                                     auto _i8,
+                                                                                                     auto _i9, auto _i10) {
+            assert(_d->magic == 324);
+
+            NEWORDER_START();
+
+            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+            _d->d_next_o_id += 1;
+            uint64_t order_hash_key = o.hash_key();
+            uint64_t neworder_hash_key = no.hash_key();
+
+            uint32_t amount = 0;
+
+            // ===== Update the order line and stock ====
+            INSERT_ORDER_LINE(order_hash_key, 1);
+            UPDATE_STOCK(1);
+            INSERT_ORDER_LINE(order_hash_key, 2);
+            UPDATE_STOCK(2);
+            INSERT_ORDER_LINE(order_hash_key, 3);
+            UPDATE_STOCK(3);
+            INSERT_ORDER_LINE(order_hash_key, 4);
+            UPDATE_STOCK(4);
+            INSERT_ORDER_LINE(order_hash_key, 5);
+            UPDATE_STOCK(5);
+            INSERT_ORDER_LINE(order_hash_key, 6);
+            UPDATE_STOCK(6);
+            INSERT_ORDER_LINE(order_hash_key, 7);
+            UPDATE_STOCK(7);
+            INSERT_ORDER_LINE(order_hash_key, 8);
+            UPDATE_STOCK(8);
+            INSERT_ORDER_LINE(order_hash_key, 9);
+            UPDATE_STOCK(9);
+            INSERT_ORDER_LINE(order_hash_key, 10);
+            UPDATE_STOCK(10);
+            // ==========================================
+
+            NEWORDER_END();
+          };
+          break;
+        }
+        case 11:
+        {
+          auto s1 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[3]));
+          auto s2 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[4]));
+          auto s3 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[5]));
+          auto s4 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[6]));
+          auto s5 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[7]));
+          auto s6 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[8]));
+          auto s7 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[9]));
+          auto s8 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[10]));
+          auto s9 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[11]));
+          auto s10 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[12]));
+          auto s11 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[13]));
+          auto i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));
+          auto i2 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[19]));
+          auto i3 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[20]));
+          auto i4 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[21]));
+          auto i5 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[22]));
+          auto i6 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[23]));
+          auto i7 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[24]));
+          auto i8 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[25]));
+          auto i9 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[26]));
+          auto i10 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[27]));
+          auto i11 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[28]));
+
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11) << [=](
+                                                                                                     auto _w,
+                                                                                                     auto _d,
+                                                                                                     auto _c,
+                                                                                                     auto _s1,
+                                                                                                     auto _s2,
+                                                                                                     auto _s3,
+                                                                                                     auto _s4,
+                                                                                                     auto _s5,
+                                                                                                     auto _s6,
+                                                                                                     auto _s7,
+                                                                                                     auto _s8,
+                                                                                                     auto _s9, auto _s10, auto _s11,
+                                                                                                     auto _i1,
+                                                                                                     auto _i2,
+                                                                                                     auto _i3,
+                                                                                                     auto _i4,
+                                                                                                     auto _i5,
+                                                                                                     auto _i6,
+                                                                                                     auto _i7,
+                                                                                                     auto _i8,
+                                                                                                     auto _i9, auto _i10, auto _i11) {
+            assert(_d->magic == 324);
+
+            NEWORDER_START();
+
+            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+            _d->d_next_o_id += 1;
+            uint64_t order_hash_key = o.hash_key();
+            uint64_t neworder_hash_key = no.hash_key();
+
+            uint32_t amount = 0;
+
+            // ===== Update the order line and stock ====
+            INSERT_ORDER_LINE(order_hash_key, 1);
+            UPDATE_STOCK(1);
+            INSERT_ORDER_LINE(order_hash_key, 2);
+            UPDATE_STOCK(2);
+            INSERT_ORDER_LINE(order_hash_key, 3);
+            UPDATE_STOCK(3);
+            INSERT_ORDER_LINE(order_hash_key, 4);
+            UPDATE_STOCK(4);
+            INSERT_ORDER_LINE(order_hash_key, 5);
+            UPDATE_STOCK(5);
+            INSERT_ORDER_LINE(order_hash_key, 6);
+            UPDATE_STOCK(6);
+            INSERT_ORDER_LINE(order_hash_key, 7);
+            UPDATE_STOCK(7);
+            INSERT_ORDER_LINE(order_hash_key, 8);
+            UPDATE_STOCK(8);
+            INSERT_ORDER_LINE(order_hash_key, 9);
+            UPDATE_STOCK(9);
+            INSERT_ORDER_LINE(order_hash_key, 10);
+            UPDATE_STOCK(10);
+            INSERT_ORDER_LINE(order_hash_key, 11);
+            UPDATE_STOCK(11);
+            // ==========================================
+
+            NEWORDER_END();
+          };
+          break;
+        }
+        case 12:
+        {
+          auto s1 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[3]));
+          auto s2 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[4]));
+          auto s3 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[5]));
+          auto s4 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[6]));
+          auto s5 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[7]));
+          auto s6 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[8]));
+          auto s7 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[9]));
+          auto s8 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[10]));
+          auto s9 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[11]));
+          auto s10 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[12]));
+          auto s11 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[13]));
+          auto s12 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[14]));
+          auto i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));
+          auto i2 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[19]));
+          auto i3 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[20]));
+          auto i4 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[21]));
+          auto i5 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[22]));
+          auto i6 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[23]));
+          auto i7 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[24]));
+          auto i8 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[25]));
+          auto i9 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[26]));
+          auto i10 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[27]));
+          auto i11 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[28]));
+          auto i12 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[29]));
+
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12) << [=](
+                                                                                                     auto _w,
+                                                                                                     auto _d,
+                                                                                                     auto _c,
+                                                                                                     auto _s1,
+                                                                                                     auto _s2,
+                                                                                                     auto _s3,
+                                                                                                     auto _s4,
+                                                                                                     auto _s5,
+                                                                                                     auto _s6,
+                                                                                                     auto _s7,
+                                                                                                     auto _s8,
+                                                                                                     auto _s9, auto _s10, auto _s11, auto _s12,
+                                                                                                     auto _i1,
+                                                                                                     auto _i2,
+                                                                                                     auto _i3,
+                                                                                                     auto _i4,
+                                                                                                     auto _i5,
+                                                                                                     auto _i6,
+                                                                                                     auto _i7,
+                                                                                                     auto _i8,
+                                                                                                     auto _i9, auto _i10, auto _i11, auto _i12) {
+            assert(_d->magic == 324);
+
+            NEWORDER_START();
+
+            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+            _d->d_next_o_id += 1;
+            uint64_t order_hash_key = o.hash_key();
+            uint64_t neworder_hash_key = no.hash_key();
+
+            uint32_t amount = 0;
+
+            // ===== Update the order line and stock ====
+            INSERT_ORDER_LINE(order_hash_key, 1);
+            UPDATE_STOCK(1);
+            INSERT_ORDER_LINE(order_hash_key, 2);
+            UPDATE_STOCK(2);
+            INSERT_ORDER_LINE(order_hash_key, 3);
+            UPDATE_STOCK(3);
+            INSERT_ORDER_LINE(order_hash_key, 4);
+            UPDATE_STOCK(4);
+            INSERT_ORDER_LINE(order_hash_key, 5);
+            UPDATE_STOCK(5);
+            INSERT_ORDER_LINE(order_hash_key, 6);
+            UPDATE_STOCK(6);
+            INSERT_ORDER_LINE(order_hash_key, 7);
+            UPDATE_STOCK(7);
+            INSERT_ORDER_LINE(order_hash_key, 8);
+            UPDATE_STOCK(8);
+            INSERT_ORDER_LINE(order_hash_key, 9);
+            UPDATE_STOCK(9);
+            INSERT_ORDER_LINE(order_hash_key, 10);
+            UPDATE_STOCK(10);
+            INSERT_ORDER_LINE(order_hash_key, 11);
+            UPDATE_STOCK(11);
+            INSERT_ORDER_LINE(order_hash_key, 12);
+            UPDATE_STOCK(12);
+            // ==========================================
+
+            NEWORDER_END();
+          };
+          break;
+        }
+        case 13:
+        {
+          auto s1 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[3]));
+          auto s2 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[4]));
+          auto s3 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[5]));
+          auto s4 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[6]));
+          auto s5 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[7]));
+          auto s6 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[8]));
+          auto s7 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[9]));
+          auto s8 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[10]));
+          auto s9 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[11]));
+          auto s10 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[12]));
+          auto s11 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[13]));
+          auto s12 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[14]));
+          auto s13 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[15]));
+          auto i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));
+          auto i2 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[19]));
+          auto i3 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[20]));
+          auto i4 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[21]));
+          auto i5 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[22]));
+          auto i6 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[23]));
+          auto i7 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[24]));
+          auto i8 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[25]));
+          auto i9 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[26]));
+          auto i10 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[27]));
+          auto i11 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[28]));
+          auto i12 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[29]));
+          auto i13 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[30]));
+
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13) << [=](
+                                                                                                     auto _w,
+                                                                                                     auto _d,
+                                                                                                     auto _c,
+                                                                                                     auto _s1,
+                                                                                                     auto _s2,
+                                                                                                     auto _s3,
+                                                                                                     auto _s4,
+                                                                                                     auto _s5,
+                                                                                                     auto _s6,
+                                                                                                     auto _s7,
+                                                                                                     auto _s8,
+                                                                                                     auto _s9, auto _s10, auto _s11, auto _s12, auto _s13,
+                                                                                                     auto _i1,
+                                                                                                     auto _i2,
+                                                                                                     auto _i3,
+                                                                                                     auto _i4,
+                                                                                                     auto _i5,
+                                                                                                     auto _i6,
+                                                                                                     auto _i7,
+                                                                                                     auto _i8,
+                                                                                                     auto _i9, auto _i10, auto _i11, auto _i12, auto _i13) {
+            assert(_d->magic == 324);
+//printf("processing case 13\n");
+            NEWORDER_START();
+
+            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+            _d->d_next_o_id += 1;
+            uint64_t order_hash_key = o.hash_key();
+            uint64_t neworder_hash_key = no.hash_key();
+
+            uint32_t amount = 0;
+
+            // ===== Update the order line and stock ====
+            INSERT_ORDER_LINE(order_hash_key, 1);
+            UPDATE_STOCK(1);
+            INSERT_ORDER_LINE(order_hash_key, 2);
+            UPDATE_STOCK(2);
+            INSERT_ORDER_LINE(order_hash_key, 3);
+            UPDATE_STOCK(3);
+            INSERT_ORDER_LINE(order_hash_key, 4);
+            UPDATE_STOCK(4);
+            INSERT_ORDER_LINE(order_hash_key, 5);
+            UPDATE_STOCK(5);
+            INSERT_ORDER_LINE(order_hash_key, 6);
+            UPDATE_STOCK(6);
+            INSERT_ORDER_LINE(order_hash_key, 7);
+            UPDATE_STOCK(7);
+            INSERT_ORDER_LINE(order_hash_key, 8);
+            UPDATE_STOCK(8);
+            INSERT_ORDER_LINE(order_hash_key, 9);
+            UPDATE_STOCK(9);
+            INSERT_ORDER_LINE(order_hash_key, 10);
+            UPDATE_STOCK(10);
+            INSERT_ORDER_LINE(order_hash_key, 11);
+            UPDATE_STOCK(11);
+            INSERT_ORDER_LINE(order_hash_key, 12);
+            UPDATE_STOCK(12);
+            INSERT_ORDER_LINE(order_hash_key, 13);
+            UPDATE_STOCK(13);
+            // ==========================================
+
+            NEWORDER_END();
+          };
+          break;
+        }
+        case 14:
+        {
+          auto s1 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[3]));
+          auto s2 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[4]));
+          auto s3 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[5]));
+          auto s4 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[6]));
+          auto s5 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[7]));
+          auto s6 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[8]));
+          auto s7 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[9]));
+          auto s8 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[10]));
+          auto s9 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[11]));
+          auto s10 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[12]));
+          auto s11 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[13]));
+          auto s12 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[14]));
+          auto s13 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[15]));
+          auto s14 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[16]));
+          auto i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));
+          auto i2 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[19]));
+          auto i3 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[20]));
+          auto i4 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[21]));
+          auto i5 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[22]));
+          auto i6 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[23]));
+          auto i7 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[24]));
+          auto i8 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[25]));
+          auto i9 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[26]));
+          auto i10 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[27]));
+          auto i11 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[28]));
+          auto i12 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[29]));
+          auto i13 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[30]));
+          auto i14 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[31]));
+
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14) << [=](
+                                                                                                     auto _w,
+                                                                                                     auto _d,
+                                                                                                     auto _c,
+                                                                                                     auto _s1,
+                                                                                                     auto _s2,
+                                                                                                     auto _s3,
+                                                                                                     auto _s4,
+                                                                                                     auto _s5,
+                                                                                                     auto _s6,
+                                                                                                     auto _s7,
+                                                                                                     auto _s8,
+                                                                                                     auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _s14,
+                                                                                                     auto _i1,
+                                                                                                     auto _i2,
+                                                                                                     auto _i3,
+                                                                                                     auto _i4,
+                                                                                                     auto _i5,
+                                                                                                     auto _i6,
+                                                                                                     auto _i7,
+                                                                                                     auto _i8,
+                                                                                                     auto _i9, auto _i10, auto _i11, auto _i12, auto _i13, auto _i14) {
+            assert(_d->magic == 324);
+
+            NEWORDER_START();
+
+            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+            _d->d_next_o_id += 1;
+            uint64_t order_hash_key = o.hash_key();
+            uint64_t neworder_hash_key = no.hash_key();
+
+            uint32_t amount = 0;
+
+            // ===== Update the order line and stock ====
+            INSERT_ORDER_LINE(order_hash_key, 1);
+            UPDATE_STOCK(1);
+            INSERT_ORDER_LINE(order_hash_key, 2);
+            UPDATE_STOCK(2);
+            INSERT_ORDER_LINE(order_hash_key, 3);
+            UPDATE_STOCK(3);
+            INSERT_ORDER_LINE(order_hash_key, 4);
+            UPDATE_STOCK(4);
+            INSERT_ORDER_LINE(order_hash_key, 5);
+            UPDATE_STOCK(5);
+            INSERT_ORDER_LINE(order_hash_key, 6);
+            UPDATE_STOCK(6);
+            INSERT_ORDER_LINE(order_hash_key, 7);
+            UPDATE_STOCK(7);
+            INSERT_ORDER_LINE(order_hash_key, 8);
+            UPDATE_STOCK(8);
+            INSERT_ORDER_LINE(order_hash_key, 9);
+            UPDATE_STOCK(9);
+            INSERT_ORDER_LINE(order_hash_key, 10);
+            UPDATE_STOCK(10);
+            INSERT_ORDER_LINE(order_hash_key, 11);
+            UPDATE_STOCK(11);
+            INSERT_ORDER_LINE(order_hash_key, 12);
+            UPDATE_STOCK(12);
+            INSERT_ORDER_LINE(order_hash_key, 13);
+            UPDATE_STOCK(13);
+            INSERT_ORDER_LINE(order_hash_key, 14);
+            UPDATE_STOCK(14);
+            // ==========================================
+
+            NEWORDER_END();
+          };
+          break;
+        }
+        case 15:
+        {
+          auto s1 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[3]));
+          auto s2 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[4]));
+          auto s3 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[5]));
+          auto s4 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[6]));
+          auto s5 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[7]));
+          auto s6 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[8]));
+          auto s7 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[9]));
+          auto s8 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[10]));
+          auto s9 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[11]));
+          auto s10 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[12]));
+          auto s11 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[13]));
+          auto s12 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[14]));
+          auto s13 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[15]));
+          auto s14 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[16]));
+          auto s15 = get_cown_ptr_from_addr<Stock>(reinterpret_cast<void*>(txm->cown_ptrs[17]));
+          auto i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));
+          auto i2 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[19]));
+          auto i3 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[20]));
+          auto i4 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[21]));
+          auto i5 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[22]));
+          auto i6 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[23]));
+          auto i7 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[24]));
+          auto i8 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[25]));
+          auto i9 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[26]));
+          auto i10 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[27]));
+          auto i11 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[28]));
+          auto i12 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[29]));
+          auto i13 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[30]));
+          auto i14 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[31]));
+          auto i15 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[32]));
+
+          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14, i15) << [=](
+                                                                                                     auto _w,
+                                                                                                     auto _d,
+                                                                                                     auto _c,
+                                                                                                     auto _s1,
+                                                                                                     auto _s2,
+                                                                                                     auto _s3,
+                                                                                                     auto _s4,
+                                                                                                     auto _s5,
+                                                                                                     auto _s6,
+                                                                                                     auto _s7,
+                                                                                                     auto _s8,
+                                                                                                     auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _s14, auto _s15,
+                                                                                                     auto _i1,
+                                                                                                     auto _i2,
+                                                                                                     auto _i3,
+                                                                                                     auto _i4,
+                                                                                                     auto _i5,
+                                                                                                     auto _i6,
+                                                                                                     auto _i7,
+                                                                                                     auto _i8,
+                                                                                                     auto _i9, auto _i10, auto _i11, auto _i12, auto _i13, auto _i14, auto _i15) {
+            assert(_d->magic == 324);
+
+            NEWORDER_START();
+
+            Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
+            NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
+            _d->d_next_o_id += 1;
+            uint64_t order_hash_key = o.hash_key();
+            uint64_t neworder_hash_key = no.hash_key();
+
+            uint32_t amount = 0;
+
+            // ===== Update the order line and stock ====
+            INSERT_ORDER_LINE(order_hash_key, 1);
+            UPDATE_STOCK(1);
+            INSERT_ORDER_LINE(order_hash_key, 2);
+            UPDATE_STOCK(2);
+            INSERT_ORDER_LINE(order_hash_key, 3);
+            UPDATE_STOCK(3);
+            INSERT_ORDER_LINE(order_hash_key, 4);
+            UPDATE_STOCK(4);
+            INSERT_ORDER_LINE(order_hash_key, 5);
+            UPDATE_STOCK(5);
+            INSERT_ORDER_LINE(order_hash_key, 6);
+            UPDATE_STOCK(6);
+            INSERT_ORDER_LINE(order_hash_key, 7);
+            UPDATE_STOCK(7);
+            INSERT_ORDER_LINE(order_hash_key, 8);
+            UPDATE_STOCK(8);
+            INSERT_ORDER_LINE(order_hash_key, 9);
+            UPDATE_STOCK(9);
+            INSERT_ORDER_LINE(order_hash_key, 10);
+            UPDATE_STOCK(10);
+            INSERT_ORDER_LINE(order_hash_key, 11);
+            UPDATE_STOCK(11);
+            INSERT_ORDER_LINE(order_hash_key, 12);
+            UPDATE_STOCK(12);
+            INSERT_ORDER_LINE(order_hash_key, 13);
+            UPDATE_STOCK(13);
+            INSERT_ORDER_LINE(order_hash_key, 14);
+            UPDATE_STOCK(14);
+            INSERT_ORDER_LINE(order_hash_key, 15);
+            UPDATE_STOCK(15);
+            // ==========================================
+
+            NEWORDER_END();
+          };
+          break;
+        }
         default:
         {
           break;
@@ -812,6 +1378,7 @@ public:
       uint32_t h_amount = txm->params[52];
 
       when(w, d, c) << [=](auto _w, auto _d, auto _c) {
+        //printf("processing payment\n");
         assert(_w->magic == 123);
         assert(_d->magic == 324);
         // Update warehouse balance

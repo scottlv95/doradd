@@ -3,10 +3,10 @@
 #include <stdint.h>
 #include <cstdint>
 
-const uint64_t NUM_TPCC_TRANSACTIONS = 10000;
-const uint64_t MAX_ORDER_TRANSACTIONS = (NUM_TPCC_TRANSACTIONS / 10) * 6;
+const uint64_t NUM_TRANSACTIONS = 3200 * 2;
+const uint64_t MAX_ORDER_TRANSACTIONS = (NUM_TRANSACTIONS / 10) * 6;
 
-const uint32_t NUM_WAREHOUSES = 1;
+const uint32_t NUM_WAREHOUSES = 23;
 const uint8_t MONEY_DECIMALS = 2;
 
 // Item constants
@@ -24,16 +24,16 @@ const uint32_t MAX_I_DATA = 50;
 const double MIN_TAX = 0;
 const double MAX_TAX = 0.2000;
 const uint32_t TAX_DECIMALS = 4;
-const double INITIAL_W_YTD = 300000.00;
+const double INITIAL_W_YTD = 30000000;
 const uint32_t MIN_NAME = 6;
 const uint32_t MAX_NAME = 10;
 const uint32_t MIN_STREET = 10;
 const uint32_t MAX_STREET = 20;
 const uint32_t MIN_CITY = 10;
 const uint32_t MAX_CITY = 20;
-const uint32_t STATE = 2;
+const uint32_t STATE = 3;
 const uint32_t ZIP_LENGTH = 9;
-const std::string ZIP_SUFFIX = "11111";
+const std::string ZIP_SUFFIX = "123456789";
 
 // Stock constants
 const uint32_t MIN_QUANTITY = 10;
@@ -43,21 +43,21 @@ const uint32_t STOCK_PER_WAREHOUSE = 100000;
 
 // District constants
 const uint32_t DISTRICTS_PER_WAREHOUSE = 10;
-const double INITIAL_D_YTD = 30000.00;
+const double INITIAL_D_YTD = 3000000;
 const uint32_t INITIAL_NEXT_O_ID = 3001;
 
 // Customer constants
 const uint32_t CUSTOMERS_PER_DISTRICT = 3000;
 const double INITIAL_CREDIT_LIM = 50000.00;
-const double MIN_DISCOUNT = 0.0000;
+const double MIN_DISCOUNT = 0.0001;
 const double MAX_DISCOUNT = 0.5000;
 const uint32_t DISCOUNT_DECIMALS = 4;
-const double INITIAL_BALANCE = -10.00;
-const double INITIAL_YTD_PAYMENT = 10.00;
+const double INITIAL_BALANCE = -1000;
+const double INITIAL_YTD_PAYMENT = 1000;
 const uint32_t INITIAL_PAYMENT_CNT = 1;
 const uint32_t INITIAL_DELIVERY_CNT = 0;
-const uint32_t MIN_FIRST = 6;
-const uint32_t MAX_FIRST = 10;
+const uint32_t MIN_FIRST = 8;
+const uint32_t MAX_FIRST = 16;
 const std::string MIDDLE = "OE";
 const uint32_t PHONE = 16;
 const uint32_t MIN_C_DATA = 300;
@@ -98,8 +98,8 @@ const uint32_t MIN_STOCK_LEVEL_THRESHOLD = 10;
 const uint32_t MAX_STOCK_LEVEL_THRESHOLD = 20;
 
 // Used to generate payment transactions
-const double MIN_PAYMENT = 1.0;
-const double MAX_PAYMENT = 5000.0;
+const double MIN_PAYMENT = 100;
+const double MAX_PAYMENT = 500000;
 
 // ================
 // Table sizes
@@ -109,6 +109,6 @@ const uint64_t TSIZE_CUSTOMER = NUM_WAREHOUSES * DISTRICTS_PER_WAREHOUSE * CUSTO
 const uint64_t TSIZE_ITEM = NUM_ITEMS;
 const uint64_t TSIZE_STOCK = NUM_WAREHOUSES * NUM_ITEMS;
 const uint64_t TSIZE_ORDER = NUM_WAREHOUSES * DISTRICTS_PER_WAREHOUSE * (INITIAL_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS);
-const uint64_t TSIZE_NEW_ORDER = NUM_WAREHOUSES * DISTRICTS_PER_WAREHOUSE * INITIAL_NEW_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS;
+const uint64_t TSIZE_NEW_ORDER = NUM_WAREHOUSES * DISTRICTS_PER_WAREHOUSE * (INITIAL_NEW_ORDERS_PER_DISTRICT + MAX_ORDER_TRANSACTIONS);
 const uint64_t TSIZE_ORDER_LINE = TSIZE_ORDER * 15 * 2;
 const uint64_t TSIZE_HISTORY = NUM_WAREHOUSES * DISTRICTS_PER_WAREHOUSE * CUSTOMERS_PER_DISTRICT;
