@@ -12,6 +12,10 @@
 
 #define CHANNEL_SIZE_IDX_PREF 1000000
 
+std::unordered_map<std::thread::id, uint64_t*>* counter_map;
+std::unordered_map<std::thread::id, log_arr_type*>* log_map;
+std::mutex* counter_map_mutex;
+
 template<typename T>
 void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 {
@@ -22,12 +26,11 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
 
   // init stats collectors for workers
-  auto counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
+  counter_map = new std::unordered_map<std::thread::id, uint64_t*>();
   counter_map->reserve(worker_cnt);
-  auto log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
+  log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
   log_map->reserve(worker_cnt);
-  auto counter_map_mutex = new std::mutex();
-
+  counter_map_mutex = new std::mutex();
 
   // init and run dispatcher pipelines
   when() << [&]() {

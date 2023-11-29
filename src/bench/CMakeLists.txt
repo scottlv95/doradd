@@ -48,7 +48,6 @@ target_link_libraries(ycsb PRIVATE atomic)
 
 add_executable(tpcc tpcc.cc)
 add_compile_definitions(PREFETCH)
-add_compile_definitions(NO_IDX_LOOKUP)
 add_compile_definitions(CORE_PIPE)
 target_include_directories(tpcc PRIVATE ../lancet)
 target_include_directories(tpcc PRIVATE ../deterdb)

@@ -227,8 +227,8 @@ public:
   {
     auto txm = reinterpret_cast<const TPCCTransactionMarshalled*>(input);
 
-    for (int i = 0; i < 30; i++)
-      __builtin_prefetch(reinterpret_cast<const void*>(txm->cown_ptrs[i] + 32), 1, 3);
+    for (int i = 0; i < 33; i++)
+      __builtin_prefetch(reinterpret_cast<const void*>(txm->cown_ptrs[i]), 1, 3);
 
     return sizeof(TPCCTransactionMarshalled);
   }
@@ -370,6 +370,7 @@ public:
     cown_ptr<NewOrder> no_cown = make_cown<NewOrder>(no); \
     index->order_table.insert_row(order_hash_key, std::move(o_cown)); \
     index->new_order_table.insert_row(neworder_hash_key, std::move(no_cown)); \
+    TxCounter::instance().incr(); \
   }
 
 #ifdef RPC_LATENCY
@@ -848,6 +849,7 @@ public:
         _c->c_balance -= h_amount;
         _c->c_ytd_payment += h_amount;
         _c->c_payment_cnt += 1;
+        TxCounter::instance().incr();
       };
     }
     else
@@ -864,9 +866,6 @@ public:
 
 Database* TPCCTransaction::index;
 uint64_t TPCCTransaction::cown_base_addr;
-std::unordered_map<std::thread::id, uint64_t*>* counter_map;
-std::unordered_map<std::thread::id, log_arr_type*>* log_map;
-std::mutex* counter_map_mutex;
 
 int main(int argc, char** argv)
 {
@@ -878,7 +877,7 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  uint8_t core_cnt = 3;
+  uint8_t core_cnt = 12;
   // uint8_t core_cnt = atoi(argv[2]);
   // uint8_t max_core = std::thread::hardware_concurrency();
   // assert(1 < core_cnt && core_cnt <= max_core);
