@@ -33,7 +33,7 @@ using namespace verona::cpp;
     amount += _ol##_INDEX.ol_amount; \
     uint64_t _ol_hash_key##_INDEX = _ol##_INDEX.hash_key(); \
     cown_ptr<OrderLine> _ol_cown##_INDEX = make_cown<OrderLine>(_ol##_INDEX); \
-    /*index->order_line_table.insert_row(_ol_hash_key##_INDEX, _ol_cown##_INDEX);*/ \
+    index->order_line_table.insert_row(_ol_hash_key##_INDEX, _ol_cown##_INDEX); \
   }
 
 // Macros for getting cown pointers
@@ -235,9 +235,16 @@ public:
   }
 #endif // INDEXER
 
+#define WAREHOUSE_SPLIT() \
+  { \
+    when(w) <<[=] (auto _w) { \
+      _w->w_ytd += txm->params[52]; \
+    }; \
+  } 
+
 #define NEWORDER_START() \
   { \
-    _w->w_ytd += txm->params[52]; \
+    /*_w->w_ytd += txm->params[52];*/ \
     _d->d_ytd += txm->params[52]; \
     _c->c_balance -= txm->params[52]; \
     _c->c_ytd_payment += txm->params[52]; \
@@ -248,8 +255,8 @@ public:
   { \
     cown_ptr<Order> o_cown = make_cown<Order>(o); \
     cown_ptr<NewOrder> no_cown = make_cown<NewOrder>(no); \
-    /*index->order_table.insert_row(order_hash_key, std::move(o_cown));*/ \
-    /*index->new_order_table.insert_row(neworder_hash_key, std::move(no_cown)); */\
+    index->order_table.insert_row(order_hash_key, std::move(o_cown)); \
+    index->new_order_table.insert_row(neworder_hash_key, std::move(no_cown)); \
     TxCounter::instance().incr(); \
   }
 
@@ -277,7 +284,8 @@ public:
           GET_COWN_PTR_STOCK_1();
           GET_COWN_PTR_ITEM_1();
 
-          when(w, d, c, s1, i1) << [=](auto _w, auto _d, auto _c, auto _s1, auto _i1) {
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, i1) << [=](auto _d, auto _c, auto _s1, auto _i1) {
             printf("processing new order case 1\n");
             assert(_d->magic == 324);
 
@@ -305,7 +313,8 @@ public:
           GET_COWN_PTR_STOCK_2();
           GET_COWN_PTR_ITEM_2();
 
-          when(w, d, c, s1, s2, i1, i2) << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _i1, auto _i2) {
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, i1, i2) << [=](auto _d, auto _c, auto _s1, auto _s2, auto _i1, auto _i2) {
             assert(_d->magic == 324);
 
             NEWORDER_START();
@@ -332,8 +341,9 @@ public:
           GET_COWN_PTR_STOCK_3();
           GET_COWN_PTR_ITEM_3();
 
-          when(w, d, c, s1, s2, s3, i1, i2, i3)
-            << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _i1, auto _i2, auto _i3) {
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, s3, i1, i2, i3)
+            << [=](auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _i1, auto _i2, auto _i3) {
                  assert(_d->magic == 324);
 
                  NEWORDER_START();
@@ -360,7 +370,8 @@ public:
           GET_COWN_PTR_STOCK_4();
           GET_COWN_PTR_ITEM_4();
 
-          when(w, d, c, s1, s2, s3, s4, i1, i2, i3, i4) << [=](auto _w,auto _d,auto _c,auto _s1,auto _s2,auto _s3,
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, s3, s4, i1, i2, i3, i4) << [=](auto _d,auto _c,auto _s1,auto _s2,auto _s3,
           auto _s4,auto _i1,auto _i2,auto _i3,auto _i4) {
 
             assert(_d->magic == 324);
@@ -388,7 +399,8 @@ public:
           GET_COWN_PTR_STOCK_5();
           GET_COWN_PTR_ITEM_5();
 
-          when(w, d, c, s1, s2, s3, s4, s5, i1, i2, i3, i4, i5) << [=](auto _w,auto _d,auto _c,auto _s1,auto _s2,
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, s3, s4, s5, i1, i2, i3, i4, i5) << [=](auto _d,auto _c,auto _s1,auto _s2,
           auto _s3,auto _s4,auto _s5,auto _i1,auto _i2,auto _i3,auto _i4,auto _i5) {
 
             assert(_d->magic == 324);
@@ -415,7 +427,8 @@ public:
           GET_COWN_PTR_STOCK_6();
           GET_COWN_PTR_ITEM_7();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, i1, i2, i3, i4, i5, i6) << [=](auto _w, auto _d, auto _c, auto _s1, 
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, s3, s4, s5, s6, i1, i2, i3, i4, i5, i6) << [=](auto _d, auto _c, auto _s1, 
           auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6) 
           {
             assert(_d->magic == 324);
@@ -443,8 +456,9 @@ public:
           GET_COWN_PTR_STOCK_7();
           GET_COWN_PTR_ITEM_7();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, i1, i2, i3, i4, i5, i6, i7) << 
-          [=](auto _w,auto _d,auto _c,auto _s1,auto _s2,auto _s3,auto _s4,auto _s5,auto _s6,auto _s7,
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, s3, s4, s5, s6, s7, i1, i2, i3, i4, i5, i6, i7) << 
+          [=](auto _d,auto _c,auto _s1,auto _s2,auto _s3,auto _s4,auto _s5,auto _s6,auto _s7,
           auto _i1,auto _i2,auto _i3,auto _i4,auto _i5,auto _i6,auto _i7) {
             assert(_d->magic == 324);
 
@@ -471,8 +485,9 @@ public:
           GET_COWN_PTR_STOCK_8();
           GET_COWN_PTR_ITEM_8();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, i1, i2, i3, i4, i5, i6, i7, i8) << 
-          [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, auto _s8,
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, s3, s4, s5, s6, s7, s8, i1, i2, i3, i4, i5, i6, i7, i8) << 
+          [=](auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, auto _s8,
            auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8) {
 
             assert(_d->magic == 324);
@@ -499,8 +514,9 @@ public:
           GET_COWN_PTR_STOCK_9();
           GET_COWN_PTR_ITEM_9();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, i1, i2, i3, i4, i5, i6, i7, i8, i9) << 
-          [=](auto _w,auto _d,auto _c,auto _s1,auto _s2,auto _s3,auto _s4,auto _s5,auto _s6,auto _s7,auto _s8,
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, i1, i2, i3, i4, i5, i6, i7, i8, i9) << 
+          [=](auto _d,auto _c,auto _s1,auto _s2,auto _s3,auto _s4,auto _s5,auto _s6,auto _s7,auto _s8,
           auto _s9,auto _i1,auto _i2,auto _i3,auto _i4,auto _i5,auto _i6,auto _i7,auto _i8,auto _i9) {
 
             assert(_d->magic == 324);
@@ -528,8 +544,9 @@ public:
           GET_COWN_PTR_STOCK_10();
           GET_COWN_PTR_ITEM_10();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10) << 
-          [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, auto _s8,
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10) << 
+          [=](auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, auto _s8,
            auto _s9, auto _s10, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, 
            auto _i9, auto _i10) {
 
@@ -558,8 +575,9 @@ public:
           GET_COWN_PTR_STOCK_11();
           GET_COWN_PTR_ITEM_11();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11) 
-          << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7,
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11) 
+          << [=](auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7,
            auto _s8, auto _s9, auto _s10, auto _s11, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, 
            auto _i7, auto _i8, auto _i9, auto _i10, auto _i11) {
 
@@ -587,8 +605,9 @@ public:
           GET_COWN_PTR_STOCK_12();
           GET_COWN_PTR_ITEM_12();
 
-          when(w,d,c,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12)
-          << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
+          WAREHOUSE_SPLIT();
+          when(d,c,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12)
+          << [=](auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
           auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, 
           auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12) {
 
@@ -615,8 +634,9 @@ public:
           GET_COWN_PTR_STOCK_13();
           GET_COWN_PTR_ITEM_13();
 
-          when(w,d,c,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13)
-           << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
+          WAREHOUSE_SPLIT();
+          when(d,c,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13)
+           << [=](auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
            auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _i1, auto _i2, auto _i3, auto _i4, 
            auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12, auto _i13) {
 
@@ -644,8 +664,9 @@ public:
           GET_COWN_PTR_STOCK_14();
           GET_COWN_PTR_ITEM_14();
 
-          when(w,d,c,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13,i14) 
-            << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
+          WAREHOUSE_SPLIT();
+          when(d,c,s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,s11,s12,s13,s14,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13,i14) 
+            << [=](auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
             auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _s14, auto _i1, auto _i2, auto _i3, 
             auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12, auto _i13, 
             auto _i14) {
@@ -674,9 +695,10 @@ public:
           GET_COWN_PTR_STOCK_15();
           GET_COWN_PTR_ITEM_15();
 
-          when(w, d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, i1, i2, i3, i4, i5, i6, i7, 
+          WAREHOUSE_SPLIT();
+          when(d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14, s15, i1, i2, i3, i4, i5, i6, i7, 
           i8, i9, i10, i11, i12, i13, i14, i15)
-            << [=](auto _w, auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
+            << [=](auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, 
             auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _s14, auto _s15, auto _i1, auto _i2, 
             auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12,
             auto _i13, auto _i14, auto _i15) {
@@ -715,12 +737,15 @@ public:
       cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(reinterpret_cast<void*>(txm->cown_ptrs[2]));
       uint32_t h_amount = txm->params[52];
 
-      when(w, d, c) << [=](auto _w, auto _d, auto _c) {
-        // printf("processing payment\n");
+      when(w) << [=](auto _w) {
         assert(_w->magic == 123);
-        assert(_d->magic == 324);
         // Update warehouse balance
         _w->w_ytd += h_amount;
+      };
+
+      when(d, c) << [=](auto _d, auto _c) {
+        // printf("processing payment\n");
+        assert(_d->magic == 324);
 
         // Update district balance
         _d->d_ytd += h_amount;
