@@ -302,11 +302,7 @@ public:
 
           WAREHOUSE_SPLIT();
           when(d, c, s1, i1) << [=](auto _d, auto _c, auto _s1, auto _i1) {
-            printf("processing new order case 1\n");
-            assert(_d->magic == 324);
-
-            NEWORDER_START();
-
+            //assert(_d->magic == 324);
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
             _d->d_next_o_id += 1;
@@ -331,9 +327,7 @@ public:
 
           WAREHOUSE_SPLIT();
           when(d, c, s1, s2, i1, i2) << [=](auto _d, auto _c, auto _s1, auto _s2, auto _i1, auto _i2) {
-            assert(_d->magic == 324);
-
-            NEWORDER_START();
+            //assert(_d->magic == 324);
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -360,9 +354,7 @@ public:
           WAREHOUSE_SPLIT();
           when(d, c, s1, s2, s3, i1, i2, i3)
             << [=](auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _i1, auto _i2, auto _i3) {
-                 assert(_d->magic == 324);
-
-                 NEWORDER_START();
+                 //assert(_d->magic == 324);
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -390,8 +382,7 @@ public:
           when(d, c, s1, s2, s3, s4, i1, i2, i3, i4) << [=](auto _d,auto _c,auto _s1,auto _s2,auto _s3,
           auto _s4,auto _i1,auto _i2,auto _i3,auto _i4) {
 
-            assert(_d->magic == 324);
-            NEWORDER_START();
+            //assert(_d->magic == 324);
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -419,8 +410,7 @@ public:
           when(d, c, s1, s2, s3, s4, s5, i1, i2, i3, i4, i5) << [=](auto _d,auto _c,auto _s1,auto _s2,
           auto _s3,auto _s4,auto _s5,auto _i1,auto _i2,auto _i3,auto _i4,auto _i5) {
 
-            assert(_d->magic == 324);
-            NEWORDER_START();
+   //         assert(_d->magic == 324);
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -447,9 +437,7 @@ public:
           when(d, c, s1, s2, s3, s4, s5, s6, i1, i2, i3, i4, i5, i6) << [=](auto _d, auto _c, auto _s1, 
           auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6) 
           {
-            assert(_d->magic == 324);
-
-            NEWORDER_START();
+    //        assert(_d->magic == 324);
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -476,9 +464,7 @@ public:
           when(d, c, s1, s2, s3, s4, s5, s6, s7, i1, i2, i3, i4, i5, i6, i7) << 
           [=](auto _d,auto _c,auto _s1,auto _s2,auto _s3,auto _s4,auto _s5,auto _s6,auto _s7,
           auto _i1,auto _i2,auto _i3,auto _i4,auto _i5,auto _i6,auto _i7) {
-            assert(_d->magic == 324);
-
-            NEWORDER_START();
+            //assert(_d->magic == 324);
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -506,8 +492,7 @@ public:
           [=](auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, auto _s8,
            auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8) {
 
-            assert(_d->magic == 324);
-            NEWORDER_START();
+  //          assert(_d->magic == 324);
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -535,8 +520,7 @@ public:
           [=](auto _d,auto _c,auto _s1,auto _s2,auto _s3,auto _s4,auto _s5,auto _s6,auto _s7,auto _s8,
           auto _s9,auto _i1,auto _i2,auto _i3,auto _i4,auto _i5,auto _i6,auto _i7,auto _i8,auto _i9) {
 
-            assert(_d->magic == 324);
-            NEWORDER_START();
+//            assert(_d->magic == 324);
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -566,9 +550,7 @@ public:
            auto _s9, auto _s10, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, 
            auto _i9, auto _i10) {
 
-                 assert(_d->magic == 324);
-
-                 NEWORDER_START();
+//                 assert(_d->magic == 324);
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -597,8 +579,7 @@ public:
            auto _s8, auto _s9, auto _s10, auto _s11, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, 
            auto _i7, auto _i8, auto _i9, auto _i10, auto _i11) {
 
-                 assert(_d->magic == 324);
-                 NEWORDER_START();
+//                 assert(_d->magic == 324);
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -627,8 +608,7 @@ public:
           auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, 
           auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12) {
 
-                 assert(_d->magic == 324);
-                 NEWORDER_START();
+//                 assert(_d->magic == 324);
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -656,9 +636,7 @@ public:
            auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _i1, auto _i2, auto _i3, auto _i4, 
            auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12, auto _i13) {
 
-                 assert(_d->magic == 324);
-                 // printf("processing case 13\n");
-                 NEWORDER_START();
+//                 assert(_d->magic == 324);
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -687,8 +665,7 @@ public:
             auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12, auto _i13, 
             auto _i14) {
 
-                 assert(_d->magic == 324);
-                 NEWORDER_START();
+//                 assert(_d->magic == 324);
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -719,9 +696,7 @@ public:
             auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12,
             auto _i13, auto _i14, auto _i15) {
 
-                 assert(_d->magic == 324);
-
-                 NEWORDER_START();
+//                 assert(_d->magic == 324);
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -754,14 +729,14 @@ public:
       uint32_t h_amount = txm->params[52];
 
       when(w) << [=](auto _w) {
-        assert(_w->magic == 123);
+        //assert(_w->magic == 123);
         // Update warehouse balance
         _w->w_ytd += h_amount;
       };
 
       when(d, c) << [=](auto _d, auto _c) {
         // printf("processing payment\n");
-        assert(_d->magic == 324);
+        //assert(_d->magic == 324);
 
         // Update district balance
         _d->d_ytd += h_amount;
@@ -811,29 +786,21 @@ int main(int argc, char** argv)
   // Create rows (cowns) with huge pages and via static allocation
   TPCCTransaction::index = new Database();
 
-#define HUGE_PAGES
-#ifdef HUGE_PAGES
-#  if 0
   // Big table to store all tpcc related stuff
   void* tpcc_arr_addr_warehouse = static_cast<void*>(
-    aligned_alloc_hpage(sizeof(Warehouse) * TSIZE_WAREHOUSE));
-  void* tpcc_arr_addr_district =
-    static_cast<void*>(aligned_alloc_hpage(sizeof(District) * TSIZE_DISTRICT));
-  void* tpcc_arr_addr_customer =
-    static_cast<void*>(aligned_alloc_hpage(sizeof(Customer) * TSIZE_CUSTOMER));
-  void* tpcc_arr_addr_stock =
-    static_cast<void*>(aligned_alloc_hpage(sizeof(Stock) * TSIZE_STOCK));
-  void* tpcc_arr_addr_item =
-    static_cast<void*>(aligned_alloc_hpage(sizeof(Item) * TSIZE_ITEM));
-  void* tpcc_arr_addr_history =
-    static_cast<void*>(aligned_alloc_hpage(sizeof(History) * TSIZE_HISTORY));
-  void* tpcc_arr_addr_order =
-    static_cast<void*>(aligned_alloc_hpage(sizeof(Order) * TSIZE_ORDER));
-  void* tpcc_arr_addr_order_line = static_cast<void*>(
-    aligned_alloc_hpage(sizeof(OrderLine) * TSIZE_ORDER_LINE));
-  void* tpcc_arr_addr_new_order =
-    static_cast<void*>(aligned_alloc_hpage(sizeof(NewOrder) * TSIZE_NEW_ORDER));
-#  else
+    aligned_alloc_hpage(1024 * (TSIZE_WAREHOUSE + TSIZE_DISTRICT + (2 * TSIZE_CUSTOMER) + TSIZE_STOCK + TSIZE_ITEM +
+                                TSIZE_HISTORY + TSIZE_ORDER + TSIZE_ORDER_LINE + TSIZE_NEW_ORDER))
+  );
+
+  void* tpcc_arr_addr_district = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_warehouse) + 1024 * TSIZE_WAREHOUSE);
+  void* tpcc_arr_addr_customer = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_district) + 1024 * TSIZE_DISTRICT);
+  void* tpcc_arr_addr_stock = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_customer) + 2 * 1024 * TSIZE_CUSTOMER);
+  void* tpcc_arr_addr_item = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_stock) + 1024 * TSIZE_STOCK);
+  void* tpcc_arr_addr_history = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_item) + 1024 * TSIZE_ITEM);
+  void* tpcc_arr_addr_order = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_history) + 1024 * TSIZE_HISTORY);
+  void* tpcc_arr_addr_order_line = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_order) + 1024 * TSIZE_ORDER);
+  void* tpcc_arr_addr_new_order = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_order_line) + 1024 * TSIZE_ORDER_LINE);
+#if 0
   // Big table to store all tpcc related stuff
   void* tpcc_arr_addr_warehouse = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_WAREHOUSE));
   void* tpcc_arr_addr_district = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_DISTRICT));
@@ -845,7 +812,6 @@ int main(int argc, char** argv)
   void* tpcc_arr_addr_order_line = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_ORDER_LINE));
   void* tpcc_arr_addr_new_order = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_NEW_ORDER));
 #  endif
-#endif
 
   TPCCGenerator gen(TPCCTransaction::index,
  tpcc_arr_addr_warehouse,
