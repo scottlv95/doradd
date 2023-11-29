@@ -33,7 +33,7 @@ using namespace verona::cpp;
     amount += _ol##_INDEX.ol_amount; \
     uint64_t _ol_hash_key##_INDEX = _ol##_INDEX.hash_key(); \
     cown_ptr<OrderLine> _ol_cown##_INDEX = make_cown<OrderLine>(_ol##_INDEX); \
-    index->order_line_table.insert_row(_ol_hash_key##_INDEX, _ol_cown##_INDEX); \
+    /*index->order_line_table.insert_row(_ol_hash_key##_INDEX, _ol_cown##_INDEX);*/ \
   }
 
 // Macros for getting cown pointers
@@ -157,7 +157,6 @@ public:
 #endif
   // static Index<YCSBRow>* index;
   static Database* index;
-  static uint64_t cown_base_addr;
 
 #if defined(INDEXER) || defined(TEST_TWO)
   // Indexer: read db and in-place update cown_ptr
@@ -194,7 +193,6 @@ public:
       }
 
       // Item
-      assert(txm->params[50] <= 15);
       for (int i = 0; i < txm->params[50]; i++)
       {
         txm->cown_ptrs[18 + i] = index->item_table.get_row_addr(Item::hash_key(txm->params[5 + i]))->get_base_addr();
@@ -214,11 +212,6 @@ public:
         index->customer_table.get_row_addr(Customer::hash_key(txm->params[0], txm->params[1], txm->params[2]))
           ->get_base_addr();
     }
-    else
-    {
-      // No
-      assert(false);
-    }
 
     return sizeof(TPCCTransactionMarshalled);
   }
@@ -227,132 +220,19 @@ public:
   {
     auto txm = reinterpret_cast<const TPCCTransactionMarshalled*>(input);
 
-    for (int i = 0; i < 33; i++)
-      __builtin_prefetch(reinterpret_cast<const void*>(txm->cown_ptrs[i]), 1, 3);
-
-    return sizeof(TPCCTransactionMarshalled);
-  }
-#else
-
-  // prefetch row entry before accessing in parse()
-  static int prepare_parse(const char* input)
-  {
-    const TPCCTransactionMarshalled* txm = reinterpret_cast<const TPCCTransactionMarshalled*>(input);
-
-    // if (txm->txn_type == 0)
-    // {
-    //   // Warehouse
-    //   auto* entry = index->warehouse_table.get_row_addr(txm->indices[0]);
-    //   __builtin_prefetch(entry, 0, 1);
-
-    //   // District
-    //   auto* entry_d = index->district_table.get_row_addr(txm->indices[1]);
-    //   __builtin_prefetch(entry_d, 0, 1);
-
-    //   // Customer
-    //   auto* entry_c = index->customer_table.get_row_addr(txm->indices[2]);
-    //   __builtin_prefetch(entry_c, 0, 1);
-
-    //   // Stock
-    //   for (int i = 0; i < txm->params[50]; i++)
-    //   {
-    //     auto* entry_s = index->stock_table.get_row_addr(txm->indices[3 + i]);
-    //     __builtin_prefetch(entry_s, 0, 1);
-    //   }
-
-    //   // Item
-    //   for (int i = 0; i < txm->params[50]; i++)
-    //   {
-    //     auto* entry_i = index->item_table.get_row_addr(txm->indices[18 + i]);
-    //     __builtin_prefetch(entry_i, 0, 1);
-    //   }
-    // }
-    // else if (txm->txn_type == 1)
-    // {
-    //   // Warehouse
-    //   auto* entry_w = index->warehouse_table.get_row_addr(txm->indices[0]);
-    //   __builtin_prefetch(entry_w, 0, 1);
-
-    //   // District
-    //   auto* entry_d = index->district_table.get_row_addr(txm->indices[1]);
-    //   __builtin_prefetch(entry_d, 0, 1);
-
-    //   // Customer
-    //   auto* entry_c = index->customer_table.get_row_addr(txm->indices[2]);
-    //   __builtin_prefetch(entry_c, 0, 1);
-    // }
-    // else
-    // {
-    //   // No
-    //   assert(false);
-    // }
-
-    return sizeof(TPCCTransactionMarshalled);
-  }
-
-#  ifndef NO_IDX_LOOKUP
-  // prefetch cowns for when closure
-  static int prepare_process(const char* input)
-  {
-    const TPCCTransactionMarshalled* txm = reinterpret_cast<const TPCCTransactionMarshalled*>(input);
-
     if (txm->txn_type == 0)
     {
-      auto* entry_w = index->warehouse_table.get_row_addr(txm->indices[0]);
-      entry_w->prefetch();
-
-      auto* entry_d = index->district_table.get_row_addr(txm->indices[1]);
-      entry_d->prefetch();
-
-      auto* entry_c = index->customer_table.get_row_addr(txm->indices[2]);
-      entry_c->prefetch();
-
-      for (int i = 0; i < txm->params[50]; i++)
-      {
-        auto* entry_s = index->stock_table.get_row_addr(txm->indices[3 + i]);
-        entry_s->prefetch();
-      }
-
-      for (int i = 0; i < txm->params[50]; i++)
-      {
-        auto* entry_i = index->item_table.get_row_addr(txm->indices[18 + i]);
-        entry_i->prefetch();
-      }
-    }
-    else if (txm->txn_type == 1)
-    {
-      auto* entry_w = index->warehouse_table.get_row_addr(txm->indices[0]);
-      entry_w->prefetch();
-
-      auto* entry_d = index->district_table.get_row_addr(txm->indices[1]);
-      entry_d->prefetch();
-
-      auto* entry_c = index->customer_table.get_row_addr(txm->indices[2]);
-      entry_c->prefetch();
-    }
-    else
-    {
-      // No
-      assert(false);
+      uint32_t item_number = txm->params[50];
+      for (uint32_t i = 3; i < item_number; i++)
+        __builtin_prefetch(reinterpret_cast<const void*>(txm->cown_ptrs[i]), 1, 3);
+      for (uint32_t i = 18; i < item_number; i++)
+        __builtin_prefetch(reinterpret_cast<const void*>(txm->cown_ptrs[i]), 1, 3);
+    } else {
+        __builtin_prefetch(reinterpret_cast<const void*>(txm->cown_ptrs[2]), 1, 3);
     }
 
     return sizeof(TPCCTransactionMarshalled);
   }
-#  else
-  static int prepare_process(const char* input, const int rw, const int locality)
-  {
-    const TPCCTransactionMarshalled* txm = reinterpret_cast<const TPCCTransactionMarshalled*>(input);
-
-    for (int i = 0; i < tmx->number_of_rows; i++)
-    {
-      __builtin_prefetch(reinterpret_cast<const void*>(cown_base_addr + (uint64_t)(1024 * txm->indices[i]) + 32),
-      rw,
-      locality);
-    }
-
-    return sizeof(TPCCTransactionMarshalled);
-  }
-#  endif // NO_IDX_LOOKUP
 #endif // INDEXER
 
 #define NEWORDER_START() \
@@ -368,8 +248,8 @@ public:
   { \
     cown_ptr<Order> o_cown = make_cown<Order>(o); \
     cown_ptr<NewOrder> no_cown = make_cown<NewOrder>(no); \
-    index->order_table.insert_row(order_hash_key, std::move(o_cown)); \
-    index->new_order_table.insert_row(neworder_hash_key, std::move(no_cown)); \
+    /*index->order_table.insert_row(order_hash_key, std::move(o_cown));*/ \
+    /*index->new_order_table.insert_row(neworder_hash_key, std::move(no_cown)); */\
     TxCounter::instance().incr(); \
   }
 
@@ -852,10 +732,6 @@ public:
         TxCounter::instance().incr();
       };
     }
-    else
-    {
-      assert(false);
-    }
 
     return sizeof(TPCCTransactionMarshalled);
   }
@@ -865,7 +741,6 @@ public:
 };
 
 Database* TPCCTransaction::index;
-uint64_t TPCCTransaction::cown_base_addr;
 
 int main(int argc, char** argv)
 {
@@ -877,13 +752,10 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  uint8_t core_cnt = 12;
-  // uint8_t core_cnt = atoi(argv[2]);
-  // uint8_t max_core = std::thread::hardware_concurrency();
-  // assert(1 < core_cnt && core_cnt <= max_core);
+  uint8_t core_cnt = atoi(argv[2]);
+  uint8_t max_core = std::thread::hardware_concurrency();
 
-  // size_t look_ahead = atoi(argv[4]);
-  // assert(8 <= look_ahead && look_ahead <= 128);
+  size_t look_ahead = atoi(argv[4]);
 
   char* input_file = argv[5];
   char* gen_file = argv[7];
