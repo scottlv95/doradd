@@ -10,8 +10,6 @@
 #include "pin-thread.hpp"
 #include "config.hpp"
 
-#define CHANNEL_SIZE_IDX_PREF 1000000
-
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 std::unordered_map<std::thread::id, log_arr_type*>* log_map;
 std::mutex* counter_map_mutex;

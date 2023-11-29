@@ -47,6 +47,7 @@ public:
     }
     else
     {
+      printf("DB is %lu\n", DB_SIZE);
       throw std::out_of_range("Index is full");
     }
   }
@@ -60,7 +61,9 @@ public:
 
 class WarehouseTable : public Table<uint64_t, Warehouse, TSIZE_WAREHOUSE> {
    public:
-    WarehouseTable() : Table<uint64_t, Warehouse, TSIZE_WAREHOUSE> () {}
+     WarehouseTable() : Table<uint64_t, Warehouse, TSIZE_WAREHOUSE> () {
+       printf("Warehouse tbl size: %lu\n", TSIZE_WAREHOUSE);
+     }
 };
 
 // =======================
@@ -71,7 +74,9 @@ class WarehouseTable : public Table<uint64_t, Warehouse, TSIZE_WAREHOUSE> {
 class DistrictTable : public Table<uint64_t, District, TSIZE_DISTRICT> {
    public:
     std::atomic<uint32_t> order_id = 0;
-    DistrictTable() : Table<uint64_t, District, TSIZE_DISTRICT> () {}
+    DistrictTable() : Table<uint64_t, District, TSIZE_DISTRICT> () {
+    printf("District tbl size: %lu\n", TSIZE_DISTRICT);
+    }
 };
 
 // =======================
@@ -81,7 +86,9 @@ class DistrictTable : public Table<uint64_t, District, TSIZE_DISTRICT> {
 
 class ItemTable : public Table<uint64_t, Item, TSIZE_ITEM> {
    public:
-    ItemTable() : Table<uint64_t, Item, TSIZE_ITEM> () {}
+     ItemTable() : Table<uint64_t, Item, TSIZE_ITEM> () {
+    printf("Item tbl size: %lu\n", TSIZE_ITEM);
+     }
 };
 
 // =======================
@@ -91,7 +98,9 @@ class ItemTable : public Table<uint64_t, Item, TSIZE_ITEM> {
 
 class CustomerTable : public Table<uint64_t, Customer, TSIZE_CUSTOMER> {
    public:
-    CustomerTable() : Table<uint64_t, Customer, TSIZE_CUSTOMER> () {}
+     CustomerTable() : Table<uint64_t, Customer, TSIZE_CUSTOMER> () {
+    printf("Customer tbl size: %lu\n", TSIZE_CUSTOMER);
+     }
 };
 
 // ====================
@@ -102,7 +111,9 @@ class CustomerTable : public Table<uint64_t, Customer, TSIZE_CUSTOMER> {
 
 class OrderLineTable : public Table<uint64_t, OrderLine, TSIZE_ORDER_LINE> {
    public:
-    OrderLineTable() : Table<uint64_t, OrderLine, TSIZE_ORDER_LINE> () {}
+     OrderLineTable() : Table<uint64_t, OrderLine, TSIZE_ORDER_LINE> () {
+    printf("OrderLine tbl size: %lu\n", TSIZE_ORDER_LINE);
+     }
 };
 
 // ====================
@@ -112,7 +123,9 @@ class OrderLineTable : public Table<uint64_t, OrderLine, TSIZE_ORDER_LINE> {
 
 class StockTable : public Table<uint64_t, Stock, TSIZE_STOCK> {
    public:
-    StockTable() : Table<uint64_t, Stock, TSIZE_STOCK> () {}
+     StockTable() : Table<uint64_t, Stock, TSIZE_STOCK> () {
+      printf("Stock tbl size: %lu\n", TSIZE_STOCK);
+     }
 };
 
 // ====================
@@ -123,7 +136,10 @@ class StockTable : public Table<uint64_t, Stock, TSIZE_STOCK> {
 
 class OrderTable : public Table<uint64_t, Order, TSIZE_ORDER> {
    public:
-    OrderTable() : Table<uint64_t, Order, TSIZE_ORDER> () {}
+     OrderTable() : Table<uint64_t, Order, TSIZE_ORDER> () {
+
+      printf("Order tbl size: %lu\n", TSIZE_ORDER);
+     }
 };
 
 // ====================
@@ -134,7 +150,9 @@ class OrderTable : public Table<uint64_t, Order, TSIZE_ORDER> {
 
 class NewOrderTable : public Table<uint64_t, NewOrder, TSIZE_NEW_ORDER> {
    public:
-    NewOrderTable() : Table<uint64_t, NewOrder, TSIZE_NEW_ORDER> () {}
+     NewOrderTable() : Table<uint64_t, NewOrder, TSIZE_NEW_ORDER> () {
+      printf("New Order tbl size: %lu\n", TSIZE_NEW_ORDER);
+     }
 };
 
 // ====================
@@ -145,5 +163,7 @@ class NewOrderTable : public Table<uint64_t, NewOrder, TSIZE_NEW_ORDER> {
 
 class HistoryTable : public Table<uint64_t, History, TSIZE_HISTORY> {
    public:
-    HistoryTable() : Table<uint64_t, History, TSIZE_HISTORY> () {}
+     HistoryTable() : Table<uint64_t, History, TSIZE_HISTORY> () {
+      printf("History tbl size: %lu\n", TSIZE_HISTORY);
+     }
 };

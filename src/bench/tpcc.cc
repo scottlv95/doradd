@@ -251,6 +251,21 @@ public:
     _c->c_payment_cnt += 1; \
   }
 
+
+#ifdef LOG_LATENCY
+#define NEWORDER_END() \
+  { \
+    cown_ptr<Order> o_cown = make_cown<Order>(o); \
+    cown_ptr<NewOrder> no_cown = make_cown<NewOrder>(no); \
+    index->order_table.insert_row(order_hash_key, std::move(o_cown)); \
+    index->new_order_table.insert_row(neworder_hash_key, std::move(no_cown)); \
+    TxCounter::instance().incr(); \
+    auto time_now = std::chrono::system_clock::now(); \
+    std::chrono::duration<double> duration = time_now - init_time; \
+    uint32_t log_duration = static_cast<uint32_t>(duration.count() * 1'000'000); \
+    TxCounter::instance().log_latency(log_duration); \
+  }
+#else
 #define NEWORDER_END() \
   { \
     cown_ptr<Order> o_cown = make_cown<Order>(o); \
@@ -259,6 +274,7 @@ public:
     index->new_order_table.insert_row(neworder_hash_key, std::move(no_cown)); \
     TxCounter::instance().incr(); \
   }
+#endif
 
 #ifdef RPC_LATENCY
   static int parse_and_process(const char* input, ts_type init_time)
@@ -754,7 +770,14 @@ public:
         _c->c_balance -= h_amount;
         _c->c_ytd_payment += h_amount;
         _c->c_payment_cnt += 1;
-        TxCounter::instance().incr();
+
+#ifdef LOG_LATENCY
+        auto time_now = std::chrono::system_clock::now();
+        std::chrono::duration<double> duration = time_now - init_time;
+        uint32_t log_duration = static_cast<uint32_t>(duration.count() * 1'000'000);
+        TxCounter::instance().log_latency(log_duration);
+#endif
+       TxCounter::instance().incr();
       };
     }
 
