@@ -786,12 +786,15 @@ int main(int argc, char** argv)
   // Create rows (cowns) with huge pages and via static allocation
   TPCCTransaction::index = new Database();
 
+#define HUGE_PAGES
+#ifdef HUGE_PAGES
+#  ifdef SINGLE_TABLE
   // Big table to store all tpcc related stuff
   void* tpcc_arr_addr_warehouse = static_cast<void*>(
     aligned_alloc_hpage(1024 * (TSIZE_WAREHOUSE + TSIZE_DISTRICT + (2 * TSIZE_CUSTOMER) + TSIZE_STOCK + TSIZE_ITEM +
                                 TSIZE_HISTORY + TSIZE_ORDER + TSIZE_ORDER_LINE + TSIZE_NEW_ORDER))
   );
-
+  
   void* tpcc_arr_addr_district = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_warehouse) + 1024 * TSIZE_WAREHOUSE);
   void* tpcc_arr_addr_customer = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_district) + 1024 * TSIZE_DISTRICT);
   void* tpcc_arr_addr_stock = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_customer) + 2 * 1024 * TSIZE_CUSTOMER);
@@ -800,7 +803,8 @@ int main(int argc, char** argv)
   void* tpcc_arr_addr_order = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_history) + 1024 * TSIZE_HISTORY);
   void* tpcc_arr_addr_order_line = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_order) + 1024 * TSIZE_ORDER);
   void* tpcc_arr_addr_new_order = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_order_line) + 1024 * TSIZE_ORDER_LINE);
-#if 0
+  
+#  else
   // Big table to store all tpcc related stuff
   void* tpcc_arr_addr_warehouse = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_WAREHOUSE));
   void* tpcc_arr_addr_district = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_DISTRICT));
@@ -813,16 +817,8 @@ int main(int argc, char** argv)
   void* tpcc_arr_addr_new_order = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_NEW_ORDER));
 #  endif
 
-  TPCCGenerator gen(TPCCTransaction::index,
- tpcc_arr_addr_warehouse,
- tpcc_arr_addr_district,
- tpcc_arr_addr_customer,
- tpcc_arr_addr_stock,
- tpcc_arr_addr_item,
- tpcc_arr_addr_history,
- tpcc_arr_addr_order,
- tpcc_arr_addr_order_line,
- tpcc_arr_addr_new_order);
+  TPCCGenerator gen(TPCCTransaction::index, tpcc_arr_addr_warehouse, tpcc_arr_addr_district, tpcc_arr_addr_customer,
+  tpcc_arr_addr_stock, tpcc_arr_addr_item, tpcc_arr_addr_history, tpcc_arr_addr_order, tpcc_arr_addr_order_line, tpcc_arr_addr_new_order);
 
   TPCCTransaction::index->warehouse_table.start_addr = (void*)tpcc_arr_addr_warehouse;
   TPCCTransaction::index->district_table.start_addr = (void*)tpcc_arr_addr_district;
