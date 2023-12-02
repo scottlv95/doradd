@@ -816,6 +816,7 @@ int main(int argc, char** argv)
   void* tpcc_arr_addr_order_line = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_ORDER_LINE));
   void* tpcc_arr_addr_new_order = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_NEW_ORDER));
 #  endif
+#endif
 
   TPCCGenerator gen(TPCCTransaction::index, tpcc_arr_addr_warehouse, tpcc_arr_addr_district, tpcc_arr_addr_customer,
   tpcc_arr_addr_stock, tpcc_arr_addr_item, tpcc_arr_addr_history, tpcc_arr_addr_order, tpcc_arr_addr_order_line, tpcc_arr_addr_new_order);
