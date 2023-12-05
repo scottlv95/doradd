@@ -120,18 +120,11 @@ using namespace verona::cpp;
 #define UPDATE_STOCK_AND_OL14() UPDATE_STOCK_AND_OL13() UPDATE_STOCK_AND_INSERT_ORDER_LINE(14)
 #define UPDATE_STOCK_AND_OL15() UPDATE_STOCK_AND_OL14() UPDATE_STOCK_AND_INSERT_ORDER_LINE(15)
 
+#define WAREHOUSE_SPLIT
 #ifdef WAREHOUSE_SPLIT
-{
-  #define WHEN(...) \
-  { \
-      when(w) <<[=] (auto _w) { \
-        _w->w_ytd += txm->params[52]; \
-      }; \
-      when(__VA_ARGS__) \
-  }\
+  #define WHEN(...) when(w) <<[=] (auto _w) { _w->w_ytd += txm->params[52]; }; when(__VA_ARGS__)
   #define NEWORDER_START() {}
   #define PARAMS(...) (__VA_ARGS__)
-}
 #else
   #define WHEN(...) when(w, __VA_ARGS__)
   #define NEWORDER_START() \
