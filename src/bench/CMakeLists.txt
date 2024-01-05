@@ -56,6 +56,8 @@ add_compile_definitions(ADAPT_BATCH) # adaptive batching
 add_compile_definitions(RPC_LATENCY)
 add_compile_definitions(LOG_LATENCY)
 add_compile_definitions(INDEXER)
+add_compile_definitions(WAREHOUSE_SPLIT)
+add_compile_definitions(SINGLE_TABLE)
 target_include_directories(tpcc PRIVATE ../lancet)
 target_include_directories(tpcc PRIVATE ../deterdb)
 target_include_directories(tpcc PRIVATE ${VERONA_PATH}/src/rt)

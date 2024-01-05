@@ -120,7 +120,6 @@ using namespace verona::cpp;
 #define UPDATE_STOCK_AND_OL14() UPDATE_STOCK_AND_OL13() UPDATE_STOCK_AND_INSERT_ORDER_LINE(14)
 #define UPDATE_STOCK_AND_OL15() UPDATE_STOCK_AND_OL14() UPDATE_STOCK_AND_INSERT_ORDER_LINE(15)
 
-#define WAREHOUSE_SPLIT
 #ifdef WAREHOUSE_SPLIT
   #define WHEN(...) when(w) <<[=] (auto _w) { _w->w_ytd += txm->params[52]; }; when(__VA_ARGS__)
   #define NEWORDER_START() {}
@@ -764,9 +763,7 @@ int main(int argc, char** argv)
   // Create rows (cowns) with huge pages and via static allocation
   TPCCTransaction::index = new Database();
 
-#define HUGE_PAGES
-#ifdef HUGE_PAGES
-#  ifdef SINGLE_TABLE
+#ifdef SINGLE_TABLE
   // Big table to store all tpcc related stuff
   void* tpcc_arr_addr_warehouse = static_cast<void*>(
     aligned_alloc_hpage(1024 * (TSIZE_WAREHOUSE + TSIZE_DISTRICT + (2 * TSIZE_CUSTOMER) + TSIZE_STOCK + TSIZE_ITEM +
@@ -782,7 +779,7 @@ int main(int argc, char** argv)
   void* tpcc_arr_addr_order_line = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_order) + 1024 * TSIZE_ORDER);
   void* tpcc_arr_addr_new_order = static_cast<void*>(static_cast<char*>(tpcc_arr_addr_order_line) + 1024 * TSIZE_ORDER_LINE);
   
-#  else
+#else
   // Big table to store all tpcc related stuff
   void* tpcc_arr_addr_warehouse = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_WAREHOUSE));
   void* tpcc_arr_addr_district = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_DISTRICT));
@@ -793,7 +790,6 @@ int main(int argc, char** argv)
   void* tpcc_arr_addr_order = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_ORDER));
   void* tpcc_arr_addr_order_line = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_ORDER_LINE));
   void* tpcc_arr_addr_new_order = static_cast<void*>(aligned_alloc_hpage(1024 * TSIZE_NEW_ORDER));
-#  endif
 #endif
 
   TPCCGenerator gen(TPCCTransaction::index, tpcc_arr_addr_warehouse, tpcc_arr_addr_district, tpcc_arr_addr_customer,
