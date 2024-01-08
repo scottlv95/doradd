@@ -232,16 +232,8 @@ public:
   {
     auto txm = reinterpret_cast<const TPCCTransactionMarshalled*>(input);
 
-    if (txm->txn_type == 0)
-    {
-      uint32_t item_number = txm->params[50];
-      for (uint32_t i = 3; i < item_number; i++)
-        __builtin_prefetch(reinterpret_cast<const void*>(txm->cown_ptrs[i]), 1, 3);
-      for (uint32_t i = 18; i < item_number; i++)
-        __builtin_prefetch(reinterpret_cast<const void*>(txm->cown_ptrs[i]), 1, 3);
-    } else {
-        __builtin_prefetch(reinterpret_cast<const void*>(txm->cown_ptrs[2]), 1, 3);
-    }
+    for (int i = 0; i < 33; i++)
+      __builtin_prefetch(reinterpret_cast<const void*>(txm->cown_ptrs[i]), 1, 3);
 
     return sizeof(TPCCTransactionMarshalled);
   }
