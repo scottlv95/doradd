@@ -122,11 +122,11 @@ using namespace verona::cpp;
 
 #ifdef WAREHOUSE_SPLIT
   #define WHEN(...) when(w) <<[=] (auto _w) { _w->w_ytd += txm->params[52]; }; when(__VA_ARGS__)
-  #define NEWORDER_START() {}
+  #define WAREHOUSE_OP() {}
   #define PARAMS(...) (__VA_ARGS__)
 #else
   #define WHEN(...) when(w, __VA_ARGS__)
-  #define NEWORDER_START() \
+  #define WAREHOUSE_OP() \
   { \
     _w->w_ytd += txm->params[52]; \
   }
@@ -288,7 +288,7 @@ public:
           GET_COWN_PTR_ITEM_1();
 
           WHEN(d, c, s1, i1) << [=]PARAMS(auto _d, auto _c, auto _s1, auto _i1) {
-            NEWORDER_START();
+            WAREHOUSE_OP();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -313,7 +313,7 @@ public:
           GET_COWN_PTR_ITEM_2();
 
           WHEN(d, c, s1, s2, i1, i2) << [=]PARAMS(auto _d, auto _c, auto _s1, auto _s2, auto _i1, auto _i2) {
-            NEWORDER_START();
+            WAREHOUSE_OP();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -339,7 +339,7 @@ public:
 
           WHEN(d, c, s1, s2, s3, i1, i2, i3)
             << [=]PARAMS(auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _i1, auto _i2, auto _i3) {
-                  NEWORDER_START();
+                  WAREHOUSE_OP();
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -365,7 +365,7 @@ public:
 
           WHEN(d, c, s1, s2, s3, s4, i1, i2, i3, i4) << [=]PARAMS(auto _d,auto _c,auto _s1,auto _s2,auto _s3,
           auto _s4,auto _i1,auto _i2,auto _i3,auto _i4) {
-            NEWORDER_START();
+            WAREHOUSE_OP();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -391,7 +391,7 @@ public:
 
           WHEN(d, c, s1, s2, s3, s4, s5, i1, i2, i3, i4, i5) << [=]PARAMS(auto _d,auto _c,auto _s1,auto _s2,
           auto _s3,auto _s4,auto _s5,auto _i1,auto _i2,auto _i3,auto _i4,auto _i5) {
-            NEWORDER_START();
+            WAREHOUSE_OP();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -417,7 +417,7 @@ public:
           WHEN(d, c, s1, s2, s3, s4, s5, s6, i1, i2, i3, i4, i5, i6) << [=]PARAMS(auto _d, auto _c, auto _s1, 
           auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6) 
           {
-            NEWORDER_START();
+            WAREHOUSE_OP();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -443,7 +443,7 @@ public:
           WHEN(d, c, s1, s2, s3, s4, s5, s6, s7, i1, i2, i3, i4, i5, i6, i7) << 
           [=]PARAMS(auto _d,auto _c,auto _s1,auto _s2,auto _s3,auto _s4,auto _s5,auto _s6,auto _s7,
           auto _i1,auto _i2,auto _i3,auto _i4,auto _i5,auto _i6,auto _i7) {
-            NEWORDER_START();
+            WAREHOUSE_OP();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -469,7 +469,7 @@ public:
           WHEN(d, c, s1, s2, s3, s4, s5, s6, s7, s8, i1, i2, i3, i4, i5, i6, i7, i8) << 
           [=]PARAMS(auto _d, auto _c, auto _s1, auto _s2, auto _s3, auto _s4, auto _s5, auto _s6, auto _s7, auto _s8,
            auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8) {
-            NEWORDER_START();
+            WAREHOUSE_OP();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -495,7 +495,7 @@ public:
           WHEN(d, c, s1, s2, s3, s4, s5, s6, s7, s8, s9, i1, i2, i3, i4, i5, i6, i7, i8, i9) << 
           [=]PARAMS(auto _d,auto _c,auto _s1,auto _s2,auto _s3,auto _s4,auto _s5,auto _s6,auto _s7,auto _s8,
           auto _s9,auto _i1,auto _i2,auto _i3,auto _i4,auto _i5,auto _i6,auto _i7,auto _i8,auto _i9) {
-            NEWORDER_START();
+            WAREHOUSE_OP();
 
             Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
             NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -524,7 +524,7 @@ public:
            auto _s9, auto _s10, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, 
            auto _i9, auto _i10) {
 
-                NEWORDER_START();
+                WAREHOUSE_OP();
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -552,7 +552,7 @@ public:
            auto _s8, auto _s9, auto _s10, auto _s11, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, auto _i6, 
            auto _i7, auto _i8, auto _i9, auto _i10, auto _i11) {
 
-                 NEWORDER_START();
+                 WAREHOUSE_OP();
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -580,7 +580,7 @@ public:
           auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _i1, auto _i2, auto _i3, auto _i4, auto _i5, 
           auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12) {
 
-                 NEWORDER_START();
+                 WAREHOUSE_OP();
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -607,7 +607,7 @@ public:
            auto _s8, auto _s9, auto _s10, auto _s11, auto _s12, auto _s13, auto _i1, auto _i2, auto _i3, auto _i4, 
            auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12, auto _i13) {
 
-                NEWORDER_START();
+                WAREHOUSE_OP();
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -635,7 +635,7 @@ public:
             auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12, auto _i13, 
             auto _i14) {
 
-                  NEWORDER_START();
+                  WAREHOUSE_OP();
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -665,7 +665,7 @@ public:
             auto _i3, auto _i4, auto _i5, auto _i6, auto _i7, auto _i8, auto _i9, auto _i10, auto _i11, auto _i12,
             auto _i13, auto _i14, auto _i15) {
 
-                NEWORDER_START();
+                WAREHOUSE_OP();
 
                  Order o = Order(txm->params[0], txm->params[1], _d->d_next_o_id);
                  NewOrder no = NewOrder(txm->params[0], txm->params[1], _d->d_next_o_id);
@@ -697,16 +697,8 @@ public:
       cown_ptr<Customer> c = get_cown_ptr_from_addr<Customer>(reinterpret_cast<void*>(txm->cown_ptrs[2]));
       uint32_t h_amount = txm->params[52];
 
-      when(w) << [=](auto _w) {
-        //assert(_w->magic == 123);
-        // Update warehouse balance
-        _w->w_ytd += h_amount;
-      };
-
-      when(d, c) << [=](auto _d, auto _c) {
-        // printf("processing payment\n");
-        //assert(_d->magic == 324);
-
+      WHEN(d, c) << [=]PARAMS(auto _d, auto _c) {
+        WAREHOUSE_OP();
         // Update district balance
         _d->d_ytd += h_amount;
 
