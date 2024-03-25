@@ -9,7 +9,6 @@
 #include <cassert>
 #include <stdlib.h> 
 #include <stdio.h>
-#include <mutex>
 
 #include "config.hpp"
 #include "spscq.hpp"
@@ -473,7 +472,6 @@ struct Spawner
 #ifdef RPC_LATENCY
   uint64_t txn_log_id = 0;
   uint64_t init_time_log_arr;
-  FILE* res_log_fd;
   ts_type init_time;
 #endif  
 
@@ -486,7 +484,6 @@ struct Spawner
       , rigtorp::SPSCQueue<int>* ring_
 #ifdef RPC_LATENCY
       , uint64_t init_time_log_arr_
-      , FILE* res_log_fd_
 #endif
       ) : 
     read_top(reinterpret_cast<char*>(mmap_ret)), 
@@ -496,7 +493,6 @@ struct Spawner
     ring(ring_)
 #ifdef RPC_LATENCY
     , init_time_log_arr(init_time_log_arr_)
-    , res_log_fd(res_log_fd_)
 #endif
   { 
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
@@ -609,9 +605,6 @@ struct Spawner
           tx_exec_sum = calc_tx_exec_sum();
         printf("spawn - %lf tx/s\n", tx_count / dur_cnt);
         printf("exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);
-#ifdef RPC_LATENCY
-        fprintf(res_log_fd, "%lf\n", tx_count / dur_cnt);
-#endif
         tx_count = 0;
         last_tx_exec_sum = tx_exec_sum;
         last_print = time_now;

@@ -10,10 +10,6 @@
 #include "pin-thread.hpp"
 #include "config.hpp"
 
-std::unordered_map<std::thread::id, uint64_t*>* counter_map;
-std::unordered_map<std::thread::id, log_arr_type*>* log_map;
-std::mutex* counter_map_mutex;
-
 template<typename T>
 void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 {
@@ -29,6 +25,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
   log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
   log_map->reserve(worker_cnt);
   counter_map_mutex = new std::mutex();
+
 
   // init and run dispatcher pipelines
   when() << [&]() {
@@ -107,7 +104,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     #ifdef RPC_LATENCY
     // give init_time_log_arr to spawner. Needed for capturing in when.
     Spawner<T> spawner(ret, worker_cnt, counter_map, 
-        counter_map_mutex, &ring_pref_disp, log_arr_addr, res_log_fd);
+        counter_map_mutex, &ring_pref_disp, log_arr_addr);
     #else
     Spawner<T> spawner(ret, worker_cnt, counter_map, 
         counter_map_mutex, &ring_pref_disp);
