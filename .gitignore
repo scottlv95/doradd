@@ -6,5 +6,3 @@ scripts/*.txt
 *.txt
 *.log
 *.out
-
-.vscode/

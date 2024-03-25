@@ -1,8 +1,5 @@
 #pragma once
 
-#include <iostream>
-
-
 class Body
 {
 public:
