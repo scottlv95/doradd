@@ -107,7 +107,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     #ifdef RPC_LATENCY
     // give init_time_log_arr to spawner. Needed for capturing in when.
     Spawner<T> spawner(ret, worker_cnt, counter_map, 
-        counter_map_mutex, &ring_pref_disp, log_arr_addr);
+        counter_map_mutex, &ring_pref_disp, log_arr_addr, res_log_fd);
     #else
     Spawner<T> spawner(ret, worker_cnt, counter_map, 
         counter_map_mutex, &ring_pref_disp);
