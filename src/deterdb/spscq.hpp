@@ -29,6 +29,7 @@ SOFTWARE.
 #include <new>    // std::hardware_destructive_interference_size
 #include <stdexcept>
 #include <type_traits> // std::enable_if, std::is_*_constructible
+#include <immintrin.h>
 
 #ifdef __has_cpp_attribute
 #if __has_cpp_attribute(nodiscard)
