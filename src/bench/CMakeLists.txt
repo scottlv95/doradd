@@ -28,9 +28,9 @@ add_compile_definitions(PREFETCH)
 #add_compile_definitions(NO_IDX_LOOKUP)
 add_compile_definitions(CORE_PIPE)
 add_compile_definitions(INDEXER)
-#add_compile_definitions(ADAPT_BATCH) # adaptive batching
-#add_compile_definitions(RPC_LATENCY)
-#add_compile_definitions(LOG_LATENCY)
+add_compile_definitions(ADAPT_BATCH) # adaptive batching
+add_compile_definitions(RPC_LATENCY)
+add_compile_definitions(LOG_LATENCY)
 #add_compile_definitions(LOG_SCHED_OHEAD)
 #add_compile_definitions(ZERO_SERV_TIME)
 #add_compile_definitions(TEST_TWO)
