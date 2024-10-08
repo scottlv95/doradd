@@ -8,6 +8,7 @@
 #include <cassert>
 #include <fcntl.h>
 #include <mutex>
+#include <numeric>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -40,10 +41,8 @@ private:
   uint64_t tx_exec_sum;
   uint64_t last_tx_exec_sum;
 
-#ifdef ADAPT_BATCH
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt = 0;
-#endif
 
   ts_type last_print;
 
@@ -58,11 +57,8 @@ public:
     void* mmap_ret,
     uint8_t worker_cnt_,
     std::unordered_map<std::thread::id, uint64_t*>* counter_map_,
-    std::mutex* counter_map_mutex_
-#ifdef ADAPT_BATCH
-    ,
+    std::mutex* counter_map_mutex_,
     std::atomic<uint64_t>* recvd_req_cnt_
-#endif
 #ifdef RPC_LATENCY
     ,
     uint64_t init_time_log_arr_
@@ -71,11 +67,8 @@ public:
   : read_top(reinterpret_cast<char*>(mmap_ret)),
     worker_cnt(worker_cnt_),
     counter_map(counter_map_),
-    counter_map_mutex(counter_map_mutex_)
-#ifdef ADAPT_BATCH
-    ,
+    counter_map_mutex(counter_map_mutex_),
     recvd_req_cnt(recvd_req_cnt_)
-#endif
 #ifdef RPC_LATENCY
     ,
     init_time_log_arr(init_time_log_arr_)
@@ -116,7 +109,6 @@ public:
     return sum;
   }
 
-#ifdef ADAPT_BATCH
   size_t check_avail_cnts()
   {
     uint64_t avail_cnt;
@@ -139,7 +131,6 @@ public:
 
     return dyn_batch;
   }
-#endif
 
 #ifdef RPC_LATENCY
   int dispatch_one()
@@ -170,11 +161,7 @@ public:
       prepare_proc_read_head = read_top;
     }
 
-#ifdef ADAPT_BATCH
     look_ahead = check_avail_cnts();
-#else
-    look_ahead = BATCH_SPAWNER;
-#endif
 
     for (i = 0; i < look_ahead; i++)
     {
@@ -199,9 +186,7 @@ public:
       tx_count++;
     }
 
-#ifdef ADAPT_BATCH
     handled_req_cnt += look_ahead;
-#endif
 
     return ret;
   }
@@ -270,37 +255,25 @@ struct Indexer
 {
   uint32_t read_count;
   char* read_top;
-#ifdef ADAPT_BATCH
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
-#endif
 
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
 
   Indexer(
     void* mmap_ret,
-    rigtorp::SPSCQueue<int>* ring_
-#ifdef ADAPT_BATCH
-    ,
-    std::atomic<uint64_t>* req_cnt_
-#endif
-    )
+    rigtorp::SPSCQueue<int>* ring_,
+    std::atomic<uint64_t>* req_cnt_)
   : read_top(reinterpret_cast<char*>(mmap_ret)),
-    ring(ring_)
-#ifdef ADAPT_BATCH
-    ,
+    ring(ring_),
     recvd_req_cnt(req_cnt_)
-#endif
   {
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
     read_top += sizeof(uint32_t);
-#ifdef ADAPT_BATCH
     handled_req_cnt = 0;
-#endif
   }
 
-#ifdef ADAPT_BATCH
   size_t check_avail_cnts()
   {
     uint64_t avail_cnt;
@@ -325,7 +298,6 @@ struct Indexer
 
     return dyn_batch;
   }
-#endif
 
   void run()
   {
@@ -342,11 +314,7 @@ struct Indexer
         read_idx = 0;
       }
 
-#ifdef ADAPT_BATCH
       batch = check_avail_cnts();
-#else
-      batch = MAX_BATCH;
-#endif
 
       for (i = 0; i < batch; i++)
       {
@@ -388,32 +356,6 @@ struct Prefetcher
     read_top += sizeof(uint32_t);
   }
 
-// #if defined(ADAPT_BATCH) || defined(INDEXER)
-#if 0
-  size_t check_avail_cnts()
-  {
-    uint64_t avail_cnt;
-    size_t dyn_batch;
-
-    do {
-      uint64_t load_val = recvd_req_cnt->load(std::memory_order_relaxed);
-      avail_cnt = load_val - handled_req_cnt;
-      if (avail_cnt >= MAX_BATCH) 
-        dyn_batch = MAX_BATCH;
-      else if (avail_cnt > 0)
-        dyn_batch = static_cast<size_t>(avail_cnt);
-      else
-      {
-        _mm_pause();
-        continue;  
-      }
-    } while (avail_cnt == 0);
-
-    return dyn_batch;
-  }
-#endif
-
-  // TODO: check adapt batch (since integrating indexer)
   void run()
   {
     int ret;
@@ -437,11 +379,7 @@ struct Prefetcher
         continue;
 #endif
 
-#ifdef ADAPT_BATCH
       batch_sz = static_cast<size_t>(*ring_indexer->front());
-#else
-      batch_sz = BATCH_PREFETCHER;
-#endif
 
 #ifdef TEST_TWO
       for (i = 0; i < batch_sz; i++)
@@ -589,11 +527,7 @@ struct Spawner
       if (!ring->front())
         continue;
 
-#ifdef ADAPT_BATCH
       batch_sz = static_cast<size_t>(*ring->front());
-#else
-      batch_sz = BATCH_SPAWNER;
-#endif
 
       if (!counter_registered)
         track_worker_counter();

@@ -32,13 +32,10 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     printf("Init and Run - Dispatcher Pipelines\n");
     // sched.add_external_event_source();
 
-#if defined(ADAPT_BATCH)
     std::atomic<uint64_t> req_cnt(0);
-#endif
 
     // Init RPC handler
-#ifdef ADAPT_BATCH
-#  ifdef RPC_LATENCY
+#ifdef RPC_LATENCY
     uint8_t* log_arr = static_cast<uint8_t*>(
       aligned_alloc_hpage(RPC_LOG_SIZE * sizeof(ts_type)));
 
@@ -51,10 +48,9 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
       fopen(reinterpret_cast<const char*>(res_log_name.c_str()), "w");
 
     RPCHandler rpc_handler(&req_cnt, gen_type, log_arr_addr);
-#  else
+#else
     RPCHandler rpc_handler(&req_cnt, gen_type);
-#  endif // RPC_LATENCY
-#endif // ADAPT_BATCH
+#endif // RPC_LATENCY
 
     // Map txn logs into memory
     int fd = open(log_name, O_RDONLY);
@@ -79,11 +75,8 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
       ret,
       worker_cnt,
       counter_map,
-      counter_map_mutex
-#  ifdef ADAPT_BATCH
-      ,
+      counter_map_mutex,
       &req_cnt
-#  endif
 #  ifdef RPC_LATENCY
       ,
       log_arr_addr
@@ -99,14 +92,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
 #  ifdef INDEXER
     rigtorp::SPSCQueue<int> ring_idx_pref(CHANNEL_SIZE_IDX_PREF);
-    Indexer<T> indexer(
-      ret,
-      &ring_idx_pref
-#    ifdef ADAPT_BATCH
-      ,
-      &req_cnt
-#    endif
-    );
+    Indexer<T> indexer(ret, &ring_idx_pref, &req_cnt);
 #  endif
 
     rigtorp::SPSCQueue<int> ring_pref_disp(CHANNEL_SIZE);
@@ -153,13 +139,11 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     });
 #endif
 
-#ifdef ADAPT_BATCH
     std::thread rpc_handler_thread([&]() mutable {
       pin_thread(0);
       std::this_thread::sleep_for(std::chrono::seconds(6));
       rpc_handler.run();
     });
-#endif
 
     // flush latency logs
 #ifdef LOG_LATENCY
@@ -174,9 +158,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     pthread_cancel(extern_thrd.native_handle());
 #  endif // CORE_PIPE
 
-#  ifdef ADAPT_BATCH
     pthread_cancel(rpc_handler_thread.native_handle());
-#  endif // ADAPT_BATCH
 
     for (const auto& entry : *log_map)
     {
@@ -198,9 +180,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
       }
     }
 #else
-#  ifdef ADAPT_BATCH
     rpc_handler_thread.join();
-#  endif // ADAPT_BATCH
 
 #  ifdef CORE_PIPE
 #    ifdef INDEXER
