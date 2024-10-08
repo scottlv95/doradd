@@ -6,6 +6,7 @@ set(SNMALLOC_PATH "../external/snmalloc/")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+add_compile_options(-Wno-pointer-arith)
 
 # Release Build
 if(CMAKE_BUILD_TYPE MATCHES Release)
