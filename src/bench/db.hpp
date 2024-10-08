@@ -1,10 +1,8 @@
 #pragma once
 
-#include <unordered_map>
-#include <optional>
-#include <cpp/when.h>
-
 #include "constants.hpp"
+
+#include <cpp/when.h>
 
 using namespace verona::rt;
 using namespace verona::cpp;
