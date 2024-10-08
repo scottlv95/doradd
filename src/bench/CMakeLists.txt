@@ -5,6 +5,7 @@ set(VERONA_PATH "../external/verona-rt-scofield")
 set(SNMALLOC_PATH "../external/snmalloc/")
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Release Build
 if(CMAKE_BUILD_TYPE MATCHES Release)
