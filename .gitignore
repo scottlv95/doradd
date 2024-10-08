@@ -6,3 +6,4 @@ scripts/*.txt
 *.txt
 *.log
 *.out
+*.idx
