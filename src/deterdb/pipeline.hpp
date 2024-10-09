@@ -146,8 +146,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     });
 
     // flush latency logs
-#ifdef LOG_LATENCY
-    std::this_thread::sleep_for(std::chrono::seconds(200));
+    std::this_thread::sleep_for(std::chrono::seconds(20));
 #  ifdef CORE_PIPE
     pthread_cancel(spawner_thread.native_handle());
     pthread_cancel(prefetcher_thread.native_handle());
@@ -160,6 +159,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
     pthread_cancel(rpc_handler_thread.native_handle());
 
+    #ifdef LOG_LATENCY
     for (const auto& entry : *log_map)
     {
       printf("flush entry --ing\n");
@@ -179,20 +179,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 #  endif // LOG_SCHED_OHEAD
       }
     }
-#else
-    rpc_handler_thread.join();
-
-#  ifdef CORE_PIPE
-#    ifdef INDEXER
-    indexer_thread.join();
-#    endif
-    prefetcher_thread.join();
-    spawner_thread.join();
-#  else
-    extern_thrd.join();
-#  endif // CORE_PIPE
-
-#endif // LOG_LATENCY
+         #endif
 
     // sched.remove_external_event_source();
   };
