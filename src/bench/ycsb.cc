@@ -158,11 +158,11 @@ Index<YCSBRow>* YCSBTransaction::index;
 
 int main(int argc, char** argv)
 {
-  if (argc != 8 || strcmp(argv[1], "-n") != 0 || strcmp(argv[3], "-l") != 0)
+  if (argc != 6 || strcmp(argv[1], "-n") != 0)
   {
     fprintf(
       stderr,
-      "Usage: ./program -n core_cnt -l look_ahead"
+      "Usage: ./program -n core_cnt"
       " <dispatcher_input_file> -i <inter_arrival>\n");
     return -1;
   }
@@ -170,9 +170,6 @@ int main(int argc, char** argv)
   uint8_t core_cnt = atoi(argv[2]);
   uint8_t max_core = std::thread::hardware_concurrency();
   assert(1 < core_cnt && core_cnt <= max_core);
-
-  size_t look_ahead = atoi(argv[4]);
-  assert(8 <= look_ahead && look_ahead <= 128);
 
   // Create rows (cowns) with huge pages and via static allocation
   YCSBTransaction::index = new Index<YCSBRow>;
@@ -192,5 +189,5 @@ int main(int argc, char** argv)
     YCSBTransaction::index->insert_row(cown_r);
   }
 
-  build_pipelines<YCSBTransaction>(core_cnt - 1, argv[5], argv[7]);
+  build_pipelines<YCSBTransaction>(core_cnt - 1, argv[3], argv[5]);
 }
