@@ -1,15 +1,16 @@
 #include "zipfian_random.h"
+
+#include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstring>
-#include <array>
-#include <vector>
-#include <algorithm>
-#include <random>
-#include <iterator>
 #include <fstream>
+#include <iterator>
+#include <random>
+#include <vector>
 
-#define ROW_COUNT  10'000'000
-#define TX_COUNT   1'000'000 // 4M for Caracal
+#define ROW_COUNT 10'000'000
+#define TX_COUNT 1'000'000 // 4M for Caracal
 #define ROW_PER_TX 10
 #define NrMSBContentionKey 6
 
@@ -21,21 +22,27 @@ std::array<uint32_t, ROW_PER_TX> gen_keys(Rand* r, int contention)
 {
   int nr_lsb = 63 - __builtin_clzll(ROW_COUNT) - NrMSBContentionKey;
   size_t mask = 0;
-  if (nr_lsb > 0) mask = (1 << nr_lsb) - 1;
+  if (nr_lsb > 0)
+    mask = (1 << nr_lsb) - 1;
 
   int NrContKey = 0;
-  if (contention) NrContKey = 7;
+  if (contention)
+    NrContKey = 7;
 
   std::array<uint32_t, ROW_PER_TX> keys;
-  for (int i = 0; i < ROW_PER_TX; i++) {
- again:
+  for (int i = 0; i < ROW_PER_TX; i++)
+  {
+  again:
     keys[i] = r->next() % ROW_COUNT;
     // if branch below skip the idx-0, i.e., the most contended key
-    // since "& mask" will opt it out, thus keys are [1, 10M-1] 
+    // since "& mask" will opt it out, thus keys are [1, 10M-1]
     // To stay consistent w/ Caracal, we keep these here.
-    if (i < NrContKey) {
+    if (i < NrContKey)
+    {
       keys[i] &= ~mask;
-    } else {
+    }
+    else
+    {
       if ((keys[i] & mask) == 0)
         goto again;
     }
@@ -47,9 +54,9 @@ std::array<uint32_t, ROW_PER_TX> gen_keys(Rand* r, int contention)
   return keys;
 }
 
-uint16_t gen_write_set(int contention) 
+uint16_t gen_write_set(int contention)
 {
-  // Set 0:10 read-write ratio for contented workloads
+  // Set 0:10 read-write ratio for contended workloads
   if (contention)
     return static_cast<uint16_t>((1 << 10) - 1);
 
@@ -68,13 +75,13 @@ uint16_t gen_write_set(int contention)
 void gen_bin_txn(Rand* rand, std::ofstream* f, int contention)
 {
   auto keys = gen_keys(rand, contention);
-  auto ws   = gen_write_set(contention);
+  auto ws = gen_write_set(contention);
   int padding = 86;
 
   // pack
-  for (const uint32_t& key : keys) 
+  for (const uint32_t& key : keys)
   {
-    for (size_t i = 0; i < sizeof(uint32_t); i++) 
+    for (size_t i = 0; i < sizeof(uint32_t); i++)
     {
       uint8_t byte = (key >> (i * 8)) & 0xFF;
       f->write(reinterpret_cast<const char*>(&byte), sizeof(uint8_t));
@@ -82,7 +89,7 @@ void gen_bin_txn(Rand* rand, std::ofstream* f, int contention)
   }
 
   f->write(reinterpret_cast<const char*>(&ws), sizeof(uint16_t));
-  
+
   for (int i = 0; i < padding; i++)
   {
     uint8_t zeroByte = 0x00;
@@ -90,7 +97,7 @@ void gen_bin_txn(Rand* rand, std::ofstream* f, int contention)
   }
 }
 
-int main(int argc, char** argv) 
+int main(int argc, char** argv)
 {
   if (argc != 5 || strcmp(argv[1], "-d") != 0 || strcmp(argv[3], "-c") != 0)
   {
@@ -98,7 +105,7 @@ int main(int argc, char** argv)
     return -1;
   }
 
-  double zipf_s = 0; 
+  double zipf_s = 0;
   if (!strcmp(argv[2], "zipfian"))
   {
     zipf_s = 0.9;
@@ -111,8 +118,8 @@ int main(int argc, char** argv)
   if (!strcmp(argv[4], "cont"))
   {
     contention = 1;
-    printf("generating w/ contented accesses\n");
-  } 
+    printf("generating w/ contended accesses\n");
+  }
   else
   {
     printf("generating w/ No contended accesses\n");
@@ -131,7 +138,7 @@ int main(int argc, char** argv)
   uint32_t count = TX_COUNT;
   outLog.write(reinterpret_cast<const char*>(&count), sizeof(uint32_t));
 
-  for (int i = 0; i < TX_COUNT; i++) 
+  for (int i = 0; i < TX_COUNT; i++)
   {
     gen_bin_txn(&rand, &outLog, contention);
   }
