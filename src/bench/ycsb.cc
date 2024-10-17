@@ -24,11 +24,7 @@
 #ifdef LOG_LATENCY
 #  define M_LOG_LATENCY() \
     { \
-      auto time_now = std::chrono::system_clock::now(); \
-      std::chrono::duration<double> duration = time_now - init_time; \
-      uint32_t log_duration = \
-        static_cast<uint32_t>(duration.count() * 1'000'000); \
-      TxCounter::instance().log_latency(log_duration); \
+      TxCounter::instance().log_latency(init_time); \
       TxCounter::instance().incr(); \
     }
 #else

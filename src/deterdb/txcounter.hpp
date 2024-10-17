@@ -9,6 +9,7 @@
 extern std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 extern std::unordered_map<std::thread::id, log_arr_type*>* log_map;
 extern std::mutex* counter_map_mutex;
+const int SAMPLE_RATE = 10;
 
 /* Thread-local singleton TxCounter */
 struct TxCounter
@@ -31,9 +32,17 @@ struct TxCounter
     log_arr->push_back({exec_time, txn_time});
   }
 #  else
-  void log_latency(uint32_t exec_time)
+  void log_latency(ts_type init_time)
   {
-    log_arr->push_back(exec_time);
+    if (tx_cnt % SAMPLE_RATE == 0)
+    {
+      auto time_now = std::chrono::system_clock::now();
+      std::chrono::duration<double> duration = time_now - init_time;
+      uint32_t log_duration =
+        static_cast<uint32_t>(duration.count() * 1'000'000);
+
+      log_arr->push_back(log_duration);
+    }
   }
 #  endif
 #endif
