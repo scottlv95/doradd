@@ -175,7 +175,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
             std::get<1>(value_tuple));
 #  else
         for (auto value : *(entry.second))
-          fprintf(res_log_fd, "%lu\n", value);
+          fprintf(res_log_fd, "%u\n", value);
 #  endif // LOG_SCHED_OHEAD
       }
     }
