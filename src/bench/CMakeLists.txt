@@ -25,6 +25,8 @@ if(CMAKE_BUILD_TYPE MATCHES Debug)
 endif()
 
 find_package(Threads REQUIRED)
+
+# YCSB
 add_executable(ycsb ycsb.cc)
 add_compile_definitions(PREFETCH)
 add_compile_definitions(CORE_PIPE)
@@ -44,3 +46,21 @@ target_compile_definitions(ycsb PRIVATE -DSNMALLOC_CHEAP_CHECKS)
 target_compile_definitions(ycsb PRIVATE -DACQUIRE_ALL)
 target_link_libraries(ycsb PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(ycsb PRIVATE atomic)
+
+# TPCC
+add_executable(tpcc tpcc.cc)
+# add_compile_definitions(PREFETCH)
+# add_compile_definitions(CORE_PIPE)
+# add_compile_definitions(INDEXER)
+add_compile_definitions(SINGLE_TABLE)
+#add_compile_definitions(WAREHOUSE_SPLIT)
+
+target_include_directories(tpcc PRIVATE ../lancet)
+target_include_directories(tpcc PRIVATE ../deterdb)
+target_include_directories(tpcc PRIVATE ${VERONA_PATH}/src/rt)
+target_include_directories(tpcc PRIVATE ${SNMALLOC_PATH}/src)
+target_compile_options(tpcc PRIVATE -mcx16 -march=native)
+target_compile_definitions(tpcc PRIVATE -DSNMALLOC_CHEAP_CHECKS)
+target_compile_definitions(tpcc PRIVATE -DACQUIRE_ALL)
+target_link_libraries(tpcc PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(tpcc PRIVATE atomic)

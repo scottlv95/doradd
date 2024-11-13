@@ -343,11 +343,7 @@ public:
       index->new_order_table.insert_row( \
         neworder_hash_key, std::move(no_cown)); \
       TxCounter::instance().incr(); \
-      auto time_now = std::chrono::system_clock::now(); \
-      std::chrono::duration<double> duration = time_now - init_time; \
-      uint32_t log_duration = \
-        static_cast<uint32_t>(duration.count() * 1'000'000); \
-      TxCounter::instance().log_latency(log_duration); \
+      TxCounter::instance().log_latency(init_time); \
     }
 #else
 #  define NEWORDER_END() \
@@ -1271,11 +1267,7 @@ public:
         _c->c_payment_cnt += 1;
 
 #ifdef LOG_LATENCY
-        auto time_now = std::chrono::system_clock::now();
-        std::chrono::duration<double> duration = time_now - init_time;
-        uint32_t log_duration =
-          static_cast<uint32_t>(duration.count() * 1'000'000);
-        TxCounter::instance().log_latency(log_duration);
+        TxCounter::instance().log_latency(init_time);
 #endif
         TxCounter::instance().incr();
       };
