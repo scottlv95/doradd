@@ -6,18 +6,18 @@
 #include <thread>
 
 #define GET_COWN(_INDEX) \
-  auto&& row##_INDEX = get_cown_ptr_from_addr<Row<YCSBRow>>( \
+  auto&& row##_INDEX = get_cown_ptr_from_addr<YCSBRow>( \
     reinterpret_cast<void*>(txm->cown_ptrs[_INDEX]));
 #define GET_ROW(_INDEX) \
   auto&& row##_INDEX = index->get_row(txm->indices[_INDEX]);
 #define TXN(_INDEX) \
   { \
     if (write_set_l & 0x1) \
-      memset(&acq_row##_INDEX->val, sum, WRITE_SIZE); \
+      memset(acq_row##_INDEX->payload, sum, WRITE_SIZE); \
     else \
     { \
       for (int j = 0; j < ROW_SIZE; j++) \
-        sum += acq_row##_INDEX->val.payload[j]; \
+        sum += acq_row##_INDEX->payload[j]; \
     } \
     write_set_l >>= 1; \
   }
@@ -72,7 +72,7 @@ public:
 
     for (int i = 0; i < ROWS_PER_TX; i++)
       __builtin_prefetch(
-        reinterpret_cast<const void*>(txm->cown_ptrs[i] + 32), 1, 3);
+        reinterpret_cast<const void*>(txm->cown_ptrs[i]), 1, 3);
 
     return sizeof(YCSBTransactionMarshalled);
   }
@@ -112,7 +112,7 @@ public:
     GET_ROW(9);
 #endif
 
-    using AcqType = acquired_cown<Row<YCSBRow>>;
+    using AcqType = acquired_cown<YCSBRow>;
 #ifdef RPC_LATENCY
     when(row0, row1, row2, row3, row4, row5, row6, row7, row8, row9)
       << [ws_cap, init_time]
@@ -175,7 +175,7 @@ int main(int argc, char** argv)
 
   for (int i = 0; i < DB_SIZE; i++)
   {
-    cown_ptr<Row<YCSBRow>> cown_r = make_cown_custom<Row<YCSBRow>>(
+    cown_ptr<YCSBRow> cown_r = make_cown_custom<YCSBRow>(
       reinterpret_cast<void*>(cown_arr_addr + (uint64_t)1024 * i));
 
     if (i > 0)
