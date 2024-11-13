@@ -463,7 +463,6 @@ struct Spawner
   {
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
     read_top += sizeof(uint32_t);
-    printf("read_count in spawner is %d\n", read_count);
     read_head = read_top;
     prepare_read_head = read_top;
     last_tx_exec_sum = 0;

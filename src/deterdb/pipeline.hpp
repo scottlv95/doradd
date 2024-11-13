@@ -160,10 +160,9 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     pthread_cancel(rpc_handler_thread.native_handle());
 
 #ifdef LOG_LATENCY
+    printf("flush latency stats\n");
     for (const auto& entry : *log_map)
     {
-      printf("flush entry --ing\n");
-      fprintf(res_log_fd, "flush entry --ing\n");
       if (entry.second)
       {
 #  ifdef LOG_SCHED_OHEAD

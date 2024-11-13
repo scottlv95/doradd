@@ -118,7 +118,7 @@ void* aligned_alloc_hpage_fd(int fd)
   }
 
   memcpy(buf, src, strlen(src));
-  printf("all good at huge_page alloc\n");
+  printf("allocated huge pages\n");
 
   munmap(src_begin, src_sz);
   return buf_begin;
@@ -142,6 +142,6 @@ void* aligned_alloc_hpage(size_t sz)
     check_huge_page(buf);
     buf += HPAGE_SIZE;
   }
-  printf("all good at huge_page alloc\n");
+  printf("allocated huge pages\n");
   return buf_begin;
 }
