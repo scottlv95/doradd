@@ -4,6 +4,8 @@ set -Eeuo pipefail
 trap cleanup SIGINT SIGTERM ERR EXIT
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+src_dir=$script_dir/../../src/bench/
+build_dir=$src_dir/build
 
 usage() {
   cat <<EOF
@@ -72,11 +74,11 @@ parse_params() {
   # check required params and arguments
   [[ -z "${contention-}" ]] && die "Missing required parameter: contention"
   case "$contention" in
-    "no" | "mid" | "high" | "split")
+    "no" | "mod" | "high" | "split")
         # echo "contention: $contention"
         ;;
     *)
-        echo "Error: Invalid parameter. It must be 'no', 'mid', 'high', or 'split'."
+        echo "Error: Invalid parameter. It must be 'no', 'mod', 'high', or 'split'."
         exit 1
         ;;
   esac
@@ -103,20 +105,26 @@ check_pattern() {
 split_txn_setup() {
   # Uncomment WAREHOUSE_SPLIT macro to enable dorad-split
 
-  local file="../CMakeLists.txt"
+  local file="${src_dir}/CMakeLists.txt"
   local pattern="#add_compile_definitions(WAREHOUSE_SPLIT)"
-  local line_number=59
+  local line_number=56
 
   check_pattern $line_number $file $pattern
 
   # Modify the line by removing a '#' at the beginning
   sed -i "${line_number}s/^#//" "$file"
-  ninja
+  cd ${build_dir} && ninja
 }
+
+check_cmake_build() {
+  mkdir -p $build_dir && cd $build_dir
+  cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DRPC_LATENCY -DLOG_LATENCY"
+  ninja
+} 
 
 contention_setup() {
   # config warehouse cnts and replayed logs
-  local file="../tpcc/constants.hpp"
+  local file="${src_dir}/tpcc/constants.hpp"
   local pattern="const uint32_t NUM_WAREHOUSES = *"
   local line_number=9
 
@@ -138,8 +146,8 @@ contention_setup() {
       set_warehouse 23
       set_tbl_size 1
       ;;
-    "mid" )
-      msg "mid contention"
+    "mod" )
+      msg "mod contention"
       set_warehouse 8
       set_tbl_size 2
       ;;
@@ -155,7 +163,8 @@ contention_setup() {
       split_txn_setup
       ;;
  esac
-  ninja
+  check_cmake_build 
+  cd ${build_dir} && ninja
 }
 
 contention_setup

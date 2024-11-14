@@ -11,7 +11,10 @@ def read_data(file_path):
                 throughput.append(int(float(value)))
                 continue
             latency.append((int(count), int(value)))
-    return latency, int(statistics.mean(throughput[1:])) # filter the first printed out throughput
+    final_throughput = 0
+    if throughput:
+        final_throughput = int(statistics.mean(throughput[1:]))  # filter the first printed out throughput
+    return latency, final_throughput
 
 def calculate_cdf(data):
     total_count = sum(count for count, _ in data)
@@ -33,6 +36,11 @@ def calculate_percentiles(cdf):
     return get_percentile(cdf, 0.99)
 
 if __name__ == "__main__":
-   latency_data, throughput = read_data(sys.argv[1])
-   cdf = calculate_cdf(latency_data)
-   print(calculate_percentiles(cdf), throughput)
+    latency_data, throughput = read_data(sys.argv[1])
+    latency = 0
+    if throughput == 0:
+        latency = 10000000; # overloaded
+    else:
+        cdf = calculate_cdf(latency_data)
+        latency = calculate_percentiles(cdf)
+    print(latency, throughput)

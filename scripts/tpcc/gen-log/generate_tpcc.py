@@ -9,7 +9,7 @@ from scaleparameters import ScaleParameters, makeWithScaleFactor
 from datetime import datetime
 import binascii
 
-TX_COUNT = 3200
+TX_COUNT = 1000000
 
 def makeWarehouseId(scaleParameters: ScaleParameters):
     w_id = rand.number(scaleParameters.starting_warehouse, scaleParameters.ending_warehouse)
