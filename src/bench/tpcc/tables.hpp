@@ -47,7 +47,7 @@ public:
     }
     else
     {
-      printf("DB is %lu\n", DB_SIZE);
+      //printf("DB is %lu\n", DB_SIZE);
       throw std::out_of_range("Index is full");
     }
   }
