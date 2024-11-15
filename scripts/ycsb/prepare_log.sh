@@ -1,7 +1,9 @@
 #!/bin/bash
 
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+
 # Directory and source file
-src_cc="generate_ycsb_zipf.cc"
+src_cc="${script_dir}/generate_ycsb_zipf.cc"
 cc_cmd="g++ -O3 ${src_cc}"
 
 # Log file names
@@ -19,14 +21,14 @@ generate_log() {
     # Check if the file already exists
     if [ ! -f "$output_file" ]; then
         echo "Generating $output_file..."
-        
+
         # Adjust NrContKey based on the hot_keys parameter
         sed -i '30s/\(NrContKey = \)[0-9]\(;\)/\1'"$hot_keys"'\2/' $src_cc
-        
+
         # Compile and run the generator
         $cc_cmd
         ./a.out -d "$distribution" -c "$contention"
-        
+
         # Rename the output file
         mv ycsb_uniform_cont.txt "$output_file"
     else
