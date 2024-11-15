@@ -1,8 +1,8 @@
 # compile the binary
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
-log_dir=${script_dir}/zipf
+log_dir=${script_dir}
 
-cd ${script_dir}/../src/bench/
+cd ${script_dir}/../../src/bench/
 mkdir -p build && cd build
 
 mkdir -p results # collect latency
@@ -14,7 +14,7 @@ for cont in "no" "mod" "high"; do
   final_result="$(pwd)/${cont}_cont.res"
   rm -f ${final_result}
 
-  for i in 4000 2000 1000 800 600 400 350 300 280 250 220 200; do
+  for i in 4000 2000 1000 800 600 400 350 300 280 250 220 200 180 160; do
     log="$log_dir/ycsb_uniform_${cont}_cont.txt"
     ia="exp:$i"
 
@@ -28,8 +28,10 @@ for cont in "no" "mod" "high"; do
 
     cat $log_name | sort -n | uniq -c > $agg_log
 
-    python $script_dir/latency-throughput.py $agg_log >> $final_result
+    python $script_dir/../latency-throughput.py $agg_log >> $final_result
 
     cd ../
   done
 done
+
+echo "Finished all ycsb experiments"
