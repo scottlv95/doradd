@@ -17,7 +17,7 @@ check_no_split() {
   local file="${src_dir}/CMakeLists.txt"
   local pattern="add_compile_definitions(WAREHOUSE_SPLIT)"
   local comment_pattern="#add_compile_definitions(WAREHOUSE_SPLIT)"
-  local line_number=56
+  local line_number=66
 
   # Check if the line is already commented
   if sed -n "${line_number}p" "$file" | grep -qF "$comment_pattern"; then
@@ -81,3 +81,5 @@ run_all() {
 }
 
 run_all
+
+echo "Finished all tpcc experiments"

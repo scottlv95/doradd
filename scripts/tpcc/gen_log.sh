@@ -5,7 +5,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 gen_script=$script_dir/gen-log
 
 # Create the log directory if it doesn't exist
-mkdir -p input-log
+mkdir -p $script_dir/input-log
 final_log=$script_dir/input-log
 
 # Function to generate logs if they don't already exist

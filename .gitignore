@@ -8,3 +8,5 @@ scripts/*.txt
 *.out
 *.idx
 *.res
+
+src/bench/tpcc_gen.cc

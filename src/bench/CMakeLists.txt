@@ -4,7 +4,7 @@ project(deterdb-bench CXX)
 set(VERONA_PATH "../external/verona-rt-scofield")
 set(SNMALLOC_PATH "../external/snmalloc/")
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_compile_options(-Wno-pointer-arith)
 
@@ -47,8 +47,18 @@ target_compile_definitions(ycsb PRIVATE -DACQUIRE_ALL)
 target_link_libraries(ycsb PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(ycsb PRIVATE atomic)
 
+add_custom_command(
+  OUTPUT ${CMAKE_SOURCE_DIR}/tpcc_gen.cc
+  COMMAND m4 ${CMAKE_SOURCE_DIR}/tpcc_macros.m4 ${CMAKE_SOURCE_DIR}/tpcc.cc > ${CMAKE_SOURCE_DIR}/tpcc_gen.cc
+  DEPENDS ${CMAKE_SOURCE_DIR}/tpcc_macros.m4 ${CMAKE_SOURCE_DIR}/tpcc.cc
+  COMMENT "Generating tpcc_gen.cc"
+  VERBATIM
+)
+
 # TPCC
-add_executable(tpcc tpcc.cc)
+add_executable(tpcc ${CMAKE_SOURCE_DIR}/tpcc_gen.cc)
+
+
 # add_compile_definitions(PREFETCH)
 # add_compile_definitions(CORE_PIPE)
 # add_compile_definitions(INDEXER)
