@@ -107,7 +107,7 @@ split_txn_setup() {
 
   local file="${src_dir}/CMakeLists.txt"
   local pattern="#add_compile_definitions(WAREHOUSE_SPLIT)"
-  local line_number=56
+  local line_number=66
 
   check_pattern $line_number $file $pattern
 
@@ -120,7 +120,7 @@ check_cmake_build() {
   mkdir -p $build_dir && cd $build_dir
   cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DRPC_LATENCY -DLOG_LATENCY"
   ninja
-} 
+}
 
 contention_setup() {
   # config warehouse cnts and replayed logs
@@ -163,7 +163,7 @@ contention_setup() {
       split_txn_setup
       ;;
  esac
-  check_cmake_build 
+  check_cmake_build
   cd ${build_dir} && ninja
 }
 
