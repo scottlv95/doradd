@@ -3,8 +3,8 @@
 #include <algorithm>
 
 #include "core.hpp"
-#include "../../deterdb/pin-thread.hpp"
-#include "../../deterdb/hugepage.hpp"
+#include "../../doradd/pin-thread.hpp"
+#include "../../doradd/hugepage.hpp"
 
 template<typename TxnType>
 void runPipeline(size_t cnt, char* read_head, int read_cnt)
