@@ -10,7 +10,7 @@ define(`__GENERATE_ITEM_MACROS', `ifelse(`$1', `1',
 `#define GET_COWN_PTR_ITEM_1() auto&& i1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[18]));',
 `__GENERATE_ITEM_MACROS(decr($1))
 #define GET_COWN_PTR_ITEM_$1() \
-  GET_COWN_PTR_ITEM_'decr($1)`() auto&& i$1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[eval(18+$1)]));')')
+  GET_COWN_PTR_ITEM_'decr($1)`() auto&& i$1 = get_cown_ptr_from_addr<Item>(reinterpret_cast<void*>(txm->cown_ptrs[eval(17+$1)]));')')
 
 define(`__GENERATE_UPDATE_STOCK_OL_MACROS', `ifelse(`$1', `1',
 `#define UPDATE_STOCK_AND_OL1() UPDATE_STOCK_AND_INSERT_ORDER_LINE(1)',
