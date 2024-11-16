@@ -25,7 +25,7 @@ sudo apt-get update
 sudo apt-get install -y pkg-config libssl-dev clang libclang-dev build-essential ninja-build cmake
 ```
 
-3. build the YCSB and TPCC-NP benchmark
+3. Build the YCSB and TPCC-NP benchmark
 
 ```
 cd src/bench/
@@ -60,6 +60,3 @@ sudo "$BUILD_DIR/ycsb" -n 8 "$SCRIPT_DIR/ycsb/ycsb_uniform_no_cont.txt" -i exp:4
 cd "$SCRIPT_DIR"/tpcc && ./prepare_log.sh # Prepare the input logs
 sudo "$BUILD_DIR/ycsb" -n 8 "$SCRIPT_DIR/tpcc/input-log/tpcc_no_cont.txt" -i exp:4000
 ```
-
-
-To enable latency logging, add `-DCMAKE_CXX_FLAGS="-DRPC_LATENCY -DLOG_LATENCY"` at building.
