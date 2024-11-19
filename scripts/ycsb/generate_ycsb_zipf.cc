@@ -128,12 +128,9 @@ int main(int argc, char** argv)
   Rand rand;
   rand.init(ROW_COUNT, zipf_s, 1238);
 
-  char log_name[25];
-  strcat(log_name, "ycsb_");
-  strcat(log_name, argv[2]);
-  strcat(log_name, "_");
-  strcat(log_name, argv[4]);
-  strcat(log_name, ".txt");
+  char log_name[50];
+  snprintf(log_name, sizeof(log_name), "ycsb_%s_%s.txt", argv[2], argv[4]);
+  
   std::ofstream outLog(log_name, std::ios::binary);
   uint32_t count = TX_COUNT;
   outLog.write(reinterpret_cast<const char*>(&count), sizeof(uint32_t));
