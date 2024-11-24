@@ -42,7 +42,7 @@ run_one() {
   local one_log_path="$script_dir/stats/tpcc_${cont}_cont.res"
   rm -f $one_log_path
 
-  ./setup.sh -c $cont
+  ${script_dir}/setup.sh -c $cont
   if [[ "$cont" == "split" ]]; then
     cont="high"
   fi
