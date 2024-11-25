@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.8)
 project(doradd-bench CXX)
 
-set(VERONA_PATH "../external/verona-rt-scofield")
+set(VERONA_PATH "../external/verona-rt")
 set(SNMALLOC_PATH "../external/snmalloc/")
 
 set(CMAKE_CXX_STANDARD 20)
