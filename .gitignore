@@ -1,5 +1,5 @@
-src/bench/build/
-src/bench/build-dbg/
+app/build/
+app/build-dbg/
 scripts/*.txt
 
 *.swp
@@ -9,6 +9,6 @@ scripts/*.txt
 *.idx
 *.res
 
-src/bench/tpcc_gen.cc
+app/tpcc_gen.cc
 
-src/bench/pipeline-profile/pipeline
+app/pipeline-profile/pipeline
