@@ -4,6 +4,7 @@
 #include "dispatcher.hpp"
 #include "pin-thread.hpp"
 #include "rpc_handler.hpp"
+#include "SPSCQueue.h"
 
 #include <thread>
 #include <unordered_map>

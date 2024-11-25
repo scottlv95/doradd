@@ -46,6 +46,7 @@ target_compile_definitions(ycsb PRIVATE -DSNMALLOC_CHEAP_CHECKS)
 target_compile_definitions(ycsb PRIVATE -DACQUIRE_ALL)
 target_link_libraries(ycsb PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(ycsb PRIVATE atomic)
+target_include_directories(ycsb PRIVATE ../external/SPSCQueue/include/rigtorp)
 
 add_custom_command(
   OUTPUT ${CMAKE_SOURCE_DIR}/tpcc_gen.cc
@@ -74,3 +75,4 @@ target_compile_definitions(tpcc PRIVATE -DSNMALLOC_CHEAP_CHECKS)
 target_compile_definitions(tpcc PRIVATE -DACQUIRE_ALL)
 target_link_libraries(tpcc PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(tpcc PRIVATE atomic)
+target_include_directories(tpcc PRIVATE ../external/SPSCQueue/include/rigtorp)

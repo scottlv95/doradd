@@ -2,8 +2,8 @@
 
 #include "config.hpp"
 #include "hugepage.hpp"
-#include "spscq.hpp"
 #include "warmup.hpp"
+#include "SPSCQueue.h"
 
 #include <cassert>
 #include <fcntl.h>
