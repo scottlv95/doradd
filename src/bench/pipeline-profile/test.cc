@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Original setup
-    int ent_cnt = 10'000;
+    int ent_cnt = 1'000;
     uint8_t* read_head = static_cast<uint8_t*>(aligned_alloc_hpage(
         ent_cnt * sizeof(TxnMarshalled)));
 

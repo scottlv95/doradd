@@ -10,3 +10,5 @@ scripts/*.txt
 *.res
 
 src/bench/tpcc_gen.cc
+
+src/bench/pipeline-profile/pipeline
