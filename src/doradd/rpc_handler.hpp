@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../lancet/inter_arrival.hpp"
+#include "../request-inter-arrival/inter_arrival.hpp"
 
 #include <atomic>
 #include <cassert>
