@@ -13,22 +13,23 @@ deterministic databases scale efficiently via bypassing the need of two-phase co
 
 1. Clone and pull the submodules
 ```
-git clone https://github.com/Scofield626/doradd
+git clone https://github.com/doradd-rt/doradd
 cd doradd
 git submodule update --init
 ```
 
-2. Install dependencies on Linux (tested on Ubuntu 20.04)
+2. Install dependencies on Linux (tested on Ubuntu 22.04)
 
 ```
 sudo apt-get update
-sudo apt-get install -y pkg-config libssl-dev clang libclang-dev build-essential ninja-build cmake
+sudo apt-get install -y pkg-config libssl-dev clang libclang-dev build-essential ninja-build cmake cpufrequtils htop python3-pip
+pip install numpy
 ```
 
 3. Build the YCSB and TPCC-NP benchmark
 
 ```
-cd src/bench/
+cd app/
 mkdir -p build && cd build
 mkdir -p results # collect stats
 cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DRPC_LATENCY -DLOG_LATENCY"
@@ -37,18 +38,17 @@ ninja
 
 ## Example workloads
 
-Change to the root dir and use the following directory variables
-```
-PROJECT_ROOT=$(pwd)
-SCRIPT_DIR="$PROJECT_ROOT/scripts/"
-BUILD_DIR="$PROJECT_ROOT/src/bench/build"
-```
-
 ### 1. YCSB
 
 ```
-cd "$SCRIPT_DIR"/ycsb && ./prepare_log.sh # Prepare the input logs
-sudo "$BUILD_DIR/ycsb" -n 8 "$SCRIPT_DIR/ycsb/ycsb_uniform_no_cont.txt" -i exp:4000
+# prepare the input log
+pushd app/ycsb/gen-log
+g++ -o generator -O3 generate_ycsb_zipf.cc 
+./generator -d uniform -c no_cont
+popd
+
+# run
+sudo app/build/ycsb -n 8 app/ycsb/gen-log/ycsb_uniform_no_cont.txt -i exp:4000
 
 # -n: core counts
 # -i: the request arrival pattern (fixed or exponential) and interval (in nanoseconds) 
@@ -57,6 +57,11 @@ sudo "$BUILD_DIR/ycsb" -n 8 "$SCRIPT_DIR/ycsb/ycsb_uniform_no_cont.txt" -i exp:4
 ### 2. TPCC-NP
 
 ```
-cd "$SCRIPT_DIR"/tpcc && ./prepare_log.sh # Prepare the input logs
-sudo "$BUILD_DIR/ycsb" -n 8 "$SCRIPT_DIR/tpcc/input-log/tpcc_no_cont.txt" -i exp:4000
+# prepare the input log
+pushd app/tpcc/gen-log
+python generate_tpcc.py --warehouses 23 
+popd
+
+# run
+sudo app/build/tpcc" -n 8 app/tpcc/gen-log/tpcc.txt -i exp:4000
 ```
