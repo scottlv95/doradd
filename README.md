@@ -63,5 +63,5 @@ python generate_tpcc.py --warehouses 23
 popd
 
 # run
-sudo app/build/tpcc" -n 8 app/tpcc/gen-log/tpcc.txt -i exp:4000
+sudo app/build/tpcc -n 8 app/tpcc/gen-log/tpcc.txt -i exp:4000
 ```
