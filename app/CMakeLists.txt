@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.8)
 project(doradd-bench CXX)
 
-set(VERONA_PATH "../src/external/verona-rt")
-set(SNMALLOC_PATH "../src/external/snmalloc/")
+set(VERONA_PATH "../external/verona-rt")
+set(SNMALLOC_PATH "../external/snmalloc/")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -46,7 +46,7 @@ target_compile_definitions(ycsb PRIVATE -DSNMALLOC_CHEAP_CHECKS)
 target_compile_definitions(ycsb PRIVATE -DACQUIRE_ALL)
 target_link_libraries(ycsb PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(ycsb PRIVATE atomic)
-target_include_directories(ycsb PRIVATE ../src/external/SPSCQueue/include/rigtorp)
+target_include_directories(ycsb PRIVATE ../external/SPSCQueue/include/rigtorp)
 
 add_custom_command(
   OUTPUT ${CMAKE_SOURCE_DIR}/tpcc_gen.cc
@@ -75,4 +75,4 @@ target_compile_definitions(tpcc PRIVATE -DSNMALLOC_CHEAP_CHECKS)
 target_compile_definitions(tpcc PRIVATE -DACQUIRE_ALL)
 target_link_libraries(tpcc PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(tpcc PRIVATE atomic)
-target_include_directories(tpcc PRIVATE ../src/external/SPSCQueue/include/rigtorp)
+target_include_directories(tpcc PRIVATE ../external/SPSCQueue/include/rigtorp)

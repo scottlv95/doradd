@@ -1,9 +1,9 @@
-[submodule "src/external/snmalloc"]
-	path = src/external/snmalloc
-	url = https://github.com/microsoft/snmalloc.git
-[submodule "src/external/SPSCQueue"]
-	path = src/external/SPSCQueue
+[submodule "external/SPSCQueue"]
+	path = external/SPSCQueue
 	url = https://github.com/rigtorp/SPSCQueue.git
-[submodule "src/external/verona-rt"]
-	path = src/external/verona-rt
-	url = https://github.com/doradd-rt/verona-rt
+[submodule "external/snmalloc"]
+	path = external/snmalloc
+	url = https://github.com/microsoft/snmalloc.git
+[submodule "external/verona-rt"]
+	path = external/verona-rt
+	url = https://github.com/doradd-rt/verona-rt.git
