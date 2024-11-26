@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../request-inter-arrival/inter_arrival.hpp"
+#include "../misc/inter_arrival.hpp"
 
 #include <atomic>
 #include <cassert>
