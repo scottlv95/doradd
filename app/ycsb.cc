@@ -1,5 +1,5 @@
-#include "constants.hpp"
-#include "db.hpp"
+#include "ycsb/constants.hpp"
+#include "ycsb/db.hpp"
 #include "pipeline.hpp"
 #include "txcounter.hpp"
 

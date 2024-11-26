@@ -13,7 +13,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define fail(...) \
+#define localFail(...) \
   do \
   { \
     fprintf(stderr, __VA_ARGS__); \
@@ -37,12 +37,12 @@ static void check_huge_page(void* ptr)
   int pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
   if (pagemap_fd < 0)
   {
-    fail("could not open /proc/self/pagemap: %s", strerror(errno));
+    localFail("could not open /proc/self/pagemap: %s", strerror(errno));
   }
   int kpageflags_fd = open("/proc/kpageflags", O_RDONLY);
   if (kpageflags_fd < 0)
   {
-    fail("could not open /proc/kpageflags: %s", strerror(errno));
+    localFail("could not open /proc/kpageflags: %s", strerror(errno));
   }
 
   // each entry is 8 bytes long
@@ -51,16 +51,16 @@ static void check_huge_page(void* ptr)
     pread(pagemap_fd, &ent, sizeof(ent), ((uintptr_t)ptr) / PAGE_SIZE * 8) !=
     sizeof(ent))
   {
-    fail("could not read from pagemap\n");
+    localFail("could not read from pagemap\n");
   }
 
   if (!PAGEMAP_PRESENT(ent))
   {
-    fail("page not present in /proc/self/pagemap, did you allocate it?\n");
+    localFail("page not present in /proc/self/pagemap, did you allocate it?\n");
   }
   if (!PAGEMAP_PFN(ent))
   {
-    fail("page frame number not present, run this program as root\n");
+    localFail("page frame number not present, run this program as root\n");
   }
 
   uint64_t flags;
@@ -68,21 +68,21 @@ static void check_huge_page(void* ptr)
     pread(kpageflags_fd, &flags, sizeof(flags), PAGEMAP_PFN(ent) << 3) !=
     sizeof(flags))
   {
-    fail("could not read from kpageflags\n");
+    localFail("could not read from kpageflags\n");
   }
 
   if (!(flags & (1ull << KPF_THP)))
   {
-    fail("could not allocate huge page\n");
+    localFail("could not allocate huge page\n");
   }
 
   if (close(pagemap_fd) < 0)
   {
-    fail("could not close /proc/self/pagemap: %s", strerror(errno));
+    localFail("could not close /proc/self/pagemap: %s", strerror(errno));
   }
   if (close(kpageflags_fd) < 0)
   {
-    fail("could not close /proc/kpageflags: %s", strerror(errno));
+    localFail("could not close /proc/kpageflags: %s", strerror(errno));
   }
 }
 
