@@ -40,10 +40,14 @@ void runPipeline(size_t cnt, char* read_head, int read_cnt)
     firstCore.run();
   }); 
 
-  firstCoreThread.join();
-  for (auto& thread: workerThreads)
-    thread.join();
-  lastCoreThread.join();
+  if (firstCoreThread.joinable())
+    firstCoreThread.join();
+  for (auto& thread: workerThreads) {
+    if (thread.joinable())
+      thread.join();
+  }
+  if (lastCoreThread.joinable())
+    lastCoreThread.join();
 }
 
 int main(int argc, char* argv[]) {

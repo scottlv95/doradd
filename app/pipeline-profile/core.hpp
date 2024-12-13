@@ -44,15 +44,18 @@ struct Worker
 public:
   int read_cnt;
   int cnt;
+  int64_t processed_cnt; // Local transaction counter
   ringtype* inputRing;
   ringtype* outputRing;
   char* read_top;
   char* read_head;
 
+  static constexpr int64_t TERMINATION_COUNT = 40'000'000;
+
   Worker(ringtype* inputRing_, ringtype* outputRing_, 
     char* read_top_, int read_cnt_) :
     inputRing(inputRing_), outputRing(outputRing_), 
-    read_top(read_top_), read_cnt(read_cnt_) 
+    read_top(read_top_), read_cnt(read_cnt_), processed_cnt(0)
   {
     read_head = read_top;
     cnt = 0; 
@@ -76,11 +79,17 @@ public:
       read_head += ret;
       cnt++;
     }
+
+    processed_cnt += BATCH_SZ;
+  }
+
+  bool terminate() const {
+    return processed_cnt >= TERMINATION_COUNT;
   }
     
   virtual void run()
   {
-    while(1)
+    while(!terminate())
     {
       if (!inputRing->front())
         continue;
@@ -103,7 +112,7 @@ struct FirstCore : public Worker<T>
 
   void run()
   {
-    while (1) 
+    while (!this->terminate()) 
     {
       this->dispatch_batch();
       this->outputRing->push(BATCH_SZ);       
@@ -121,10 +130,10 @@ struct LastCore : public Worker<T>
   
   void run()
   {
-    int i, tx_cnt = 0;
+    int tx_cnt = 0;
     last_print = std::chrono::system_clock::now();
 
-    while (1) 
+    while (!this->terminate()) 
     {
       if (!this->inputRing->front())
         continue;
