@@ -4,8 +4,8 @@
 #include <iostream>
 
 #include "core.hpp"
-#include "../../doradd/pin-thread.hpp"
-#include "../../doradd/hugepage.hpp"
+#include "../../src/doradd/pin-thread.hpp"
+#include "../../src/doradd/hugepage.hpp"
 
 template<typename TxnType>
 void runPipeline(size_t cnt, char* read_head, int read_cnt)

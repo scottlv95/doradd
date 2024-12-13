@@ -1,7 +1,7 @@
 #pragma once
 
 #include <chrono>
-#include "../../doradd/spscq.hpp"
+#include "../../external/SPSCQueue/include/rigtorp/SPSCQueue.h"
 
 using ringtype = rigtorp::SPSCQueue<int>;
 using ts_type = std::chrono::time_point<std::chrono::system_clock>;
