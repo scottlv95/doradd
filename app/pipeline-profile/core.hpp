@@ -39,7 +39,7 @@ public:
 };
 
 template<typename T>
-struct Worker
+struct alignas(64) Worker
 {
 public:
   int read_cnt;
