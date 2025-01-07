@@ -48,7 +48,8 @@ g++ -o generator -O3 generate_ycsb_zipf.cc
 popd
 
 # run
-sudo app/build/ycsb -n 8 app/ycsb/gen-log/ycsb_uniform_no_cont.txt -i exp:4000
+cd app/build
+sudo taskset -c 4-11 ./ycsb -n 8 app/ycsb/gen-log/ycsb_uniform_no_cont.txt -i exp:4000
 
 # -n: core counts
 # -i: the request arrival pattern (fixed or exponential) and interval (in nanoseconds) 
@@ -63,5 +64,6 @@ python generate_tpcc.py --warehouses 23
 popd
 
 # run
-sudo app/build/tpcc -n 8 app/tpcc/gen-log/tpcc.txt -i exp:4000
+cd app/build
+sudo taskset -c 4-11 ./tpcc -n 8 app/tpcc/gen-log/tpcc.txt -i exp:4000
 ```
