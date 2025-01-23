@@ -49,7 +49,7 @@ popd
 
 # run
 cd app/build
-sudo taskset -c 4-11 ./ycsb -n 8 app/ycsb/gen-log/ycsb_uniform_no_cont.txt -i exp:4000
+sudo taskset -c 4-11 ./ycsb -n 8 ../ycsb/gen-log/ycsb_uniform_no_cont.txt -i exp:4000
 
 # -n: core counts
 # -i: the request arrival pattern (fixed or exponential) and interval (in nanoseconds) 
@@ -65,5 +65,5 @@ popd
 
 # run
 cd app/build
-sudo taskset -c 4-11 ./tpcc -n 8 app/tpcc/gen-log/tpcc.txt -i exp:4000
+sudo taskset -c 4-11 ./tpcc -n 8 ../tpcc/gen-log/tpcc.txt -i exp:4000
 ```
