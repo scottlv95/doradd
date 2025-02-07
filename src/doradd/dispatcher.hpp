@@ -1,9 +1,9 @@
 #pragma once
 
+#include "SPSCQueue.h"
 #include "config.hpp"
 #include "hugepage.hpp"
 #include "warmup.hpp"
-#include "SPSCQueue.h"
 
 #include <cassert>
 #include <fcntl.h>
@@ -533,6 +533,7 @@ struct Spawner
 
       if (idx > (read_count - MAX_BATCH))
       {
+        std::cout<<read_head<<std::endl;
         read_head = read_top;
         prepare_read_head = read_top;
         idx = 0;
