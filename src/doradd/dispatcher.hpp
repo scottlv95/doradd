@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 template<typename T>
@@ -257,6 +258,7 @@ struct Indexer
   char* read_top;
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
+  std::unordered_set<uint64_t> cown_ptrs_set;
 
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
@@ -319,6 +321,12 @@ struct Indexer
       for (i = 0; i < batch; i++)
       {
         ret = T::prepare_cowns(read_head);
+        auto txm = reinterpret_cast<T::Marshalled*>(read_head);
+        // keep indices in the set, or can keep the actual cown
+        size_t cown_ptrs_sz = sizeof(txm->cown_ptrs) / sizeof(uint64_t);
+        for (int j = 0; j < cown_ptrs_sz; j++)
+          cown_ptrs_set.insert(txm->cown_ptrs[j]);
+
         read_head += ret;
         read_idx++;
       }
@@ -533,7 +541,6 @@ struct Spawner
 
       if (idx > (read_count - MAX_BATCH))
       {
-        std::cout<<read_head<<std::endl;
         read_head = read_top;
         prepare_read_head = read_top;
         idx = 0;
