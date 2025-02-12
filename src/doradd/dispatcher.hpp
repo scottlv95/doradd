@@ -258,7 +258,8 @@ struct Indexer
   char* read_top;
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
-  std::unordered_set<uint64_t> cown_ptrs_set;
+  std::unordered_set<uint64_t>* cown_ptrs_set;
+  std::mutex* cown_set_mutex;
 
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
@@ -266,10 +267,14 @@ struct Indexer
   Indexer(
     void* mmap_ret,
     rigtorp::SPSCQueue<int>* ring_,
-    std::atomic<uint64_t>* req_cnt_)
+    std::atomic<uint64_t>* req_cnt_,
+    std::unordered_set<uint64_t>* cown_ptrs_set_,
+    std::mutex* cown_set_mutex_)
   : read_top(reinterpret_cast<char*>(mmap_ret)),
     ring(ring_),
-    recvd_req_cnt(req_cnt_)
+    recvd_req_cnt(req_cnt_),
+    cown_ptrs_set(cown_ptrs_set_),
+    cown_set_mutex(cown_set_mutex_)
   {
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
     read_top += sizeof(uint32_t);
@@ -322,10 +327,9 @@ struct Indexer
       {
         ret = T::prepare_cowns(read_head);
         auto txm = reinterpret_cast<T::Marshalled*>(read_head);
-        // keep indices in the set, or can keep the actual cown
-        size_t cown_ptrs_sz = sizeof(txm->cown_ptrs) / sizeof(uint64_t);
+        constexpr int cown_ptrs_sz = sizeof(txm->cown_ptrs) / sizeof(uint64_t);
         for (int j = 0; j < cown_ptrs_sz; j++)
-          cown_ptrs_set.insert(txm->cown_ptrs[j]);
+          cown_ptrs_set->insert(txm->cown_ptrs[j]);
 
         read_head += ret;
         read_idx++;
@@ -432,7 +436,8 @@ struct Spawner
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
   std::mutex* counter_map_mutex;
   std::vector<uint64_t*> counter_vec; // FIXME
-
+  std::unordered_set<uint64_t>* cown_ptrs_set;
+  std::mutex* cown_set_mutex;
   uint64_t tx_exec_sum;
   uint64_t last_tx_exec_sum;
   uint64_t tx_spawn_sum;
@@ -451,9 +456,10 @@ struct Spawner
     uint8_t worker_cnt_,
     std::unordered_map<std::thread::id, uint64_t*>* counter_map_,
     std::mutex* counter_map_mutex_,
-    rigtorp::SPSCQueue<int>* ring_
+    rigtorp::SPSCQueue<int>* ring_,
+    std::unordered_set<uint64_t>* cown_ptrs_set_,
+    std::mutex* cown_set_mutex_,
 #ifdef RPC_LATENCY
-    ,
     uint64_t init_time_log_arr_,
     FILE* res_log_fd_
 #endif
@@ -462,7 +468,9 @@ struct Spawner
     worker_cnt(worker_cnt_),
     counter_map(counter_map_),
     counter_map_mutex(counter_map_mutex_),
-    ring(ring_)
+    ring(ring_),
+    cown_ptrs_set(cown_ptrs_set_),
+    cown_set_mutex(cown_set_mutex_)
 #ifdef RPC_LATENCY
     ,
     init_time_log_arr(init_time_log_arr_),
