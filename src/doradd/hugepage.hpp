@@ -112,7 +112,7 @@ void* aligned_alloc_hpage_fd(int fd)
   for (size_t i = 0; i < hpage_nr - 1; i++)
   {
     memcpy(buf, src, HPAGE_SIZE);
-    check_huge_page(buf);
+    // check_huge_page(buf);
     buf += HPAGE_SIZE;
     src += HPAGE_SIZE;
   }
@@ -139,7 +139,7 @@ void* aligned_alloc_hpage(size_t sz)
   for (size_t i = 0; i < hpage_nr; i++)
   {
     memset(buf, 0, HPAGE_SIZE);
-    check_huge_page(buf);
+    // check_huge_page(buf);
     buf += HPAGE_SIZE;
   }
   printf("allocated huge pages\n");

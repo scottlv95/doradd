@@ -329,7 +329,13 @@ struct Indexer
         auto txm = reinterpret_cast<T::Marshalled*>(read_head);
         constexpr int cown_ptrs_sz = sizeof(txm->cown_ptrs) / sizeof(uint64_t);
         for (int j = 0; j < cown_ptrs_sz; j++)
+        {
           cown_ptrs_set->insert(txm->cown_ptrs[j]);
+          // std::cout << "inserted cown ptr: " << txm->cown_ptrs[j] <<
+          // std::endl;
+        }
+        std::cout << "size of cown_ptrs_set: " << cown_ptrs_set->size()
+                  << std::endl;
 
         read_head += ret;
         read_idx++;
@@ -563,7 +569,8 @@ struct Spawner
 #endif
         prepare_read_head += ret;
       }
-
+      std::cout << "SPAWNER: size of cown_ptrs_set: " << cown_ptrs_set->size()
+                << std::endl;
       for (i = 0; i < batch_sz; i++)
       {
         ret = dispatch_one();

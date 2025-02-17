@@ -170,8 +170,10 @@ int main(int argc, char** argv)
   // Create rows (cowns) with huge pages and via static allocation
   YCSBTransaction::index = new Index<YCSBRow>;
   uint64_t cown_prev_addr = 0;
-  uint8_t* cown_arr_addr =
-    static_cast<uint8_t*>(aligned_alloc_hpage(1024 * DB_SIZE));
+  uint8_t* cown_arr_addr = static_cast<uint8_t*>(malloc(1024 * DB_SIZE));
+
+  if (!cown_arr_addr)
+    printf("could not allocate mem for cown_arr_addr: %s\n", strerror(errno));
 
   for (int i = 0; i < DB_SIZE; i++)
   {

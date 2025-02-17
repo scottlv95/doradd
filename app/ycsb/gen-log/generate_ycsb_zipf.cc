@@ -9,8 +9,8 @@
 #include <random>
 #include <vector>
 
-#define ROW_COUNT 10'000'000
-#define TX_COUNT 1'000'000 // 4M for Caracal
+#define ROW_COUNT 10000
+#define TX_COUNT 1000 // 4M for Caracal
 #define ROW_PER_TX 10
 #define NrMSBContentionKey 6
 
@@ -130,7 +130,7 @@ int main(int argc, char** argv)
 
   char log_name[50];
   snprintf(log_name, sizeof(log_name), "ycsb_%s_%s.txt", argv[2], argv[4]);
-  
+
   std::ofstream outLog(log_name, std::ios::binary);
   uint32_t count = TX_COUNT;
   outLog.write(reinterpret_cast<const char*>(&count), sizeof(uint32_t));
