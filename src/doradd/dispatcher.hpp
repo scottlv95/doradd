@@ -251,6 +251,17 @@ public:
   }
 };
 
+void checkpoint(
+  std::unordered_set<uint64_t>* cown_ptrs_set, std::mutex* cown_set_mutex)
+{
+  std::lock_guard<std::mutex> lock(*cown_set_mutex);
+  std::unordered_set<uint64_t> cown_ptrs_set_cp = *cown_ptrs_set;
+  std::cout << "checkpointing cown_ptrs_set: " << cown_ptrs_set_cp.size()
+            << std::endl;
+  // blackbox checkpoint
+  cown_ptrs_set->clear();
+}
+
 template<typename T>
 struct Indexer
 {
@@ -334,8 +345,6 @@ struct Indexer
           // std::cout << "inserted cown ptr: " << txm->cown_ptrs[j] <<
           // std::endl;
         }
-        std::cout << "size of cown_ptrs_set: " << cown_ptrs_set->size()
-                  << std::endl;
 
         read_head += ret;
         read_idx++;
@@ -533,10 +542,22 @@ struct Spawner
 
     // warm-up
     prepare_run();
+    constexpr auto CHECKPOINT_INTERVAL = std::chrono::seconds(1);
+    auto last_checkpoint_time = std::chrono::steady_clock::now();
 
     // run
     while (1)
     {
+      // Check if it is time for a checkpoint.
+      auto now = std::chrono::steady_clock::now();
+      if (now - last_checkpoint_time >= CHECKPOINT_INTERVAL)
+      {
+        {
+          // Lock the mutex to safely access the set.
+          checkpoint(cown_ptrs_set, cown_set_mutex);
+        }
+        last_checkpoint_time = now;
+      }
 #ifdef RPC_LATENCY
       if (txn_log_id == 0)
         last_print = std::chrono::system_clock::now();
@@ -569,8 +590,7 @@ struct Spawner
 #endif
         prepare_read_head += ret;
       }
-      std::cout << "SPAWNER: size of cown_ptrs_set: " << cown_ptrs_set->size()
-                << std::endl;
+
       for (i = 0; i < batch_sz; i++)
       {
         ret = dispatch_one();
