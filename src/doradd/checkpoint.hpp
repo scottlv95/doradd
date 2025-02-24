@@ -11,11 +11,11 @@ public:
   // push the current diff set to the checkpoint deque, and clear the current
   // diff set
   // must be r value reference
-  void push_diff_set(uint64_t transaction_number, std::set<uint64_t>&& diff_set)
+  void push_diff_set(uint64_t transaction_number)
   {
     std::lock_guard<std::mutex> lock(mtx);
-    cown_deque.push_back({transaction_number, std::move(diff_set)});
-    diff_set.clear();
+    cown_deque.push_back({transaction_number, std::move(current_diff_set)});
+    current_diff_set.clear();
   }
 
   // update the current diff set
