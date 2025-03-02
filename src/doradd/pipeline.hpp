@@ -27,6 +27,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
   log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
   log_map->reserve(worker_cnt);
   counter_map_mutex = new std::mutex();
+  auto checkpointer = new Checkpointer();
 
   // init and run dispatcher pipelines
   when() << [&]() {
@@ -34,11 +35,6 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
     // sched.add_external_event_source();
 
     std::atomic<uint64_t> req_cnt(0);
-
-    std::unordered_set<uint64_t>* cown_ptrs_set =
-      new std::unordered_set<uint64_t>();
-
-    std::mutex* cown_set_mutex = new std::mutex();
 
     // Init RPC handler
 #ifdef RPC_LATENCY
@@ -98,8 +94,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
 #  ifdef INDEXER
     rigtorp::SPSCQueue<int> ring_idx_pref(CHANNEL_SIZE_IDX_PREF);
-    Indexer<T> indexer(
-      ret, &ring_idx_pref, &req_cnt, cown_ptrs_set, cown_set_mutex);
+    Indexer<T> indexer(ret, &ring_idx_pref, &req_cnt, checkpointer);
 #  endif
 
     rigtorp::SPSCQueue<int> ring_pref_disp(CHANNEL_SIZE);
@@ -114,10 +109,9 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
       counter_map,
       counter_map_mutex,
       &ring_pref_disp,
-      cown_ptrs_set,
-      cown_set_mutex,
       log_arr_addr,
-      res_log_fd);
+      res_log_fd,
+      checkpointer);
 #    else
     spawner(
       ret,
@@ -125,8 +119,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
       counter_map,
       counter_map_mutex,
       &ring_pref_disp,
-      cown_ptrs_set,
-      cown_set_mutex);
+      checkpointer);
 #    endif // RPC_LATENCY
 #  else
     Prefetcher<T> prefetcher(ret, &ring_pref_disp);
@@ -136,8 +129,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
       counter_map,
       counter_map_mutex,
       &ring_pref_disp,
-      cown_ptrs_set,
-      cown_set_mutex);
+      checkpointer);
 
 #  endif // INDEXER
 

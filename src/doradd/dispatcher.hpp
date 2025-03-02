@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SPSCQueue.h"
+#include "checkpoint.hpp"
 #include "config.hpp"
 #include "hugepage.hpp"
 #include "warmup.hpp"
@@ -251,17 +252,6 @@ public:
   }
 };
 
-void checkpoint(
-  std::unordered_set<uint64_t>* cown_ptrs_set, std::mutex* cown_set_mutex)
-{
-  std::lock_guard<std::mutex> lock(*cown_set_mutex);
-  std::unordered_set<uint64_t> cown_ptrs_set_cp = *cown_ptrs_set;
-  std::cout << "checkpointing cown_ptrs_set: " << cown_ptrs_set_cp.size()
-            << std::endl;
-  // blackbox checkpoint
-  cown_ptrs_set->clear();
-}
-
 template<typename T>
 struct Indexer
 {
@@ -269,23 +259,21 @@ struct Indexer
   char* read_top;
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
-  std::unordered_set<uint64_t>* cown_ptrs_set;
-  std::mutex* cown_set_mutex;
 
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
+  Checkpointer* checkpointer;
+  uint64_t transaction_number = 0;
 
   Indexer(
     void* mmap_ret,
     rigtorp::SPSCQueue<int>* ring_,
     std::atomic<uint64_t>* req_cnt_,
-    std::unordered_set<uint64_t>* cown_ptrs_set_,
-    std::mutex* cown_set_mutex_)
+    Checkpointer* checkpointer_)
   : read_top(reinterpret_cast<char*>(mmap_ret)),
     ring(ring_),
     recvd_req_cnt(req_cnt_),
-    cown_ptrs_set(cown_ptrs_set_),
-    cown_set_mutex(cown_set_mutex_)
+    checkpointer(checkpointer_)
   {
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
     read_top += sizeof(uint32_t);
@@ -333,6 +321,8 @@ struct Indexer
       }
 
       batch = check_avail_cnts();
+      transaction_number += batch;
+      checkpointer->try_schedule_checkpoint(transaction_number);
 
       for (i = 0; i < batch; i++)
       {
@@ -341,11 +331,8 @@ struct Indexer
         constexpr int cown_ptrs_sz = sizeof(txm->cown_ptrs) / sizeof(uint64_t);
         for (int j = 0; j < cown_ptrs_sz; j++)
         {
-          cown_ptrs_set->insert(txm->cown_ptrs[j]);
-          // std::cout << "inserted cown ptr: " << txm->cown_ptrs[j] <<
-          // std::endl;
+          checkpointer->add_cown_ptr(txm->cown_ptrs[j]);
         }
-
         read_head += ret;
         read_idx++;
       }
@@ -451,8 +438,8 @@ struct Spawner
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
   std::mutex* counter_map_mutex;
   std::vector<uint64_t*> counter_vec; // FIXME
-  std::unordered_set<uint64_t>* cown_ptrs_set;
-  std::mutex* cown_set_mutex;
+  Checkpointer* checkpointer;
+  uint64_t transaction_number = 0;
   uint64_t tx_exec_sum;
   uint64_t last_tx_exec_sum;
   uint64_t tx_spawn_sum;
@@ -472,25 +459,22 @@ struct Spawner
     std::unordered_map<std::thread::id, uint64_t*>* counter_map_,
     std::mutex* counter_map_mutex_,
     rigtorp::SPSCQueue<int>* ring_,
-    std::unordered_set<uint64_t>* cown_ptrs_set_,
-    std::mutex* cown_set_mutex_,
 #ifdef RPC_LATENCY
     uint64_t init_time_log_arr_,
-    FILE* res_log_fd_
+    FILE* res_log_fd_,
 #endif
-    )
+    Checkpointer* checkpointer_)
   : read_top(reinterpret_cast<char*>(mmap_ret)),
     worker_cnt(worker_cnt_),
     counter_map(counter_map_),
     counter_map_mutex(counter_map_mutex_),
     ring(ring_),
-    cown_ptrs_set(cown_ptrs_set_),
-    cown_set_mutex(cown_set_mutex_)
+    checkpointer(checkpointer_),
 #ifdef RPC_LATENCY
-    ,
     init_time_log_arr(init_time_log_arr_),
     res_log_fd(res_log_fd_)
 #endif
+
   {
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
     read_top += sizeof(uint32_t);
@@ -542,22 +526,10 @@ struct Spawner
 
     // warm-up
     prepare_run();
-    constexpr auto CHECKPOINT_INTERVAL = std::chrono::seconds(1);
-    auto last_checkpoint_time = std::chrono::steady_clock::now();
 
     // run
     while (1)
     {
-      // Check if it is time for a checkpoint.
-      auto now = std::chrono::steady_clock::now();
-      if (now - last_checkpoint_time >= CHECKPOINT_INTERVAL)
-      {
-        {
-          // Lock the mutex to safely access the set.
-          checkpoint(cown_ptrs_set, cown_set_mutex);
-        }
-        last_checkpoint_time = now;
-      }
 #ifdef RPC_LATENCY
       if (txn_log_id == 0)
         last_print = std::chrono::system_clock::now();
@@ -595,6 +567,8 @@ struct Spawner
       {
         ret = dispatch_one();
         read_head += ret;
+        ++transaction_number;
+        checkpointer->try_spawn_checkpoint(transaction_number);
         idx++;
         tx_count++;
         tx_spawn_sum++;
