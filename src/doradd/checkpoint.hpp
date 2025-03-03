@@ -44,7 +44,7 @@ public:
         when(cown) << [this, transaction_number](auto acq) {
           try
           {
-            storage.save_checkpoint(transaction_number, acq);
+            storage.save_checkpoint(transaction_number, *acq);
           }
           catch (const std::exception& e)
           {

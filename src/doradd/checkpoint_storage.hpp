@@ -24,8 +24,7 @@ public:
     std::filesystem::create_directories(base_directory);
   }
 
-  void save_checkpoint(
-    uint64_t transaction_number, typename verona::cpp::acquired_cown<T>& acq)
+  void save_checkpoint(uint64_t transaction_number, const T& state)
   {
     std::string filename = generate_filename(transaction_number);
 
@@ -39,7 +38,6 @@ public:
       reinterpret_cast<const char*>(&transaction_number),
       sizeof(transaction_number));
 
-    auto& state = *acq;
     file.write(reinterpret_cast<const char*>(&state), sizeof(T));
 
     file.close();
