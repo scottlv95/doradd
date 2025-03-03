@@ -35,17 +35,16 @@ public:
         std::lock_guard<std::mutex> lock(cown_deque_mutex);
         raw_set = std::move(cown_deque.front().second);
         cown_deque.pop_front();
-        current_diff_set.clear();
       }
 
       auto strongCowns = convert_to_cown_ptrs(raw_set);
 
       for (auto cown : strongCowns)
       {
-        when(cown) << [this](auto acq) {
+        when(cown) << [this, transaction_number](auto acq) {
           try
           {
-            storage.save_checkpoint(std::chrono::system_clock::now(), acq);
+            storage.save_checkpoint(transaction_number, acq);
           }
           catch (const std::exception& e)
           {

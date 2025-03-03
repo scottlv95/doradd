@@ -14,7 +14,7 @@ class CheckpointStorage
 public:
   struct CheckpointRecord
   {
-    std::chrono::system_clock::time_point timestamp;
+    uint64_t transaction_number;
     T state;
   };
 
@@ -25,11 +25,9 @@ public:
   }
 
   void save_checkpoint(
-    std::chrono::system_clock::time_point timestamp,
-    typename verona::cpp::acquired_cown<T>& acq)
+    uint64_t transaction_number, typename verona::cpp::acquired_cown<T>& acq)
   {
-    auto time_timestamp = std::chrono::system_clock::to_time_t(timestamp);
-    std::string filename = generate_filename(time_timestamp);
+    std::string filename = generate_filename(transaction_number);
 
     std::ofstream file(filename, std::ios::binary);
     if (!file)
@@ -38,7 +36,8 @@ public:
     }
 
     file.write(
-      reinterpret_cast<const char*>(&time_timestamp), sizeof(time_timestamp));
+      reinterpret_cast<const char*>(&transaction_number),
+      sizeof(transaction_number));
 
     auto& state = *acq;
     file.write(reinterpret_cast<const char*>(&state), sizeof(T));
@@ -46,44 +45,12 @@ public:
     file.close();
   }
 
-  std::vector<CheckpointRecord> load_checkpoints()
-  {
-    std::vector<CheckpointRecord> records;
-    for (const auto& entry :
-         std::filesystem::directory_iterator(base_directory))
-    {
-      if (entry.path().extension() == ".bin")
-      {
-        records.push_back(load_checkpoint(entry.path()));
-      }
-    }
-    return records;
-  }
-
 private:
-  std::string generate_filename(std::time_t timestamp)
+  std::string generate_filename(uint64_t transaction_number)
   {
     std::stringstream ss;
-    ss << base_directory << "/checkpoint_" << timestamp << ".bin";
+    ss << base_directory << "/checkpoint_" << transaction_number << ".bin";
     return ss.str();
-  }
-
-  CheckpointRecord load_checkpoint(const std::filesystem::path& path)
-  {
-    std::ifstream file(path, std::ios::binary);
-    if (!file)
-    {
-      throw std::runtime_error(
-        "Failed to open checkpoint file: " + path.string());
-    }
-
-    CheckpointRecord record;
-    std::time_t timestamp;
-    file.read(reinterpret_cast<char*>(&timestamp), sizeof(timestamp));
-    record.timestamp = std::chrono::system_clock::from_time_t(timestamp);
-    file.read(reinterpret_cast<char*>(&record.state), sizeof(T));
-
-    return record;
   }
 
   std::string base_directory;
