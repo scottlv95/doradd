@@ -35,6 +35,7 @@ public:
         std::lock_guard<std::mutex> lock(cown_deque_mutex);
         raw_set = std::move(cown_deque.front().second);
         cown_deque.pop_front();
+        current_diff_set.clear();
       }
 
       auto strongCowns = convert_to_cown_ptrs(raw_set);
@@ -44,15 +45,7 @@ public:
         when(cown) << [this](auto acq) {
           try
           {
-            typename CheckpointStorage<T>::CheckpointRecord record;
-            record.timestamp = std::chrono::system_clock::now();
-            record.state = acq->get_state();
-
-            storage.save_checkpoint(record);
-
-            std::cout << "Successfully checkpointed cown at "
-                      << std::chrono::system_clock::to_time_t(record.timestamp)
-                      << std::endl;
+            storage.save_checkpoint(std::chrono::system_clock::now(), acq);
           }
           catch (const std::exception& e)
           {
@@ -120,13 +113,11 @@ private:
     return false;
   }
 
-  // Scheduling related members
   std::deque<std::pair<uint64_t, std::unordered_set<uint64_t>>> cown_deque;
   std::mutex cown_deque_mutex;
   std::unordered_set<uint64_t> current_diff_set;
   std::chrono::steady_clock::time_point last_checkpoint_time;
   const std::chrono::seconds checkpoint_interval;
 
-  // Storage
   CheckpointStorage<T> storage;
 };

@@ -1,10 +1,12 @@
 #pragma once
 
 #include <chrono>
+#include <cpp/when.h>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <vector>
+#include <verona.h>
 
 template<typename T>
 class CheckpointStorage
@@ -22,10 +24,12 @@ public:
     std::filesystem::create_directories(base_directory);
   }
 
-  void save_checkpoint(const CheckpointRecord& record)
+  void save_checkpoint(
+    std::chrono::system_clock::time_point timestamp,
+    typename verona::cpp::acquired_cown<T>& acq)
   {
-    auto timestamp = std::chrono::system_clock::to_time_t(record.timestamp);
-    std::string filename = generate_filename(timestamp);
+    auto time_timestamp = std::chrono::system_clock::to_time_t(timestamp);
+    std::string filename = generate_filename(time_timestamp);
 
     std::ofstream file(filename, std::ios::binary);
     if (!file)
@@ -33,8 +37,12 @@ public:
       throw std::runtime_error("Failed to open checkpoint file: " + filename);
     }
 
-    file.write(reinterpret_cast<const char*>(&timestamp), sizeof(timestamp));
-    file.write(reinterpret_cast<const char*>(&record.state), sizeof(T));
+    file.write(
+      reinterpret_cast<const char*>(&time_timestamp), sizeof(time_timestamp));
+
+    auto& state = *acq;
+    file.write(reinterpret_cast<const char*>(&state), sizeof(T));
+
     file.close();
   }
 
