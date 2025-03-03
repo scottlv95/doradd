@@ -27,7 +27,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
   log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
   log_map->reserve(worker_cnt);
   counter_map_mutex = new std::mutex();
-  auto checkpointer = new Checkpointer();
+  auto checkpointer = std::make_shared<Checkpointer<T>>();
 
   // init and run dispatcher pipelines
   when() << [&]() {

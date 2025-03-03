@@ -262,14 +262,14 @@ struct Indexer
 
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
-  Checkpointer* checkpointer;
+  std::shared_ptr<Checkpointer<T>> checkpointer;
   uint64_t transaction_number = 0;
 
   Indexer(
     void* mmap_ret,
     rigtorp::SPSCQueue<int>* ring_,
     std::atomic<uint64_t>* req_cnt_,
-    Checkpointer* checkpointer_)
+    std::shared_ptr<Checkpointer<T>> checkpointer_)
   : read_top(reinterpret_cast<char*>(mmap_ret)),
     ring(ring_),
     recvd_req_cnt(req_cnt_),
@@ -438,7 +438,7 @@ struct Spawner
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
   std::mutex* counter_map_mutex;
   std::vector<uint64_t*> counter_vec; // FIXME
-  Checkpointer* checkpointer;
+  std::shared_ptr<Checkpointer<T>> checkpointer;
   uint64_t transaction_number = 0;
   uint64_t tx_exec_sum;
   uint64_t last_tx_exec_sum;
@@ -463,7 +463,7 @@ struct Spawner
     uint64_t init_time_log_arr_,
     FILE* res_log_fd_,
 #endif
-    Checkpointer* checkpointer_)
+    std::shared_ptr<Checkpointer<T>> checkpointer_)
   : read_top(reinterpret_cast<char*>(mmap_ret)),
     worker_cnt(worker_cnt_),
     counter_map(counter_map_),
@@ -567,7 +567,7 @@ struct Spawner
       {
         ret = dispatch_one();
         read_head += ret;
-        ++transaction_number;
+        transaction_number++;
         checkpointer->try_spawn_checkpoint(transaction_number);
         idx++;
         tx_count++;
