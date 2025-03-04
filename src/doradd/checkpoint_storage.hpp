@@ -4,6 +4,7 @@
 #include <cpp/when.h>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <verona.h>
@@ -12,15 +13,16 @@ template<typename T>
 class CheckpointStorage
 {
 public:
-  struct CheckpointRecord
-  {
-    uint64_t transaction_number;
-    T state;
-  };
-
   explicit CheckpointStorage(const std::string& base_dir = "checkpoints")
-  : base_directory(base_dir)
   {
+    std::filesystem::create_directories(base_dir);
+
+    auto now = std::chrono::system_clock::now();
+    auto now_time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream run_dir_ss;
+    run_dir_ss << base_dir << "/run_" << now_time_t;
+    base_directory = run_dir_ss.str();
+
     std::filesystem::create_directories(base_directory);
   }
 
