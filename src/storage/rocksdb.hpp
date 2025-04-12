@@ -1,11 +1,10 @@
 #ifndef ROCKSDB_HPP
 #define ROCKSDB_HPP
 
-#include "keyvaluestore.hpp"
 #include <rocksdb/db.h>
 #include <iostream>
 
-class RocksDB : public IKeyValueStore {
+class RocksDB : {
 private:
     rocksdb::DB* db_;
 

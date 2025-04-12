@@ -4,6 +4,8 @@
 #include "hugepage.hpp"
 #include "warmup.hpp"
 #include "SPSCQueue.h"
+#include "checkpointer.hpp"
+#include "../storage/sqlite.hpp"
 
 #include <cassert>
 #include <fcntl.h>
@@ -257,6 +259,7 @@ struct Indexer
   char* read_top;
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
+  Checkpointer<SQLiteStore, T>* checkpointer;
 
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
@@ -264,10 +267,13 @@ struct Indexer
   Indexer(
     void* mmap_ret,
     rigtorp::SPSCQueue<int>* ring_,
-    std::atomic<uint64_t>* req_cnt_)
+    std::atomic<uint64_t>* req_cnt_,
+    Checkpointer<SQLiteStore, T>* checkpointer_
+    )
   : read_top(reinterpret_cast<char*>(mmap_ret)),
     ring(ring_),
-    recvd_req_cnt(req_cnt_)
+    recvd_req_cnt(req_cnt_),
+    checkpointer(checkpointer_)
   {
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
     read_top += sizeof(uint32_t);
@@ -306,6 +312,11 @@ struct Indexer
     int i, ret = 0;
     int batch; // = MAX_BATCH;
 
+    // if it is time to checkpoint, schedule a checkpoint
+    if (checkpointer->should_checkpoint()) {
+      checkpointer->schedule_checkpoint(ring);
+    }
+
     while (1)
     {
       if (read_idx > (read_count - batch))
@@ -319,6 +330,11 @@ struct Indexer
       for (i = 0; i < batch; i++)
       {
         ret = T::prepare_cowns(read_head);
+        auto txn = reinterpret_cast<T::Marshalled*>(read_head);
+        auto indices_size = sizeof(txn->indices) / sizeof(txn->indices[0]);
+        for (size_t i = 0; i < indices_size; i++) {
+          checkpointer->add_to_difference_set(txn->indices[i]);
+        }
         read_head += ret;
         read_idx++;
       }
@@ -424,6 +440,7 @@ struct Spawner
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
   std::mutex* counter_map_mutex;
   std::vector<uint64_t*> counter_vec; // FIXME
+  Checkpointer<SQLiteStore, T>* checkpointer;
 
   uint64_t tx_exec_sum;
   uint64_t last_tx_exec_sum;
@@ -443,7 +460,8 @@ struct Spawner
     uint8_t worker_cnt_,
     std::unordered_map<std::thread::id, uint64_t*>* counter_map_,
     std::mutex* counter_map_mutex_,
-    rigtorp::SPSCQueue<int>* ring_
+    rigtorp::SPSCQueue<int>* ring_,
+    Checkpointer<SQLiteStore, T>* checkpointer_
 #ifdef RPC_LATENCY
     ,
     uint64_t init_time_log_arr_,
@@ -454,7 +472,8 @@ struct Spawner
     worker_cnt(worker_cnt_),
     counter_map(counter_map_),
     counter_map_mutex(counter_map_mutex_),
-    ring(ring_)
+    ring(ring_),
+    checkpointer(checkpointer_)
 #ifdef RPC_LATENCY
     ,
     init_time_log_arr(init_time_log_arr_),
@@ -525,6 +544,11 @@ struct Spawner
 
       if (!ring->front())
         continue;
+
+      if (*ring->front() == Checkpointer<SQLiteStore, T>::CHECKPOINT_MARKER) {
+        checkpointer->process_checkpoint_request(ring);
+        continue;
+      }
 
       batch_sz = static_cast<size_t>(*ring->front());
 

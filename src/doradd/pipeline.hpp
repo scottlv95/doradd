@@ -1,10 +1,12 @@
 #pragma once
 
+#include "SPSCQueue.h"
 #include "config.hpp"
 #include "dispatcher.hpp"
 #include "pin-thread.hpp"
 #include "rpc_handler.hpp"
-#include "SPSCQueue.h"
+#include "../storage/sqlite.hpp"
+#include "checkpointer.hpp"
 
 #include <thread>
 #include <unordered_map>
@@ -27,6 +29,10 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
   log_map = new std::unordered_map<std::thread::id, log_arr_type*>();
   log_map->reserve(worker_cnt);
   counter_map_mutex = new std::mutex();
+
+  // Create storage instance and checkpointer
+  SQLiteStore storage;
+  auto* checkpointer = new Checkpointer<SQLiteStore, T>(storage);
 
   // init and run dispatcher pipelines
   when() << [&]() {
@@ -93,7 +99,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
 #  ifdef INDEXER
     rigtorp::SPSCQueue<int> ring_idx_pref(CHANNEL_SIZE_IDX_PREF);
-    Indexer<T> indexer(ret, &ring_idx_pref, &req_cnt);
+    Indexer<T> indexer(ret, &ring_idx_pref, &req_cnt, checkpointer);
 #  endif
 
     rigtorp::SPSCQueue<int> ring_pref_disp(CHANNEL_SIZE);
@@ -108,11 +114,17 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
       counter_map,
       counter_map_mutex,
       &ring_pref_disp,
+      checkpointer,
       log_arr_addr,
       res_log_fd);
 #    else
     Spawner<T> spawner(
-      ret, worker_cnt, counter_map, counter_map_mutex, &ring_pref_disp);
+      ret, 
+      worker_cnt, 
+      counter_map, 
+      counter_map_mutex, 
+      &ring_pref_disp,
+      checkpointer);
 #    endif // RPC_LATENCY
 #  else
     Prefetcher<T> prefetcher(ret, &ring_pref_disp);

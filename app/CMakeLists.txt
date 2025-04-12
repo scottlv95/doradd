@@ -48,31 +48,34 @@ target_link_libraries(ycsb PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(ycsb PRIVATE atomic)
 target_include_directories(ycsb PRIVATE ../external/SPSCQueue/include/rigtorp)
 
-add_custom_command(
-  OUTPUT ${CMAKE_SOURCE_DIR}/tpcc_gen.cc
-  COMMAND m4 ${CMAKE_SOURCE_DIR}/tpcc_macros.m4 ${CMAKE_SOURCE_DIR}/tpcc.cc > ${CMAKE_SOURCE_DIR}/tpcc_gen.cc
-  DEPENDS ${CMAKE_SOURCE_DIR}/tpcc_macros.m4 ${CMAKE_SOURCE_DIR}/tpcc.cc
-  COMMENT "Generating tpcc_gen.cc"
-  VERBATIM
-)
+# Find SQLite package
+find_package(SQLite3 REQUIRED)
 
-# TPCC
-add_executable(tpcc ${CMAKE_SOURCE_DIR}/tpcc_gen.cc)
+# Add these to your executable target
+target_link_libraries(ycsb PRIVATE SQLite::SQLite3)
 
+# Commenting out all TPCC-related sections
+#add_custom_command(
+#  OUTPUT ${CMAKE_SOURCE_DIR}/tpcc_gen.cc
+#  COMMAND m4 ${CMAKE_SOURCE_DIR}/tpcc_macros.m4 ${CMAKE_SOURCE_DIR}/tpcc.cc > ${CMAKE_SOURCE_DIR}/tpcc_gen.cc
+#  DEPENDS ${CMAKE_SOURCE_DIR}/tpcc_macros.m4 ${CMAKE_SOURCE_DIR}/tpcc.cc
+#  COMMENT "Generating tpcc_gen.cc"
+#  VERBATIM
+#)
 
-# add_compile_definitions(PREFETCH)
-# add_compile_definitions(CORE_PIPE)
-# add_compile_definitions(INDEXER)
-add_compile_definitions(SINGLE_TABLE)
+# Commenting out TPCC executable and its configurations
+#add_executable(tpcc ${CMAKE_SOURCE_DIR}/tpcc_gen.cc)
+
+#add_compile_definitions(SINGLE_TABLE)
 #add_compile_definitions(WAREHOUSE_SPLIT)
 
-target_include_directories(tpcc PRIVATE ../src/misc)
-target_include_directories(tpcc PRIVATE ../src/doradd)
-target_include_directories(tpcc PRIVATE ${VERONA_PATH}/src/rt)
-target_include_directories(tpcc PRIVATE ${SNMALLOC_PATH}/src)
-target_compile_options(tpcc PRIVATE -mcx16 -march=native)
-target_compile_definitions(tpcc PRIVATE -DSNMALLOC_CHEAP_CHECKS)
-target_compile_definitions(tpcc PRIVATE -DACQUIRE_ALL)
-target_link_libraries(tpcc PRIVATE ${CMAKE_THREAD_LIBS_INIT})
-target_link_libraries(tpcc PRIVATE atomic)
-target_include_directories(tpcc PRIVATE ../external/SPSCQueue/include/rigtorp)
+#target_include_directories(tpcc PRIVATE ../src/misc)
+#target_include_directories(tpcc PRIVATE ../src/doradd)
+#target_include_directories(tpcc PRIVATE ${VERONA_PATH}/src/rt)
+#target_include_directories(tpcc PRIVATE ${SNMALLOC_PATH}/src)
+#target_compile_options(tpcc PRIVATE -mcx16 -march=native)
+#target_compile_definitions(tpcc PRIVATE -DSNMALLOC_CHEAP_CHECKS)
+#target_compile_definitions(tpcc PRIVATE -DACQUIRE_ALL)
+#target_link_libraries(tpcc PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+#target_link_libraries(tpcc PRIVATE atomic)
+#target_include_directories(tpcc PRIVATE ../external/SPSCQueue/include/rigtorp)
