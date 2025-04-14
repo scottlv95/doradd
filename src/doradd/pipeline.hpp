@@ -5,7 +5,7 @@
 #include "dispatcher.hpp"
 #include "pin-thread.hpp"
 #include "rpc_handler.hpp"
-#include "../storage/sqlite.hpp"
+#include "../storage/rocksdb.hpp"
 #include "checkpointer.hpp"
 
 #include <thread>
@@ -31,8 +31,8 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
   counter_map_mutex = new std::mutex();
 
   // Create storage instance and checkpointer
-  SQLiteStore storage;
-  auto* checkpointer = new Checkpointer<SQLiteStore, T>(storage);
+  RocksDBStore storage;
+  auto* checkpointer = new Checkpointer<RocksDBStore, T>(storage);
 
   // init and run dispatcher pipelines
   when() << [&]() {

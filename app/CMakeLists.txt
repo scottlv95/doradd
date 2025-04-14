@@ -48,11 +48,18 @@ target_link_libraries(ycsb PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 target_link_libraries(ycsb PRIVATE atomic)
 target_include_directories(ycsb PRIVATE ../external/SPSCQueue/include/rigtorp)
 
-# Find SQLite package
-find_package(SQLite3 REQUIRED)
+# Find RocksDB
+find_library(ROCKSDB_LIBRARY NAMES rocksdb)
+find_path(ROCKSDB_INCLUDE_DIR NAMES rocksdb/db.h)
 
-# Add these to your executable target
-target_link_libraries(ycsb PRIVATE SQLite::SQLite3)
+if(NOT ROCKSDB_LIBRARY OR NOT ROCKSDB_INCLUDE_DIR)
+    message(FATAL_ERROR "RocksDB not found. Please install librocksdb-dev")
+endif()
+
+# Add RocksDB include directories and library
+target_include_directories(ycsb PRIVATE ${ROCKSDB_INCLUDE_DIR})
+target_link_libraries(ycsb PRIVATE ${ROCKSDB_LIBRARY})
+target_link_libraries(ycsb PRIVATE -lgflags -lsnappy -lz -lbz2 -llz4 -lzstd)
 
 # Commenting out all TPCC-related sections
 #add_custom_command(

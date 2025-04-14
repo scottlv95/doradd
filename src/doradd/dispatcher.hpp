@@ -5,7 +5,7 @@
 #include "warmup.hpp"
 #include "SPSCQueue.h"
 #include "checkpointer.hpp"
-#include "../storage/sqlite.hpp"
+#include "../storage/rocksdb.hpp"
 
 #include <cassert>
 #include <fcntl.h>
@@ -259,7 +259,7 @@ struct Indexer
   char* read_top;
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
-  Checkpointer<SQLiteStore, T>* checkpointer;
+  Checkpointer<RocksDBStore, T>* checkpointer;
 
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
@@ -268,7 +268,7 @@ struct Indexer
     void* mmap_ret,
     rigtorp::SPSCQueue<int>* ring_,
     std::atomic<uint64_t>* req_cnt_,
-    Checkpointer<SQLiteStore, T>* checkpointer_
+    Checkpointer<RocksDBStore, T>* checkpointer_
     )
   : read_top(reinterpret_cast<char*>(mmap_ret)),
     ring(ring_),
@@ -440,7 +440,7 @@ struct Spawner
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
   std::mutex* counter_map_mutex;
   std::vector<uint64_t*> counter_vec; // FIXME
-  Checkpointer<SQLiteStore, T>* checkpointer;
+  Checkpointer<RocksDBStore, T>* checkpointer;
 
   uint64_t tx_exec_sum;
   uint64_t last_tx_exec_sum;
@@ -461,7 +461,7 @@ struct Spawner
     std::unordered_map<std::thread::id, uint64_t*>* counter_map_,
     std::mutex* counter_map_mutex_,
     rigtorp::SPSCQueue<int>* ring_,
-    Checkpointer<SQLiteStore, T>* checkpointer_
+    Checkpointer<RocksDBStore, T>* checkpointer_
 #ifdef RPC_LATENCY
     ,
     uint64_t init_time_log_arr_,
@@ -545,7 +545,7 @@ struct Spawner
       if (!ring->front())
         continue;
 
-      if (*ring->front() == Checkpointer<SQLiteStore, T>::CHECKPOINT_MARKER) {
+      if (*ring->front() == Checkpointer<RocksDBStore, T>::CHECKPOINT_MARKER) {
         checkpointer->process_checkpoint_request(ring);
         continue;
       }
