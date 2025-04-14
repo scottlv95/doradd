@@ -7,6 +7,3 @@
 [submodule "external/verona-rt"]
 	path = external/verona-rt
 	url = https://github.com/doradd-rt/verona-rt.git
-[submodule "external/rocksdb"]
-	path = external/rocksdb
-	url = https://github.com/facebook/rocksdb.git
