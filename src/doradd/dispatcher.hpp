@@ -312,14 +312,16 @@ struct Indexer
     int i, ret = 0;
     int batch; // = MAX_BATCH;
 
-    // if it is time to checkpoint, schedule a checkpoint
-    if (checkpointer->should_checkpoint()) {
-      checkpointer->schedule_checkpoint(ring);
-      return;
-    }
 
     while (1)
     {
+    // if it is time to checkpoint, schedule a checkpoint this code is buggy and interferes with the code
+      if (checkpointer->should_checkpoint()) {
+        // std::cout << "Scheduling checkpoint" << std::endl;
+        checkpointer->schedule_checkpoint(ring);
+        continue;
+      }
+
       if (read_idx > (read_count - batch))
       {
         read_head = read_top;
@@ -394,11 +396,13 @@ struct Prefetcher
       if (!ring_indexer->front())
         continue;
 #endif
-
-      batch_sz = static_cast<int>(*ring_indexer->front());
-      if (batch_sz == Checkpointer<RocksDBStore, T>::CHECKPOINT_MARKER) {
+      int tag = *ring_indexer->front();
+      if (tag == Checkpointer<RocksDBStore, T>::CHECKPOINT_MARKER) {
+        ring_indexer->pop();
+        ring->push(tag);
         continue;
       }
+      batch_sz = tag;
 
 #ifdef TEST_TWO
       for (size_t i = 0; i < batch_sz; i++)
@@ -534,6 +538,7 @@ struct Spawner
     // warm-up
     prepare_run();
 
+    std::cout<<"Spawner running"<<std::endl;
     // run
     while (1)
     {
@@ -545,13 +550,16 @@ struct Spawner
         break;
 #endif
 
-      if (!ring->front())
+      if (!ring->front()) {
+        std::cout<<"No batch to process"<<std::endl;
         continue;
+      }
 
       if (*ring->front() == Checkpointer<RocksDBStore, T>::CHECKPOINT_MARKER) {
         checkpointer->process_checkpoint_request(ring);
         continue;
       }
+      std::cout<<"Processing batch"<<*ring->front()<<std::endl;
 
       batch_sz = static_cast<size_t>(*ring->front());
 
