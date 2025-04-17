@@ -259,7 +259,7 @@ struct Indexer
   char* read_top;
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
-  Checkpointer<RocksDBStore, T>* checkpointer;
+  Checkpointer<RocksDBStore, T, typename T::RowType>* checkpointer;
 
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
@@ -268,7 +268,7 @@ struct Indexer
     void* mmap_ret,
     rigtorp::SPSCQueue<int>* ring_,
     std::atomic<uint64_t>* req_cnt_,
-    Checkpointer<RocksDBStore, T>* checkpointer_
+    Checkpointer<RocksDBStore, T, typename T::RowType>* checkpointer_
     )
   : read_top(reinterpret_cast<char*>(mmap_ret)),
     ring(ring_),
@@ -278,6 +278,7 @@ struct Indexer
     read_count = *(reinterpret_cast<uint32_t*>(read_top));
     read_top += sizeof(uint32_t);
     handled_req_cnt = 0;
+    checkpointer->set_index(T::index);
   }
 
   size_t check_avail_cnts()
@@ -447,7 +448,7 @@ struct Spawner
   std::unordered_map<std::thread::id, uint64_t*>* counter_map;
   std::mutex* counter_map_mutex;
   std::vector<uint64_t*> counter_vec; // FIXME
-  Checkpointer<RocksDBStore, T>* checkpointer;
+  Checkpointer<RocksDBStore, T, typename T::RowType>* checkpointer;
 
   uint64_t tx_exec_sum;
   uint64_t last_tx_exec_sum;
@@ -468,7 +469,7 @@ struct Spawner
     std::unordered_map<std::thread::id, uint64_t*>* counter_map_,
     std::mutex* counter_map_mutex_,
     rigtorp::SPSCQueue<int>* ring_,
-    Checkpointer<RocksDBStore, T>* checkpointer_
+    Checkpointer<RocksDBStore, T, typename T::RowType>* checkpointer_
 #ifdef RPC_LATENCY
     ,
     uint64_t init_time_log_arr_,
@@ -551,7 +552,6 @@ struct Spawner
 #endif
 
       if (!ring->front()) {
-        std::cout<<"No batch to process"<<std::endl;
         continue;
       }
 
@@ -559,7 +559,6 @@ struct Spawner
         checkpointer->process_checkpoint_request(ring);
         continue;
       }
-      std::cout<<"Processing batch"<<*ring->front()<<std::endl;
 
       batch_sz = static_cast<size_t>(*ring->front());
 

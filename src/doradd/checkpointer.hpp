@@ -3,12 +3,12 @@
 // #include <cpp/cown_array.h>
 #include <unordered_set>
 
-template <typename StorageType, typename TxnType>
+template <typename StorageType, typename TxnType, typename RowType = TxnType>
 class Checkpointer
 {
   private:
     StorageType storage;
-    Index<TxnType>* index;
+    Index<RowType>* index;
     bool checkpoint_in_flight = false;
     bool current_difference_set_index = 0;
     std::chrono::steady_clock::time_point last_checkpoint_time;
@@ -16,10 +16,14 @@ class Checkpointer
     std::array<std::unordered_set<uint64_t>, 2> difference_sets;
     const int64_t checkpoint_interval_ms = 1000;
   public:
-    Checkpointer(StorageType storage) : storage(storage),
+    Checkpointer(const std::string& db_path = "checkpoint.db") :
     last_checkpoint_time(std::chrono::steady_clock::now()) {
-      std::cout<<"Initializing checkpointer"<<std::endl;
-      storage.open("checkpoint.db");
+      bool success = storage.open(db_path);
+      if (!success) {
+        std::cerr << "Failed to open checkpoint database at " << db_path << std::endl;
+      } else {
+        std::cout << "Successfully opened checkpoint database at " << db_path << std::endl;
+      }
     }
 
     static constexpr int CHECKPOINT_MARKER = -1;
@@ -63,17 +67,21 @@ class Checkpointer
       }
       for (auto key : keys) {
         std::cout << "Checkpoint key: " << key << std::endl;
-        cown_ptr<TxnType> cown_ptr_txn = index->get_row(key);
-        when(cown_ptr_txn) << [=, this](acquired_cown<TxnType> txn) {
-          // std::cout << "Checkpoint key: " << key << std::endl;
-          TxnType& txn_ref = txn;  // implicitly converts to reference
+        cown_ptr<RowType> cown_ptr_txn = index->get_row(key);
+        when(cown_ptr_txn) << [=, this](acquired_cown<RowType> txn) {
+          RowType& txn_ref = txn;  // implicitly converts to reference
           
-          std::string serialized_txn(reinterpret_cast<const char*>(&txn_ref), sizeof(TxnType));
+          std::string serialized_txn(reinterpret_cast<const char*>(&txn_ref), sizeof(RowType));
           storage.put(std::to_string(key), serialized_txn);
         };
       }
       checkpoint_in_flight = false;
     }
 
-    
+    void set_index(Index<RowType>* new_index) {
+      if (index == nullptr) {
+        index = new_index;
+        std::cout << "Checkpointer index initialized" << std::endl;
+      }
+    }
 };

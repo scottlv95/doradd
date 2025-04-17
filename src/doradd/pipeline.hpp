@@ -31,8 +31,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
   counter_map_mutex = new std::mutex();
 
   // Create storage instance and checkpointer
-  RocksDBStore storage;
-  auto* checkpointer = new Checkpointer<RocksDBStore, T>(storage);
+  auto* checkpointer = new Checkpointer<RocksDBStore, T, typename T::RowType>("checkpoint.db");
 
   // init and run dispatcher pipelines
   when() << [&]() {
