@@ -315,6 +315,7 @@ struct Indexer
     // if it is time to checkpoint, schedule a checkpoint
     if (checkpointer->should_checkpoint()) {
       checkpointer->schedule_checkpoint(ring);
+      return;
     }
 
     while (1)
@@ -331,7 +332,7 @@ struct Indexer
       {
         ret = T::prepare_cowns(read_head);
         auto txn = reinterpret_cast<T::Marshalled*>(read_head);
-        auto indices_size = sizeof(txn->indices) / sizeof(txn->indices[0]);
+        auto indices_size = txn->indices_size;
         for (size_t i = 0; i < indices_size; i++) {
           checkpointer->add_to_difference_set(txn->indices[i]);
         }
@@ -378,8 +379,7 @@ struct Prefetcher
     uint32_t idx = 0;
     char* read_head = read_top;
     char* prepare_read_head = read_top;
-    size_t i;
-    size_t batch_sz;
+    int batch_sz;
 
     while (1)
     {
@@ -395,17 +395,20 @@ struct Prefetcher
         continue;
 #endif
 
-      batch_sz = static_cast<size_t>(*ring_indexer->front());
+      batch_sz = static_cast<int>(*ring_indexer->front());
+      if (batch_sz == Checkpointer<RocksDBStore, T>::CHECKPOINT_MARKER) {
+        continue;
+      }
 
 #ifdef TEST_TWO
-      for (i = 0; i < batch_sz; i++)
+      for (size_t i = 0; i < batch_sz; i++)
       {
         ret = T::prepare_cowns(prepare_read_head);
         prepare_read_head += ret;
       }
 #endif
 
-      for (i = 0; i < batch_sz; i++)
+      for (size_t i = 0; i < batch_sz; i++)
       {
 #if defined(TEST_TWO) || defined(INDEXER)
         ret = T::prefetch_cowns(read_head);
