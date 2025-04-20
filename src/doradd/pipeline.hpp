@@ -159,6 +159,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
     // flush latency logs
     std::this_thread::sleep_for(std::chrono::seconds(20));
+
 #ifdef CORE_PIPE
     pthread_cancel(spawner_thread.native_handle());
     pthread_cancel(prefetcher_thread.native_handle());
@@ -173,6 +174,10 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
 #ifdef LOG_LATENCY
     printf("flush latency stats\n");
+
+    // Print checkpoint stats before terminating threads
+    CheckpointStats::print_stats();
+    CheckpointStats::write_raw_data("results/checkpoint_latency.csv");
     for (const auto& entry : *log_map)
     {
       if (entry.second)

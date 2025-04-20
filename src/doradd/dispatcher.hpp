@@ -316,9 +316,7 @@ struct Indexer
 
     while (1)
     {
-    // if it is time to checkpoint, schedule a checkpoint this code is buggy and interferes with the code
       if (checkpointer->should_checkpoint()) {
-        // std::cout << "Scheduling checkpoint" << std::endl;
         checkpointer->schedule_checkpoint(ring);
         continue;
       }
@@ -337,7 +335,9 @@ struct Indexer
         auto txn = reinterpret_cast<T::Marshalled*>(read_head);
         auto indices_size = txn->indices_size;
         for (size_t i = 0; i < indices_size; i++) {
-          checkpointer->add_to_difference_set(txn->indices[i]);
+          if (txn->indices[i] < DB_SIZE && txn->indices[i] != 0) {
+            checkpointer->add_to_difference_set(txn->indices[i]);
+          }
         }
         read_head += ret;
         read_idx++;
