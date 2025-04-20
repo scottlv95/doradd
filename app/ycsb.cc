@@ -43,13 +43,15 @@ struct YCSBRow
 struct YCSBTransaction
 {
 public:
+  using RowType = YCSBRow;
   static Index<YCSBRow>* index;
   typedef struct __attribute__((packed))
   {
     uint32_t indices[ROWS_PER_TX];
     uint16_t write_set;
     uint64_t cown_ptrs[ROWS_PER_TX];
-    uint8_t pad[6];
+    uint32_t indices_size;
+    uint8_t pad[2];
   } Marshalled;
   // static_assert(sizeof(YCSBTransactionMarshalled) == 128);
 
@@ -59,10 +61,16 @@ public:
 
     for (int i = 0; i < ROWS_PER_TX; i++)
     {
+      if (txm->indices[i] >= DB_SIZE)
+      {
+        std::cout << "Index out of bounds: " << txm->indices[i] << std::endl;
+        exit(1);
+      }
       auto&& cown = index->get_row(txm->indices[i]);
       txm->cown_ptrs[i] = cown.get_base_addr();
     }
 
+    txm->indices_size = ROWS_PER_TX;
     return sizeof(Marshalled);
   }
 
@@ -184,6 +192,8 @@ int main(int argc, char** argv)
 
     YCSBTransaction::index->insert_row(cown_r);
   }
+
+  
 
   build_pipelines<YCSBTransaction>(core_cnt - 1, argv[3], argv[5]);
 }
