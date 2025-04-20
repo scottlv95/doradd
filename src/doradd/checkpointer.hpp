@@ -5,6 +5,8 @@
 #include <vector>
 #include <mutex>
 #include <algorithm>
+#include <atomic>
+#include <thread>
 
 class CheckpointStats {
 private:
@@ -21,19 +23,75 @@ private:
   uint64_t total_bytes = 0;
   uint64_t min_latency_us = std::numeric_limits<uint64_t>::max();
   uint64_t max_latency_us = 0;
+  
+  // Batch tracking
+  struct BatchInfo {
+    uint64_t start_time;
+    uint64_t end_time;
+    size_t num_records;
+    size_t total_bytes;
+  };
+  
+  std::vector<BatchInfo> batches;
+  uint64_t current_batch_start = 0;
+  size_t batch_count = 0;
 
   // Private constructor for singleton
   CheckpointStats() {
     latencies_us.reserve(1000);
+    batches.reserve(100);
   }
 
 public:
+  // Start tracking a new batch
+  static void start_batch() {
+    auto& stats = instance();
+    std::lock_guard<std::mutex> lock(stats.stats_mutex);
+    
+    stats.current_batch_start = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+    stats.batch_count++;
+    
+    printf("Starting checkpoint batch #%zu\n", stats.batch_count);
+  }
+  
+  // End current batch and record stats
+  static void end_batch(size_t records, size_t bytes) {
+    auto& stats = instance();
+    std::lock_guard<std::mutex> lock(stats.stats_mutex);
+    
+    uint64_t current_time = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+        
+    if (stats.current_batch_start > 0) {
+      BatchInfo batch;
+      batch.start_time = stats.current_batch_start;
+      batch.end_time = current_time;
+      batch.num_records = records;
+      batch.total_bytes = bytes;
+      stats.batches.push_back(batch);
+      
+      uint64_t duration_us = current_time - stats.current_batch_start;
+      printf("Completed checkpoint batch #%zu: %zu records, %zu bytes in %lu μs (%.2f ms)\n", 
+             stats.batch_count, records, bytes, duration_us, duration_us/1000.0);
+      
+      // Calculate throughput
+      double seconds = duration_us / 1000000.0;
+      double records_per_sec = records / seconds;
+      double mb_per_sec = bytes / (seconds * 1024 * 1024);
+      
+      printf("Batch throughput: %.2f records/sec, %.2f MB/sec\n", 
+             records_per_sec, mb_per_sec);
+      
+      stats.current_batch_start = 0;
+    }
+  }
+
   // Record a checkpoint operation
   static void record_checkpoint(uint64_t duration_us, size_t records, size_t bytes) {
     auto& stats = instance();
     std::lock_guard<std::mutex> lock(stats.stats_mutex);
 
-    printf("Recording checkpoint with duration %lu us, records %zu, bytes %zu\n", duration_us, records, bytes);
     stats.latencies_us.push_back(duration_us);
     stats.total_records += records;
     stats.total_bytes += bytes;
@@ -45,7 +103,6 @@ public:
   static void print_stats(FILE* output = stdout) {
     auto& stats = instance();
     std::lock_guard<std::mutex> lock(stats.stats_mutex);
-    
     if (stats.latencies_us.empty()) {
       fprintf(output, "No checkpoint operations recorded.\n");
       return;
@@ -82,6 +139,46 @@ public:
             (stats.total_records * 1000000.0) / total_us);
     fprintf(output, "  MB/sec: %.2f\n", 
             (stats.total_bytes * 1000000.0) / (total_us * 1024.0 * 1024.0));
+    
+    // Batch information
+    if (!stats.batches.empty()) {
+      fprintf(output, "\n===== Batch Statistics =====\n");
+      fprintf(output, "Total batches: %zu\n", stats.batches.size());
+      
+      // Calculate batch stats
+      uint64_t total_batch_duration = 0;
+      size_t total_batch_records = 0;
+      size_t total_batch_bytes = 0;
+      uint64_t min_batch_duration = UINT64_MAX;
+      uint64_t max_batch_duration = 0;
+      
+      for (const auto& batch : stats.batches) {
+        uint64_t duration = batch.end_time - batch.start_time;
+        total_batch_duration += duration;
+        total_batch_records += batch.num_records;
+        total_batch_bytes += batch.total_bytes;
+        min_batch_duration = std::min(min_batch_duration, duration);
+        max_batch_duration = std::max(max_batch_duration, duration);
+      }
+      
+      double avg_batch_duration = total_batch_duration / (double)stats.batches.size();
+      double avg_records_per_batch = total_batch_records / (double)stats.batches.size();
+      double avg_bytes_per_batch = total_batch_bytes / (double)stats.batches.size();
+      
+      fprintf(output, "Batch duration (microseconds):\n");
+      fprintf(output, "  Min: %lu μs (%.2f ms)\n", min_batch_duration, min_batch_duration/1000.0);
+      fprintf(output, "  Avg: %.2f μs (%.2f ms)\n", avg_batch_duration, avg_batch_duration/1000.0);
+      fprintf(output, "  Max: %lu μs (%.2f ms)\n", max_batch_duration, max_batch_duration/1000.0);
+      fprintf(output, "Batch size:\n");
+      fprintf(output, "  Avg records per batch: %.2f\n", avg_records_per_batch);
+      fprintf(output, "  Avg bytes per batch: %.2f\n", avg_bytes_per_batch);
+      fprintf(output, "Batch throughput:\n");
+      fprintf(output, "  Records/sec: %.2f\n", 
+              (total_batch_records * 1000000.0) / total_batch_duration);
+      fprintf(output, "  MB/sec: %.2f\n", 
+              (total_batch_bytes * 1000000.0) / (total_batch_duration * 1024.0 * 1024.0));
+    }
+    
     fprintf(output, "===================================\n");
   }
 
@@ -89,7 +186,6 @@ public:
   static void write_raw_data(const char* filename) {
     auto& stats = instance();
     std::lock_guard<std::mutex> lock(stats.stats_mutex);
-    
     FILE* f = fopen(filename, "w");
     if (!f) {
       fprintf(stderr, "Failed to open %s for writing\n", filename);
@@ -159,20 +255,20 @@ class Checkpointer
       printf("Processing checkpoint request\n");
       ring->pop();
       
-      // Start timing
-      auto checkpoint_start = std::chrono::high_resolution_clock::now();
-      
       // Get the set to process
       auto& diff_set = this->difference_sets[1 - this->current_difference_set_index];
       size_t diff_set_size = diff_set.size();
-
+ 
       printf("Processing checkpoint with %zu keys\n", diff_set_size);
       // Skip if no records
       if (diff_set_size == 0) {
-        checkpoint_in_flight = false;
-        return;
-      }
-      
+         checkpoint_in_flight = false;
+         return;
+       }
+       
+      // Start timing the entire batch
+      auto batch_start = std::chrono::high_resolution_clock::now();
+        
       // Convert to vector
       std::vector<uint64_t> keys;
       keys.reserve(diff_set_size);
@@ -180,9 +276,16 @@ class Checkpointer
         keys.push_back(txn_id);
       }
       
-      // Process records
-      size_t total_bytes = 0;
-      size_t successful_records = 0;
+      // These variables will track processing metrics
+      std::atomic<size_t> total_bytes{0};
+      std::atomic<size_t> successful_records{0};
+      std::atomic<uint64_t> total_processing_time_us{0};
+      
+      // Count of scheduled operations
+      size_t scheduled_ops = 0;
+      
+      // Use a shared variable to indicate when we're done scheduling
+      std::atomic<bool> scheduling_complete{false};
       
       for (auto key : keys) {
         // Get the cown as a weak reference without transferring ownership
@@ -198,29 +301,56 @@ class Checkpointer
           continue;
         }
         
+        scheduled_ops++;
+        
         // Create a strong reference for the when call
-        when(weak_cown) << [=, this, &total_bytes, &successful_records](acquired_cown<RowType> txn) {
+        when(weak_cown) << [=, this, &total_bytes, &successful_records, &total_processing_time_us](acquired_cown<RowType> txn) {
+          // Start timing this individual when block
+          auto when_start = std::chrono::high_resolution_clock::now();
+          
           RowType& txn_ref = txn;
           std::string serialized_txn(reinterpret_cast<const char*>(&txn_ref), sizeof(RowType));
+          
+          // Introduce a small delay to test timing (optional)
+          // std::this_thread::sleep_for(std::chrono::microseconds(100));
+          
           if (storage.put(std::to_string(key), serialized_txn)) {
-            total_bytes += serialized_txn.size();
-            successful_records++;
+            size_t bytes_size = serialized_txn.size();
+            total_bytes.fetch_add(bytes_size, std::memory_order_relaxed);
+            successful_records.fetch_add(1, std::memory_order_relaxed);
           }
+          
+          // End timing for this when block
+          auto when_end = std::chrono::high_resolution_clock::now();
+          auto when_duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+              when_end - when_start).count();
+          auto when_duration_us = static_cast<double>(when_duration_ns) / 1000.0;
+          
+          // Use more precise timing - nanoseconds internally for calculations
+          total_processing_time_us.fetch_add(when_duration_ns, std::memory_order_relaxed);
+          
+          
+          CheckpointStats::record_checkpoint(when_duration_us, 1, serialized_txn.size());
         };
       }
       
-      // End timing
-      auto checkpoint_end = std::chrono::high_resolution_clock::now();
-      auto duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
-          checkpoint_end - checkpoint_start).count();
-
-      std::cout << "Checkpoint completed in " << duration_us << " us with " << successful_records << " successful records" << std::endl;
-      // Record stats
-      CheckpointStats::record_checkpoint(duration_us, successful_records, total_bytes);
+      // End timing for batch preparation
+      auto batch_prep_end = std::chrono::high_resolution_clock::now();
+      auto batch_prep_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
+          batch_prep_end - batch_start).count();
+      
+      // Print batch scheduling info
+      std::cout << "CHECKPOINT BATCH: Scheduled " << scheduled_ops << " operations in " 
+                << batch_prep_duration_us << " μs" << std::endl;
+      
+      // Mark scheduling as complete
+      scheduling_complete.store(true, std::memory_order_release);
       
       // Clear the set
       diff_set.clear();
       checkpoint_in_flight = false;
+      
+      // Note: Final stats will be reported at the end of the pipeline via CheckpointStats::print_stats()
     }
 
     void set_index(Index<RowType>* new_index) {
