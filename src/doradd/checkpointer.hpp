@@ -7,6 +7,9 @@
 #include <algorithm>
 #include <atomic>
 #include <thread>
+#include <unordered_map>
+#include <latch>
+#include <optional>
 
 class CheckpointStats {
 private:
@@ -211,6 +214,16 @@ class Checkpointer
     bool current_difference_set_index = 0;
     std::chrono::steady_clock::time_point last_checkpoint_time;
 
+    // Track write bits for each key (0 or 1 indicating which version to write to)
+    std::unordered_map<uint64_t, bool> write_bits;
+
+    // Mutex for thread safety when accessing write_bits
+    std::mutex write_bits_mutex;
+    
+    // Completion thread management
+    std::thread completion_thread;
+    std::mutex completion_mutex;
+    
     std::array<std::unordered_set<uint64_t>, 2> difference_sets;
     const int64_t checkpoint_interval_ms = 1000;
   public:
@@ -224,6 +237,14 @@ class Checkpointer
       }
     }
 
+    ~Checkpointer() {
+      // Wait for any ongoing checkpoint completion to finish
+      std::lock_guard<std::mutex> lock(completion_mutex);
+      if (completion_thread.joinable()) {
+        completion_thread.join();
+      }
+    }
+
     static constexpr int CHECKPOINT_MARKER = -1;
 
     bool should_checkpoint() {
@@ -234,6 +255,30 @@ class Checkpointer
                            now - last_checkpoint_time).count();
       
       return duration_ms >= checkpoint_interval_ms;
+    }
+
+    // Get the current write bit for a key (creating if it doesn't exist)
+    bool get_write_bit(uint64_t key) {
+      std::lock_guard<std::mutex> lock(write_bits_mutex);
+      auto it = write_bits.find(key);
+      if (it == write_bits.end()) {
+        // Default to writing to version 0
+        write_bits[key] = false;
+        return false;
+      }
+      return it->second;
+    }
+
+    // Flip the write bit for a key
+    void flip_write_bit(uint64_t key) {
+      std::lock_guard<std::mutex> lock(write_bits_mutex);
+      auto it = write_bits.find(key);
+      if (it != write_bits.end()) {
+        it->second = !it->second;
+      } else {
+        // If key doesn't exist yet, initialize to true (version 1)
+        write_bits[key] = true;
+      }
     }
 
     void add_to_difference_set(uint64_t txn_id) {
@@ -255,6 +300,14 @@ class Checkpointer
       printf("Processing checkpoint request\n");
       ring->pop();
       
+      // Wait for any previous checkpoint completion thread to finish
+      {
+        std::lock_guard<std::mutex> lock(completion_mutex);
+        if (completion_thread.joinable()) {
+          completion_thread.join();
+        }
+      }
+      
       // Get the set to process
       auto& diff_set = this->difference_sets[1 - this->current_difference_set_index];
       size_t diff_set_size = diff_set.size();
@@ -267,90 +320,135 @@ class Checkpointer
        }
        
       // Start timing the entire batch
-      auto batch_start = std::chrono::high_resolution_clock::now();
+      auto batch_start = std::chrono::steady_clock::now();
         
-      // Convert to vector
+      // Convert to vector - make a copy to ensure thread safety
       std::vector<uint64_t> keys;
       keys.reserve(diff_set_size);
       for (auto txn_id : diff_set) {
         keys.push_back(txn_id);
       }
       
-      // These variables will track processing metrics
-      std::atomic<size_t> total_bytes{0};
-      std::atomic<size_t> successful_records{0};
-      std::atomic<uint64_t> total_processing_time_us{0};
+      // These metrics will be captured in thread-local storage
+      // and then moved to the completion thread
+      struct BatchMetrics {
+        std::atomic<size_t> total_bytes{0};
+        std::atomic<size_t> successful_records{0};
+        std::atomic<uint64_t> total_processing_time_us{0};
+      };
+      auto metrics = std::make_shared<BatchMetrics>();
       
       // Count of scheduled operations
       size_t scheduled_ops = 0;
       
-      // Use a shared variable to indicate when we're done scheduling
-      std::atomic<bool> scheduling_complete{false};
+      // Create a shared latch that will be counted down as operations complete
+      auto latch_ptr = std::make_shared<std::latch>(diff_set_size);
       
       for (auto key : keys) {
         // Get the cown as a weak reference without transferring ownership
         auto cown_addr = index->get_row_addr(key);
         if (cown_addr == nullptr) {
           printf("Skipping null cown_addr for key: %lu\n", key);
+          latch_ptr->count_down(); // Count down for skipped keys
           continue;
         }
         
         cown_ptr<RowType>& weak_cown = *cown_addr;
         if (!weak_cown) {
           printf("Skipping null cown for key: %lu\n", key);
+          latch_ptr->count_down(); // Count down for skipped keys
           continue;
         }
         
         scheduled_ops++;
         
-        // Create a strong reference for the when call
-        when(weak_cown) << [=, this, &total_bytes, &successful_records, &total_processing_time_us](acquired_cown<RowType> txn) {
-          // Start timing this individual when block
-          auto when_start = std::chrono::high_resolution_clock::now();
+        // Capture the metrics by shared_ptr to ensure they remain valid
+        when(weak_cown) << [key, this, metrics, latch_ptr](acquired_cown<RowType> txn) {
+          auto when_start = std::chrono::steady_clock::now();
           
           RowType& txn_ref = txn;
           std::string serialized_txn(reinterpret_cast<const char*>(&txn_ref), sizeof(RowType));
           
-          // Introduce a small delay to test timing (optional)
-          // std::this_thread::sleep_for(std::chrono::microseconds(100));
+          // Get the current write bit to determine which version to write to
+          bool write_bit = get_write_bit(key);
+          std::string versioned_key = std::to_string(key) + "_v" + std::to_string(write_bit ? 1 : 0);
           
-          if (storage.put(std::to_string(key), serialized_txn)) {
+          if (storage.put(versioned_key, serialized_txn)) {
             size_t bytes_size = serialized_txn.size();
-            total_bytes.fetch_add(bytes_size, std::memory_order_relaxed);
-            successful_records.fetch_add(1, std::memory_order_relaxed);
+            metrics->total_bytes.fetch_add(bytes_size, std::memory_order_relaxed);
+            metrics->successful_records.fetch_add(1, std::memory_order_relaxed);
           }
           
-          // End timing for this when block
-          auto when_end = std::chrono::high_resolution_clock::now();
-          auto when_duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+          auto when_end = std::chrono::steady_clock::now();
+          auto when_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
               when_end - when_start).count();
-          auto when_duration_us = static_cast<double>(when_duration_ns) / 1000.0;
           
-          // Use more precise timing - nanoseconds internally for calculations
-          total_processing_time_us.fetch_add(when_duration_ns, std::memory_order_relaxed);
+          metrics->total_processing_time_us.fetch_add(when_duration_us, std::memory_order_relaxed);
           
           
           CheckpointStats::record_checkpoint(when_duration_us, 1, serialized_txn.size());
+          latch_ptr->count_down();
         };
       }
       
-      // End timing for batch preparation
-      auto batch_prep_end = std::chrono::high_resolution_clock::now();
+      auto batch_prep_end = std::chrono::steady_clock::now();
       auto batch_prep_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
           batch_prep_end - batch_start).count();
       
-      // Print batch scheduling info
       std::cout << "CHECKPOINT BATCH: Scheduled " << scheduled_ops << " operations in " 
                 << batch_prep_duration_us << " μs" << std::endl;
       
-      // Mark scheduling as complete
-      scheduling_complete.store(true, std::memory_order_release);
+      // Create a copy of diff_set_ptr to ensure it's available to the completion thread
+      auto diff_set_ptr = &diff_set;
       
-      // Clear the set
-      diff_set.clear();
-      checkpoint_in_flight = false;
+      // Create a new thread to handle the completion of the checkpoint
+      // Use a lock to ensure thread safety
+      {
+        std::lock_guard<std::mutex> lock(completion_mutex);
+        completion_thread = std::thread([this, latch_ptr, keys = std::move(keys), 
+                                         diff_set_ptr, scheduled_ops, metrics]() {
+          // Wait for all operations to complete
+          if (scheduled_ops > 0) {
+            std::cout << "Background thread waiting for " << scheduled_ops 
+                     << " checkpoint operations to complete..." << std::endl;
+            latch_ptr->wait();
+            std::cout << "All checkpoint operations completed!" << std::endl;
+            
+            // NOW flip write bits for all modified keys after the checkpoint completes
+            for (const auto& key : keys) {
+              flip_write_bit(key);
+            }
+            std::cout << "Write bits flipped for all " << keys.size() << " keys" << std::endl;
+          }
+          
+          // Clear the set
+          diff_set_ptr->clear();
+          checkpoint_in_flight = false;
+          
+          std::cout << "Checkpoint completed and write bits flipped" << std::endl;
+        });
+      }
       
-      // Note: Final stats will be reported at the end of the pipeline via CheckpointStats::print_stats()
+    }
+
+    // Get the most recent stable version of a record
+    std::optional<std::string> get_stable_version(uint64_t key) {
+      bool write_bit = get_write_bit(key);
+      // The stable version is the opposite of the current write bit
+      std::string stable_key = std::to_string(key) + "_v" + std::to_string(write_bit ? 0 : 1);
+      
+      std::string value;
+      if (storage.get(stable_key, value)) {
+        return value;
+      }
+      
+      // If stable version doesn't exist, try the current version
+      std::string current_key = std::to_string(key) + "_v" + std::to_string(write_bit ? 1 : 0);
+      if (storage.get(current_key, value)) {
+        return value;
+      }
+      
+      return std::nullopt;
     }
 
     void set_index(Index<RowType>* new_index) {
