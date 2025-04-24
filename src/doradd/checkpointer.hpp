@@ -1,460 +1,281 @@
 #pragma once
-#include <cpp/when.h>
-// #include <cpp/cown_array.h>
-#include <unordered_set>
-#include <vector>
+
+#include <chrono>
+#include <cstdint>
+#include <limits>
 #include <mutex>
-#include <algorithm>
-#include <atomic>
 #include <thread>
+#include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <latch>
+#include <atomic>
+#include <algorithm>
 #include <optional>
 
-class CheckpointStats {
-private:
-  // Make it a singleton
-  static CheckpointStats& instance() {
-    static CheckpointStats stats;
-    return stats;
+#ifndef CHECKPOINT_BATCH_SIZE
+#  error "You must define CHECKPOINT_BATCH_SIZE"
+#endif
+
+constexpr size_t BatchSize = CHECKPOINT_BATCH_SIZE;
+static_assert(
+    BatchSize == 1 || BatchSize == 2 || BatchSize == 4 || BatchSize == 8 ||
+    BatchSize == 16 || BatchSize == 32,
+    "Unsupported CHECKPOINT_BATCH_SIZE"
+);
+
+namespace batch_helpers {
+  // Tuple-unpack and apply_when using a generic lambda
+  template<typename T, typename Tuple, typename F, size_t... Is>
+  void apply_when_impl(Tuple&& t, F&& f, std::index_sequence<Is...>) {
+    when(std::get<Is>(t)...) << [func = std::forward<F>(f)](auto&&... acquired) {
+      T* arr[] = { &static_cast<T&>(acquired)... };
+      func(arr, sizeof...(acquired));
+    };
   }
 
-  // Stats storage
-  std::mutex stats_mutex;
-  std::vector<uint64_t> latencies_us;  // Microseconds
+  template<typename T, typename Tuple, typename F>
+  void apply_when(Tuple&& t, F&& f) {
+    constexpr size_t N = std::tuple_size_v<std::remove_reference_t<Tuple>>;
+    apply_when_impl<T>(
+      std::forward<Tuple>(t), std::forward<F>(f),
+      std::make_index_sequence<N>()
+    );
+  }
+
+  template<size_t N, typename T>
+  auto cowns_to_tuple(const std::vector<cown_ptr<T>>& vc, size_t start) {
+    std::array<cown_ptr<T>, N> arr{};
+    for (size_t i = 0; i < N && start + i < vc.size(); ++i) {
+      arr[i] = vc[start + i];
+    }
+    return std::apply(
+      [](auto&&... elems) { return std::make_tuple(elems...); },
+      arr
+    );
+  }
+
+  template<size_t N, typename T, typename F>
+  void process_n_cowns(const std::vector<cown_ptr<T>>& cowns,
+                        const std::vector<uint64_t>& keys,
+                        size_t start,
+                        F&& f) {
+    size_t remain = std::min(N, cowns.size() - start);
+    if (remain == N) {
+      auto tup = cowns_to_tuple<N>(cowns, start);
+      auto lam = [&, idx = start, func = std::forward<F>(f)](T** objs, size_t) {
+        func(&keys[idx], objs, N);
+      };
+      apply_when<T>(std::move(tup), std::move(lam));
+    } else {
+      for (size_t i = 0; i < remain; ++i) {
+        when(cowns[start + i]) << [&, idx = start + i, func = std::forward<F>(f)](auto&& a) {
+          T* obj = &static_cast<T&>(a);
+          func(&keys[idx], &obj, 1);
+        };
+      }
+    }
+  }
+}
+
+// Stats collector singleton
+class CheckpointStats {
+  std::mutex mu;
+  std::vector<uint64_t> latencies;
   uint64_t total_records = 0;
   uint64_t total_bytes = 0;
-  uint64_t min_latency_us = std::numeric_limits<uint64_t>::max();
-  uint64_t max_latency_us = 0;
-  
-  // Batch tracking
-  struct BatchInfo {
-    uint64_t start_time;
-    uint64_t end_time;
-    size_t num_records;
-    size_t total_bytes;
-  };
-  
-  std::vector<BatchInfo> batches;
-  uint64_t current_batch_start = 0;
-  size_t batch_count = 0;
-
-  // Private constructor for singleton
-  CheckpointStats() {
-    latencies_us.reserve(1000);
-    batches.reserve(100);
-  }
+  uint64_t min_lat = std::numeric_limits<uint64_t>::max();
+  uint64_t max_lat = 0;
 
 public:
-  // Start tracking a new batch
-  static void start_batch() {
-    auto& stats = instance();
-    std::lock_guard<std::mutex> lock(stats.stats_mutex);
-    
-    stats.current_batch_start = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-    stats.batch_count++;
-    
-    printf("Starting checkpoint batch #%zu\n", stats.batch_count);
-  }
-  
-  // End current batch and record stats
-  static void end_batch(size_t records, size_t bytes) {
-    auto& stats = instance();
-    std::lock_guard<std::mutex> lock(stats.stats_mutex);
-    
-    uint64_t current_time = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch()).count();
-        
-    if (stats.current_batch_start > 0) {
-      BatchInfo batch;
-      batch.start_time = stats.current_batch_start;
-      batch.end_time = current_time;
-      batch.num_records = records;
-      batch.total_bytes = bytes;
-      stats.batches.push_back(batch);
-      
-      uint64_t duration_us = current_time - stats.current_batch_start;
-      printf("Completed checkpoint batch #%zu: %zu records, %zu bytes in %lu μs (%.2f ms)\n", 
-             stats.batch_count, records, bytes, duration_us, duration_us/1000.0);
-      
-      // Calculate throughput
-      double seconds = duration_us / 1000000.0;
-      double records_per_sec = records / seconds;
-      double mb_per_sec = bytes / (seconds * 1024 * 1024);
-      
-      printf("Batch throughput: %.2f records/sec, %.2f MB/sec\n", 
-             records_per_sec, mb_per_sec);
-      
-      stats.current_batch_start = 0;
-    }
+  static CheckpointStats& instance() {
+    static CheckpointStats inst;
+    return inst;
   }
 
-  // Record a checkpoint operation
-  static void record_checkpoint(uint64_t duration_us, size_t records, size_t bytes) {
-    auto& stats = instance();
-    std::lock_guard<std::mutex> lock(stats.stats_mutex);
-
-    stats.latencies_us.push_back(duration_us);
-    stats.total_records += records;
-    stats.total_bytes += bytes;
-    stats.min_latency_us = std::min(stats.min_latency_us, duration_us);
-    stats.max_latency_us = std::max(stats.max_latency_us, duration_us);
+  void record(uint64_t dur_us, size_t recs, size_t bytes) {
+    std::lock_guard<std::mutex> lg(mu);
+    latencies.push_back(dur_us);
+    total_records += recs;
+    total_bytes += bytes;
+    min_lat = std::min(min_lat, dur_us);
+    max_lat = std::max(max_lat, dur_us);
   }
 
-  // Print checkpoint statistics
-  static void print_stats(FILE* output = stdout) {
-    auto& stats = instance();
-    std::lock_guard<std::mutex> lock(stats.stats_mutex);
-    if (stats.latencies_us.empty()) {
-      fprintf(output, "No checkpoint operations recorded.\n");
+  static void record_checkpoint(uint64_t dur_us, size_t recs, size_t bytes) {
+    instance().record(dur_us, recs, bytes);
+  }
+
+  static void print_stats(FILE* out = stdout) {
+    auto& s = instance();
+    std::lock_guard<std::mutex> lg(s.mu);
+    if (s.latencies.empty()) {
+      fprintf(out, "No checkpoints recorded.\n");
       return;
     }
-
-    // Calculate average
+    std::sort(s.latencies.begin(), s.latencies.end());
     uint64_t total_us = 0;
-    for (auto latency : stats.latencies_us) {
-      total_us += latency;
-    }
-    double avg_latency_us = static_cast<double>(total_us) / stats.latencies_us.size();
-    
-    // Calculate percentiles
-    std::vector<uint64_t> sorted = stats.latencies_us;
-    std::sort(sorted.begin(), sorted.end());
-    uint64_t p50 = sorted[sorted.size() * 0.5];
-    uint64_t p95 = sorted[sorted.size() * 0.95];
-    uint64_t p99 = sorted[sorted.size() * 0.99];
-    
-    // Output stats
-    fprintf(output, "\n===== Checkpoint Latency Stats =====\n");
-    fprintf(output, "Total checkpoints: %zu\n", stats.latencies_us.size());
-    fprintf(output, "Total records: %lu\n", stats.total_records);
-    fprintf(output, "Total data size: %lu bytes\n", stats.total_bytes);
-    fprintf(output, "Latency (microseconds):\n");
-    fprintf(output, "  Min: %lu μs (%.2f ms)\n", stats.min_latency_us, stats.min_latency_us/1000.0);
-    fprintf(output, "  Avg: %.2f μs (%.2f ms)\n", avg_latency_us, avg_latency_us/1000.0);
-    fprintf(output, "  Max: %lu μs (%.2f ms)\n", stats.max_latency_us, stats.max_latency_us/1000.0);
-    fprintf(output, "  p50: %lu μs (%.2f ms)\n", p50, p50/1000.0);
-    fprintf(output, "  p95: %lu μs (%.2f ms)\n", p95, p95/1000.0);
-    fprintf(output, "  p99: %lu μs (%.2f ms)\n", p99, p99/1000.0);
-    fprintf(output, "Throughput:\n");
-    fprintf(output, "  Records/sec: %.2f\n", 
-            (stats.total_records * 1000000.0) / total_us);
-    fprintf(output, "  MB/sec: %.2f\n", 
-            (stats.total_bytes * 1000000.0) / (total_us * 1024.0 * 1024.0));
-    
-    // Batch information
-    if (!stats.batches.empty()) {
-      fprintf(output, "\n===== Batch Statistics =====\n");
-      fprintf(output, "Total batches: %zu\n", stats.batches.size());
-      
-      // Calculate batch stats
-      uint64_t total_batch_duration = 0;
-      size_t total_batch_records = 0;
-      size_t total_batch_bytes = 0;
-      uint64_t min_batch_duration = UINT64_MAX;
-      uint64_t max_batch_duration = 0;
-      
-      for (const auto& batch : stats.batches) {
-        uint64_t duration = batch.end_time - batch.start_time;
-        total_batch_duration += duration;
-        total_batch_records += batch.num_records;
-        total_batch_bytes += batch.total_bytes;
-        min_batch_duration = std::min(min_batch_duration, duration);
-        max_batch_duration = std::max(max_batch_duration, duration);
-      }
-      
-      double avg_batch_duration = total_batch_duration / (double)stats.batches.size();
-      double avg_records_per_batch = total_batch_records / (double)stats.batches.size();
-      double avg_bytes_per_batch = total_batch_bytes / (double)stats.batches.size();
-      
-      fprintf(output, "Batch duration (microseconds):\n");
-      fprintf(output, "  Min: %lu μs (%.2f ms)\n", min_batch_duration, min_batch_duration/1000.0);
-      fprintf(output, "  Avg: %.2f μs (%.2f ms)\n", avg_batch_duration, avg_batch_duration/1000.0);
-      fprintf(output, "  Max: %lu μs (%.2f ms)\n", max_batch_duration, max_batch_duration/1000.0);
-      fprintf(output, "Batch size:\n");
-      fprintf(output, "  Avg records per batch: %.2f\n", avg_records_per_batch);
-      fprintf(output, "  Avg bytes per batch: %.2f\n", avg_bytes_per_batch);
-      fprintf(output, "Batch throughput:\n");
-      fprintf(output, "  Records/sec: %.2f\n", 
-              (total_batch_records * 1000000.0) / total_batch_duration);
-      fprintf(output, "  MB/sec: %.2f\n", 
-              (total_batch_bytes * 1000000.0) / (total_batch_duration * 1024.0 * 1024.0));
-    }
-    
-    fprintf(output, "===================================\n");
+    for (auto v : s.latencies) total_us += v;
+    double avg = double(total_us) / s.latencies.size();
+    fprintf(out,
+            "Latency (μs): min=%lu, avg=%.2f, max=%lu\n"
+            "Total records: %lu, total bytes: %lu\n",
+            s.min_lat, avg, s.max_lat,
+            s.total_records, s.total_bytes
+    );
   }
 
-  // Method to write raw data to a file for external processing
+  // Export raw latencies to CSV
   static void write_raw_data(const char* filename) {
-    auto& stats = instance();
-    std::lock_guard<std::mutex> lock(stats.stats_mutex);
+    auto& s = instance();
+    std::lock_guard<std::mutex> lg(s.mu);
     FILE* f = fopen(filename, "w");
-    if (!f) {
-      fprintf(stderr, "Failed to open %s for writing\n", filename);
-      return;
-    }
-    
+    if (!f) return;
     fprintf(f, "latency_us\n");
-    for (auto latency : stats.latencies_us) {
-      fprintf(f, "%lu\n", latency);
-    }
-    
+    for (auto v : s.latencies) fprintf(f, "%lu\n", v);
     fclose(f);
   }
 };
 
+// Batch metrics for checkpoint thread
+struct BatchMetrics {
+  std::atomic<size_t> total_bytes{0};
+  std::atomic<size_t> successful{0};
+  std::atomic<uint64_t> total_us{0};
+};
+
+// Main Checkpointer class
 template <typename StorageType, typename TxnType, typename RowType = TxnType>
-class Checkpointer
-{
-  private:
-    StorageType storage;
-    Index<RowType>* index;
-    bool checkpoint_in_flight = false;
-    bool current_difference_set_index = 0;
-    std::chrono::steady_clock::time_point last_checkpoint_time;
+class Checkpointer {
+  StorageType storage;
+  Index<RowType>* index = nullptr;
+  std::atomic<bool> checkpoint_in_flight{false};
+  std::atomic<int> current_diff_idx{0};
+  std::array<std::unordered_set<uint64_t>, 2> diffs;
+  std::chrono::steady_clock::time_point last_cp;
+  std::thread completion_thread;
+  std::mutex completion_mu;
+  std::mutex write_mu;
+  std::unordered_map<uint64_t,bool> bits;
+  const int interval_ms = 1000;
 
-    // Track write bits for each key (0 or 1 indicating which version to write to)
-    std::unordered_map<uint64_t, bool> write_bits;
+public:
+  static constexpr int CHECKPOINT_MARKER = -1;
 
-    // Mutex for thread safety when accessing write_bits
-    std::mutex write_bits_mutex;
-    
-    // Completion thread management
-    std::thread completion_thread;
-    std::mutex completion_mutex;
-    
-    std::array<std::unordered_set<uint64_t>, 2> difference_sets;
-    const int64_t checkpoint_interval_ms = 1000;
-  public:
-    Checkpointer(const std::string& db_path = "checkpoint.db") :
-    last_checkpoint_time(std::chrono::steady_clock::now()) {
-      bool success = storage.open(db_path);
-      if (!success) {
-        std::cerr << "Failed to open checkpoint database at " << db_path << std::endl;
-      } else {
-        std::cout << "Successfully opened checkpoint database at " << db_path << std::endl;
-      }
+  Checkpointer(const std::string& path = "checkpoint.db")
+    : last_cp(std::chrono::steady_clock::now()) {
+    if (!storage.open(path)) {
+      throw std::runtime_error("Failed to open DB");
     }
-
-    ~Checkpointer() {
-      // Wait for any ongoing checkpoint completion to finish
-      std::lock_guard<std::mutex> lock(completion_mutex);
-      if (completion_thread.joinable()) {
-        completion_thread.join();
-      }
+    // Load persisted write-bits metadata
+    std::string meta_prefix = "_meta_bit";
+    for (auto& kv : storage.scan_prefix(meta_prefix)) {
+      // kv.first = "<key>_meta_bit", kv.second = single-byte '0' or '1'
+      uint64_t k = std::stoull(kv.first.substr(0, kv.first.size() - meta_prefix.size()));
+      bits[k] = (kv.second.size()>0 && kv.second[0] == '1');
     }
+  }
 
-    static constexpr int CHECKPOINT_MARKER = -1;
+  ~Checkpointer() {
+    std::lock_guard<std::mutex> lg(completion_mu);
+    if (completion_thread.joinable())
+      completion_thread.join();
+  }
 
-    bool should_checkpoint() {
-      auto now = std::chrono::steady_clock::now();
-      
-      // Get the exact milliseconds since last checkpoint
-      auto duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           now - last_checkpoint_time).count();
-      
-      return duration_ms >= checkpoint_interval_ms;
-    }
+  void set_index(Index<RowType>* idx) {
+    if (!index) index = idx;
+  }
 
-    // Get the current write bit for a key (creating if it doesn't exist)
-    bool get_write_bit(uint64_t key) {
-      std::lock_guard<std::mutex> lock(write_bits_mutex);
-      auto it = write_bits.find(key);
-      if (it == write_bits.end()) {
-        // Default to writing to version 0
-        write_bits[key] = false;
-        return false;
-      }
-      return it->second;
-    }
+  bool should_checkpoint() const {
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - last_cp).count();
+    return elapsed >= interval_ms;
+  }
 
-    // Flip the write bit for a key
-    void flip_write_bit(uint64_t key) {
-      std::lock_guard<std::mutex> lock(write_bits_mutex);
-      auto it = write_bits.find(key);
-      if (it != write_bits.end()) {
-        it->second = !it->second;
-      } else {
-        // If key doesn't exist yet, initialize to true (version 1)
-        write_bits[key] = true;
-      }
-    }
+  void add_to_difference_set(uint64_t txn_id) {
+    diffs[current_diff_idx].insert(txn_id);
+  }
 
-    void add_to_difference_set(uint64_t txn_id) {
-      difference_sets[current_difference_set_index].insert(txn_id);
-    }
-
-    void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring) {
-      if (checkpoint_in_flight) {
-        // do not checkpoint if already in flight
-        return;
-      }
+  void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring) {
+    if (!checkpoint_in_flight.exchange(true)) {
       ring->push(CHECKPOINT_MARKER);
-      checkpoint_in_flight = true;
-      current_difference_set_index = 1 - current_difference_set_index;
-      last_checkpoint_time = std::chrono::steady_clock::now();
+      last_cp = std::chrono::steady_clock::now();
+      current_diff_idx = 1 - current_diff_idx.load();
+    }
+  }
+
+  void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
+    ring->pop();
+    {
+      std::lock_guard<std::mutex> lg(completion_mu);
+      if (completion_thread.joinable())
+        completion_thread.join();
     }
 
-    void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
-      printf("Processing checkpoint request\n");
-      ring->pop();
-      
-      // Wait for any previous checkpoint completion thread to finish
-      {
-        std::lock_guard<std::mutex> lock(completion_mutex);
-        if (completion_thread.joinable()) {
-          completion_thread.join();
-        }
+    int idx = 1 - current_diff_idx.load();
+    auto keys_ptr = std::make_shared<std::vector<uint64_t>>(diffs[idx].begin(), diffs[idx].end());
+    diffs[idx].clear();
+    if (keys_ptr->empty()) {
+      checkpoint_in_flight = false;
+      return;
+    }
+
+    // Collect live cowns and prepare latch
+    std::vector<cown_ptr<RowType>> cows;
+    cows.reserve(keys_ptr->size());
+    for (auto k : *keys_ptr) {
+      if (auto p = index->get_row_addr(k)) {
+        cows.push_back(*p);
       }
-      
-      // Get the set to process
-      auto& diff_set = this->difference_sets[1 - this->current_difference_set_index];
-      size_t diff_set_size = diff_set.size();
- 
-      printf("Processing checkpoint with %zu keys\n", diff_set_size);
-      // Skip if no records
-      if (diff_set_size == 0) {
-         checkpoint_in_flight = false;
-         return;
-       }
-       
-      // Start timing the entire batch
-      auto batch_start = std::chrono::steady_clock::now();
-        
-      // Convert to vector - make a copy to ensure thread safety
-      std::vector<uint64_t> keys;
-      keys.reserve(diff_set_size);
-      for (auto txn_id : diff_set) {
-        keys.push_back(txn_id);
+    }
+    auto latch = std::make_shared<std::latch>(cows.size());
+    auto metrics = std::make_shared<BatchMetrics>();
+
+    // Schedule batched operations
+    auto op = [this, metrics, latch](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+      auto start = std::chrono::steady_clock::now();
+      size_t batch_bytes = 0;
+      for (size_t i = 0; i < cnt; ++i) {
+        RowType& obj = *items[i];
+        std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
+        bool bit;
+        {
+          std::lock_guard<std::mutex> lg(write_mu);
+          bit = bits[*key_ptr];
+        }
+        std::string versioned = std::to_string(*key_ptr) + "_v" + (bit ? '1' : '0');
+        if (storage.put(versioned, data)) batch_bytes += data.size();
       }
-      
-      // These metrics will be captured in thread-local storage
-      // and then moved to the completion thread
-      struct BatchMetrics {
-        std::atomic<size_t> total_bytes{0};
-        std::atomic<size_t> successful_records{0};
-        std::atomic<uint64_t> total_processing_time_us{0};
-      };
-      auto metrics = std::make_shared<BatchMetrics>();
-      
-      // Count of scheduled operations
-      size_t scheduled_ops = 0;
-      
-      // Create a shared latch that will be counted down as operations complete
-      auto latch_ptr = std::make_shared<std::latch>(diff_set_size);
-      
-      for (auto key : keys) {
-        // Get the cown as a weak reference without transferring ownership
-        auto cown_addr = index->get_row_addr(key);
-        if (cown_addr == nullptr) {
-          printf("Skipping null cown_addr for key: %lu\n", key);
-          latch_ptr->count_down(); // Count down for skipped keys
-          continue;
-        }
-        
-        cown_ptr<RowType>& weak_cown = *cown_addr;
-        if (!weak_cown) {
-          printf("Skipping null cown for key: %lu\n", key);
-          latch_ptr->count_down(); // Count down for skipped keys
-          continue;
-        }
-        
-        scheduled_ops++;
-        
-        // Capture the metrics by shared_ptr to ensure they remain valid
-        when(weak_cown) << [key, this, metrics, latch_ptr](acquired_cown<RowType> txn) {
-          auto when_start = std::chrono::steady_clock::now();
-          
-          RowType& txn_ref = txn;
-          std::string serialized_txn(reinterpret_cast<const char*>(&txn_ref), sizeof(RowType));
-          
-          // Get the current write bit to determine which version to write to
-          bool write_bit = get_write_bit(key);
-          std::string versioned_key = std::to_string(key) + "_v" + std::to_string(write_bit ? 1 : 0);
-          
-          if (storage.put(versioned_key, serialized_txn)) {
-            size_t bytes_size = serialized_txn.size();
-            metrics->total_bytes.fetch_add(bytes_size, std::memory_order_relaxed);
-            metrics->successful_records.fetch_add(1, std::memory_order_relaxed);
+      auto dur = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - start).count();
+      CheckpointStats::record_checkpoint(dur, cnt, batch_bytes);
+      for (size_t i = 0; i < cnt; ++i) latch->count_down();
+    };
+
+    for (size_t i = 0; i < cows.size(); i += BatchSize) {
+      batch_helpers::process_n_cowns<BatchSize>(cows, *keys_ptr, i, op);
+    }
+
+    // Spawn completion thread to flip bits and persist metadata
+    {
+      std::lock_guard<std::mutex> lg(completion_mu);
+      completion_thread = std::thread([this, keys_ptr, latch]() {
+        latch->wait();
+        std::vector<std::pair<std::string, std::string>> batch_entries;
+        batch_entries.reserve(keys_ptr->size());
+        {
+          std::lock_guard<std::mutex> lg(write_mu);
+          for (auto k : *keys_ptr) {
+            bits[k] = !bits[k];
+            std::string metaKey = std::to_string(k) + "_meta_bit";
+            char bitChar = bits[k] ? '1' : '0';
+            batch_entries.emplace_back(metaKey, std::string(&bitChar,1));
           }
-          
-          auto when_end = std::chrono::steady_clock::now();
-          auto when_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
-              when_end - when_start).count();
-          
-          metrics->total_processing_time_us.fetch_add(when_duration_us, std::memory_order_relaxed);
-          
-          
-          CheckpointStats::record_checkpoint(when_duration_us, 1, serialized_txn.size());
-          latch_ptr->count_down();
-        };
-      }
-      
-      auto batch_prep_end = std::chrono::steady_clock::now();
-      auto batch_prep_duration_us = std::chrono::duration_cast<std::chrono::microseconds>(
-          batch_prep_end - batch_start).count();
-      
-      std::cout << "CHECKPOINT BATCH: Scheduled " << scheduled_ops << " operations in " 
-                << batch_prep_duration_us << " μs" << std::endl;
-      
-      // Create a copy of diff_set_ptr to ensure it's available to the completion thread
-      auto diff_set_ptr = &diff_set;
-      
-      // Create a new thread to handle the completion of the checkpoint
-      // Use a lock to ensure thread safety
-      {
-        std::lock_guard<std::mutex> lock(completion_mutex);
-        completion_thread = std::thread([this, latch_ptr, keys = std::move(keys), 
-                                         diff_set_ptr, scheduled_ops, metrics]() {
-          // Wait for all operations to complete
-          if (scheduled_ops > 0) {
-            std::cout << "Background thread waiting for " << scheduled_ops 
-                     << " checkpoint operations to complete..." << std::endl;
-            latch_ptr->wait();
-            std::cout << "All checkpoint operations completed!" << std::endl;
-            
-            // NOW flip write bits for all modified keys after the checkpoint completes
-            for (const auto& key : keys) {
-              flip_write_bit(key);
-            }
-            std::cout << "Write bits flipped for all " << keys.size() << " keys" << std::endl;
-          }
-          
-          // Clear the set
-          diff_set_ptr->clear();
-          checkpoint_in_flight = false;
-          
-          std::cout << "Checkpoint completed and write bits flipped" << std::endl;
-        });
-      }
-      
+        }
+        // this ensure it is atomic
+        storage.batch_put(batch_entries);
+        checkpoint_in_flight = false;
+      });
     }
-
-    // Get the most recent stable version of a record
-    std::optional<std::string> get_stable_version(uint64_t key) {
-      bool write_bit = get_write_bit(key);
-      // The stable version is the opposite of the current write bit
-      std::string stable_key = std::to_string(key) + "_v" + std::to_string(write_bit ? 0 : 1);
-      
-      std::string value;
-      if (storage.get(stable_key, value)) {
-        return value;
-      }
-      
-      // If stable version doesn't exist, try the current version
-      std::string current_key = std::to_string(key) + "_v" + std::to_string(write_bit ? 1 : 0);
-      if (storage.get(current_key, value)) {
-        return value;
-      }
-      
-      return std::nullopt;
-    }
-
-    void set_index(Index<RowType>* new_index) {
-      if (index == nullptr) {
-        index = new_index;
-        std::cout << "Checkpointer index initialized" << std::endl;
-      }
-    }
+  }
 };
