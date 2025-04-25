@@ -12,6 +12,11 @@
 #include <atomic>
 #include <algorithm>
 #include <optional>
+#include <filesystem>
+#include <fstream>
+
+// Include the separated CheckpointStats class
+#include "checkpoint_stats.hpp"
 
 #ifndef CHECKPOINT_BATCH_SIZE
 #  error "You must define CHECKPOINT_BATCH_SIZE"
@@ -56,8 +61,8 @@ namespace batch_helpers {
   }
 
   template<size_t N, typename T, typename F>
-  void process_n_cowns(const std::vector<cown_ptr<T>>& cowns,
-                        const std::vector<uint64_t>& keys,
+  void process_n_cowns(const std::vector<cown_ptr<T>>& cowns, 
+                       const std::vector<uint64_t>& keys,
                         size_t start,
                         F&& f) {
     size_t remain = std::min(N, cowns.size() - start);
@@ -78,65 +83,6 @@ namespace batch_helpers {
   }
 }
 
-// Stats collector singleton
-class CheckpointStats {
-  std::mutex mu;
-  std::vector<uint64_t> latencies;
-  uint64_t total_records = 0;
-  uint64_t total_bytes = 0;
-  uint64_t min_lat = std::numeric_limits<uint64_t>::max();
-  uint64_t max_lat = 0;
-
-public:
-  static CheckpointStats& instance() {
-    static CheckpointStats inst;
-    return inst;
-  }
-
-  void record(uint64_t dur_us, size_t recs, size_t bytes) {
-    std::lock_guard<std::mutex> lg(mu);
-    latencies.push_back(dur_us);
-    total_records += recs;
-    total_bytes += bytes;
-    min_lat = std::min(min_lat, dur_us);
-    max_lat = std::max(max_lat, dur_us);
-  }
-
-  static void record_checkpoint(uint64_t dur_us, size_t recs, size_t bytes) {
-    instance().record(dur_us, recs, bytes);
-  }
-
-  static void print_stats(FILE* out = stdout) {
-    auto& s = instance();
-    std::lock_guard<std::mutex> lg(s.mu);
-    if (s.latencies.empty()) {
-      fprintf(out, "No checkpoints recorded.\n");
-      return;
-    }
-    std::sort(s.latencies.begin(), s.latencies.end());
-    uint64_t total_us = 0;
-    for (auto v : s.latencies) total_us += v;
-    double avg = double(total_us) / s.latencies.size();
-    fprintf(out,
-            "Latency (μs): min=%lu, avg=%.2f, max=%lu\n"
-            "Total records: %lu, total bytes: %lu\n",
-            s.min_lat, avg, s.max_lat,
-            s.total_records, s.total_bytes
-    );
-  }
-
-  // Export raw latencies to CSV
-  static void write_raw_data(const char* filename) {
-    auto& s = instance();
-    std::lock_guard<std::mutex> lg(s.mu);
-    FILE* f = fopen(filename, "w");
-    if (!f) return;
-    fprintf(f, "latency_us\n");
-    for (auto v : s.latencies) fprintf(f, "%lu\n", v);
-    fclose(f);
-  }
-};
-
 // Batch metrics for checkpoint thread
 struct BatchMetrics {
   std::atomic<size_t> total_bytes{0};
@@ -147,7 +93,7 @@ struct BatchMetrics {
 // Main Checkpointer class
 template <typename StorageType, typename TxnType, typename RowType = TxnType>
 class Checkpointer {
-  StorageType storage;
+    StorageType storage;
   Index<RowType>* index = nullptr;
   std::atomic<bool> checkpoint_in_flight{false};
   std::atomic<int> current_diff_idx{0};
@@ -157,9 +103,14 @@ class Checkpointer {
   std::mutex completion_mu;
   std::mutex write_mu;
   std::unordered_map<uint64_t,bool> bits;
-  const int interval_ms = 1000;
+  
+  // Transaction count threshold for checkpoint (instead of time)
+  size_t tx_count_threshold = 10000; // Default to 10,000 transactions
+  
+  // Counter for transactions since last checkpoint
+  std::atomic<size_t> tx_count_since_last_checkpoint{0};
 
-public:
+  public:
   static constexpr int CHECKPOINT_MARKER = -1;
 
   Checkpointer(const std::string& path = "checkpoint.db")
@@ -174,6 +125,17 @@ public:
       uint64_t k = std::stoull(kv.first.substr(0, kv.first.size() - meta_prefix.size()));
       bits[k] = (kv.second.size()>0 && kv.second[0] == '1');
     }
+    
+    // Check environment variables for configuration
+    const char* threshold_env = getenv("CHECKPOINT_THRESHOLD");
+    if (threshold_env) {
+      try {
+        tx_count_threshold = std::stoul(threshold_env);
+        printf("Checkpointer: Using transaction threshold from environment: %zu\n", tx_count_threshold);
+      } catch (const std::exception& e) {
+        fprintf(stderr, "Invalid CHECKPOINT_THRESHOLD: %s\n", threshold_env);
+      }
+    }
   }
 
   ~Checkpointer() {
@@ -187,39 +149,40 @@ public:
   }
 
   bool should_checkpoint() const {
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - last_cp).count();
-    return elapsed >= interval_ms;
+    // Check transaction count threshold
+    return tx_count_since_last_checkpoint.load() >= tx_count_threshold;
   }
 
-  void add_to_difference_set(uint64_t txn_id) {
+    void add_to_difference_set(uint64_t txn_id) {
     diffs[current_diff_idx].insert(txn_id);
-  }
+    tx_count_since_last_checkpoint.fetch_add(1);
+    }
 
-  void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring) {
+    void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring) {
     if (!checkpoint_in_flight.exchange(true)) {
       ring->push(CHECKPOINT_MARKER);
-      last_cp = std::chrono::steady_clock::now();
       current_diff_idx = 1 - current_diff_idx.load();
+      // Reset transaction counter
+      tx_count_since_last_checkpoint.store(0);
     }
-  }
+    }
 
-  void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
-    ring->pop();
-    {
+    void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
+      ring->pop();
+      {
       std::lock_guard<std::mutex> lg(completion_mu);
       if (completion_thread.joinable())
-        completion_thread.join();
+          completion_thread.join();
     }
 
     int idx = 1 - current_diff_idx.load();
     auto keys_ptr = std::make_shared<std::vector<uint64_t>>(diffs[idx].begin(), diffs[idx].end());
     diffs[idx].clear();
     if (keys_ptr->empty()) {
-      checkpoint_in_flight = false;
-      return;
-    }
-
+         checkpoint_in_flight = false;
+         return;
+       }
+       
     // Collect live cowns and prepare latch
     std::vector<cown_ptr<RowType>> cows;
     cows.reserve(keys_ptr->size());
@@ -229,8 +192,8 @@ public:
       }
     }
     auto latch = std::make_shared<std::latch>(cows.size());
-    auto metrics = std::make_shared<BatchMetrics>();
-
+      auto metrics = std::make_shared<BatchMetrics>();
+      
     // Schedule batched operations
     auto op = [this, metrics, latch](const uint64_t* key_ptr, RowType** items, size_t cnt) {
       auto start = std::chrono::steady_clock::now();
@@ -274,8 +237,24 @@ public:
         }
         // this ensure it is atomic
         storage.batch_put(batch_entries);
-        checkpoint_in_flight = false;
-      });
+          checkpoint_in_flight = false;
+        });
+      }
+    }
+
+  // Parse command line args to update checkpoint parameters
+  void parse_args(int argc, char* argv[]) {
+    for (int i = 1; i < argc; i++) {
+      std::string arg = argv[i];
+      if (arg == "--txn-threshold" && i + 1 < argc) {
+        try {
+          tx_count_threshold = std::stoul(argv[i+1]);
+          printf("Checkpoint: Setting transaction threshold to %zu\n", tx_count_threshold);
+          i++; // Skip the next argument
+        } catch (const std::exception& e) {
+          fprintf(stderr, "Invalid transaction threshold: %s\n", argv[i+1]);
+        }
+      }
     }
   }
 };

@@ -10,13 +10,14 @@
 
 #include <thread>
 #include <unordered_map>
+#include <filesystem>
 
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 std::unordered_map<std::thread::id, log_arr_type*>* log_map;
 std::mutex* counter_map_mutex;
 
 template<typename T>
-void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
+void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 0, char** argv = nullptr)
 {
   // init verona-rt scheduler
   auto& sched = Scheduler::get();
@@ -32,6 +33,11 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
   // Create storage instance and checkpointer
   auto* checkpointer = new Checkpointer<RocksDBStore, T, typename T::RowType>("checkpoint.db");
+  
+  // Pass command line arguments to the checkpointer if available
+  if (argc > 0 && argv != nullptr) {
+    checkpointer->parse_args(argc, argv);
+  }
 
   // init and run dispatcher pipelines
   when() << [&]() {
@@ -177,7 +183,13 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
     // Print checkpoint stats before terminating threads
     CheckpointStats::print_stats();
+    
+    // Create results directory if it doesn't exist
+    std::filesystem::create_directories("results");
+    
+    // Write raw data to the specified file
     CheckpointStats::write_raw_data("results/checkpoint_latency.csv");
+
     for (const auto& entry : *log_map)
     {
       if (entry.second)
