@@ -37,6 +37,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
   // Pass command line arguments to the checkpointer if available
   if (argc > 0 && argv != nullptr) {
     checkpointer->parse_args(argc, argv);
+    CheckpointStats::parse_args(argc, argv);
   }
 
   // init and run dispatcher pipelines
@@ -178,11 +179,12 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
 
     pthread_cancel(rpc_handler_thread.native_handle());
 
+    // Print checkpoint statistics before continuing
+    printf("Printing Checkpoint Statistics\n");
+    CheckpointStats::print_stats();
+
 #ifdef LOG_LATENCY
     printf("flush latency stats\n");
-
-    // Print checkpoint stats before terminating threads
-    CheckpointStats::print_stats();
     
     // Create results directory if it doesn't exist
     std::filesystem::create_directories("results");
@@ -210,6 +212,12 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
 #endif
 
     // sched.remove_external_event_source();
+  };
+
+  // Also add a second when() to ensure it prints even if the first one is cancelled
+  when() << []() {
+    printf("Final Checkpoint Statistics\n");
+    CheckpointStats::print_stats();
   };
 
   sched.run();

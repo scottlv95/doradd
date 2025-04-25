@@ -26,6 +26,11 @@ endif()
 
 find_package(Threads REQUIRED)
 
+# Set default checkpoint batch size if not defined
+if(NOT DEFINED CHECKPOINT_BATCH_SIZE)
+  set(CHECKPOINT_BATCH_SIZE 1)
+endif()
+
 # YCSB
 add_executable(ycsb ycsb.cc)
 add_compile_definitions(PREFETCH)
@@ -36,6 +41,9 @@ add_compile_definitions(INDEXER)
 #add_compile_definitions(LOG_SCHED_OHEAD)
 #add_compile_definitions(ZERO_SERV_TIME)
 #add_compile_definitions(TEST_TWO)
+
+# Add CHECKPOINT_BATCH_SIZE as a compile definition
+target_compile_definitions(ycsb PRIVATE CHECKPOINT_BATCH_SIZE=${CHECKPOINT_BATCH_SIZE})
 
 target_include_directories(ycsb PRIVATE ../src/misc)
 target_include_directories(ycsb PRIVATE ../src/doradd)
