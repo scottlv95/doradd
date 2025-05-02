@@ -232,7 +232,6 @@ public:
       tx_spawn_sum += look_ahead;
 
       int ret = dispatch_batch();
-
       // announce throughput
       if (tx_count >= ANNOUNCE_THROUGHPUT_BATCH_SIZE)
       {
@@ -382,6 +381,7 @@ struct Prefetcher
     uint32_t idx = 0;
     char* read_head = read_top;
     char* prepare_read_head = read_top;
+    size_t i;
     int batch_sz;
 
     while (1)
@@ -393,27 +393,27 @@ struct Prefetcher
         idx = 0;
       }
 
-#ifdef INDEXER
+// #ifdef INDEXER
       if (!ring_indexer->front())
         continue;
-#endif
+// #endif
       int tag = *ring_indexer->front();
       if (tag == Checkpointer<RocksDBStore, T>::CHECKPOINT_MARKER) {
-        ring_indexer->pop();
         ring->push(tag);
+        ring_indexer->pop();
         continue;
       }
       batch_sz = tag;
 
 #ifdef TEST_TWO
-      for (size_t i = 0; i < batch_sz; i++)
+      for (i = 0; i < batch_sz; i++)
       {
         ret = T::prepare_cowns(prepare_read_head);
         prepare_read_head += ret;
       }
 #endif
 
-      for (size_t i = 0; i < batch_sz; i++)
+      for (i = 0; i < batch_sz; i++)
       {
 #if defined(TEST_TWO) || defined(INDEXER)
         ret = T::prefetch_cowns(read_head);
@@ -539,7 +539,6 @@ struct Spawner
     // warm-up
     prepare_run();
 
-    std::cout<<"Spawner running"<<std::endl;
     // run
     while (1)
     {
@@ -592,7 +591,7 @@ struct Spawner
       }
 
       ring->pop();
-
+      std::cout<<tx_count<<std::endl;
       // announce throughput
       if (tx_count >= ANNOUNCE_THROUGHPUT_BATCH_SIZE)
       {
@@ -604,6 +603,21 @@ struct Spawner
         printf("spawn - %lf tx/s\n", tx_count / dur_cnt);
         printf(
           "exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);
+          // FILE* throughput_log = fopen("./results/throughput.log", "a");
+          // if (!throughput_log) {
+          //   perror("fopen ./results/throughput.log");
+          //   return;
+          // }
+          
+          // double spawn_tps = tx_count / dur_cnt;
+          // double exec_tps  = (tx_exec_sum - last_tx_exec_sum) / dur_cnt;
+          
+          // // only write if the handle is valid
+          // fprintf(throughput_log, "spawn  - %lf tx/s\n", spawn_tps);
+          // fprintf(throughput_log, "exec   - %lf tx/s\n", exec_tps);
+          // fflush(throughput_log);
+          
+          // fclose(throughput_log);
 #ifdef RPC_LATENCY
         fprintf(res_log_fd, "%lf\n", tx_count / dur_cnt);
 #endif

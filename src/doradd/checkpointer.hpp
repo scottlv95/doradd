@@ -15,7 +15,6 @@
 #include <filesystem>
 #include <fstream>
 
-// Include the separated CheckpointStats class
 #include "checkpoint_stats.hpp"
 
 #ifndef CHECKPOINT_BATCH_SIZE
@@ -111,7 +110,7 @@ class Checkpointer {
   std::atomic<size_t> tx_count_since_last_checkpoint{0};
 
   public:
-  static constexpr int CHECKPOINT_MARKER = -1;
+  static constexpr int CHECKPOINT_MARKER = -10;
 
   Checkpointer(const std::string& path = "checkpoint.db")
     : last_cp(std::chrono::steady_clock::now()) {
@@ -121,7 +120,6 @@ class Checkpointer {
     // Load persisted write-bits metadata
     std::string meta_prefix = "_meta_bit";
     for (auto& kv : storage.scan_prefix(meta_prefix)) {
-      // kv.first = "<key>_meta_bit", kv.second = single-byte '0' or '1'
       uint64_t k = std::stoull(kv.first.substr(0, kv.first.size() - meta_prefix.size()));
       bits[k] = (kv.second.size()>0 && kv.second[0] == '1');
     }
@@ -149,7 +147,6 @@ class Checkpointer {
   }
 
   bool should_checkpoint() const {
-    // Check transaction count threshold
     return tx_count_since_last_checkpoint.load() >= tx_count_threshold;
   }
 
@@ -162,95 +159,53 @@ class Checkpointer {
     if (!checkpoint_in_flight.exchange(true)) {
       ring->push(CHECKPOINT_MARKER);
       current_diff_idx = 1 - current_diff_idx.load();
-      // Reset transaction counter
       tx_count_since_last_checkpoint.store(0);
     }
     }
 
     void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
+      // Pop the marker and immediately clear the in-flight flag
       ring->pop();
-      {
-      std::lock_guard<std::mutex> lg(completion_mu);
-      if (completion_thread.joinable())
-          completion_thread.join();
-    }
-
-    int idx = 1 - current_diff_idx.load();
-    auto keys_ptr = std::make_shared<std::vector<uint64_t>>(diffs[idx].begin(), diffs[idx].end());
-    diffs[idx].clear();
-    if (keys_ptr->empty()) {
-         checkpoint_in_flight = false;
-         return;
-       }
-       
-    // Collect live cowns and prepare latch
-    std::vector<cown_ptr<RowType>> cows;
-    cows.reserve(keys_ptr->size());
-    for (auto k : *keys_ptr) {
-      if (auto p = index->get_row_addr(k)) {
-        cows.push_back(*p);
+      checkpoint_in_flight = false;
+    
+      int idx = 1 - current_diff_idx.load();
+      auto keys_ptr = std::make_shared<std::vector<uint64_t>>(diffs[idx].begin(), diffs[idx].end());
+      diffs[idx].clear();
+      if (keys_ptr->empty()) {
+        return;
       }
-    }
-    auto latch = std::make_shared<std::latch>(cows.size());
-      auto metrics = std::make_shared<BatchMetrics>();
-      
-    // Schedule batched operations
-    auto op = [this, metrics, latch](const uint64_t* key_ptr, RowType** items, size_t cnt) {
-      auto start = std::chrono::steady_clock::now();
-      size_t batch_bytes = 0;
-      for (size_t i = 0; i < cnt; ++i) {
-        RowType& obj = *items[i];
-        std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
-        bool bit;
-        {
-          std::lock_guard<std::mutex> lg(write_mu);
-          bit = bits[*key_ptr];
+    
+      // Collect cowns to checkpoint
+      std::vector<cown_ptr<RowType>> cows;
+      cows.reserve(keys_ptr->size());
+      for (auto k : *keys_ptr) {
+        if (auto p = index->get_row_addr(k)) {
+          cows.push_back(*p);
         }
-        std::string versioned = std::to_string(*key_ptr) + "_v" + (bit ? '1' : '0');
-        if (storage.put(versioned, data)) batch_bytes += data.size();
       }
-      auto dur = std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now() - start).count();
-      CheckpointStats::record_checkpoint(dur, cnt, batch_bytes);
-      for (size_t i = 0; i < cnt; ++i) latch->count_down();
-    };
-
-    for (size_t i = 0; i < cows.size(); i += BatchSize) {
-      batch_helpers::process_n_cowns<BatchSize>(cows, *keys_ptr, i, op);
-    }
-
-    // Spawn completion thread to flip bits and persist metadata
-    {
-      std::lock_guard<std::mutex> lg(completion_mu);
-      completion_thread = std::thread([this, keys_ptr, latch]() {
-        latch->wait();
-        std::vector<std::pair<std::string, std::string>> batch_entries;
-        batch_entries.reserve(keys_ptr->size());
-        {
-          std::lock_guard<std::mutex> lg(write_mu);
-          for (auto k : *keys_ptr) {
-            bits[k] = !bits[k];
-            std::string metaKey = std::to_string(k) + "_meta_bit";
-            char bitChar = bits[k] ? '1' : '0';
-            batch_entries.emplace_back(metaKey, std::string(&bitChar,1));
+    
+      // Dispatch writes in batches asynchronously
+      for (size_t i = 0; i < cows.size(); i += BatchSize) {
+        batch_helpers::process_n_cowns<BatchSize>(cows, *keys_ptr, i,
+          [this](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+            // Perform actual storage writes without flipping bits
+            for (size_t j = 0; j < cnt; ++j) {
+              RowType& obj = *items[j];
+              std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
+              storage.put(std::to_string(*key_ptr), data);
+            }
           }
-        }
-        // this ensure it is atomic
-        storage.batch_put(batch_entries);
-          checkpoint_in_flight = false;
-        });
+        );
       }
     }
-
-  // Parse command line args to update checkpoint parameters
   void parse_args(int argc, char* argv[]) {
-    for (int i = 1; i < argc; i++) {
+    for (int i = 1; i < argc; ++i) {
       std::string arg = argv[i];
       if (arg == "--txn-threshold" && i + 1 < argc) {
         try {
           tx_count_threshold = std::stoul(argv[i+1]);
           printf("Checkpoint: Setting transaction threshold to %zu\n", tx_count_threshold);
-          i++; // Skip the next argument
+          i++; 
         } catch (const std::exception& e) {
           fprintf(stderr, "Invalid transaction threshold: %s\n", argv[i+1]);
         }

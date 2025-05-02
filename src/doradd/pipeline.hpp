@@ -214,11 +214,6 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
     // sched.remove_external_event_source();
   };
 
-  // Also add a second when() to ensure it prints even if the first one is cancelled
-  when() << []() {
-    printf("Final Checkpoint Statistics\n");
-    CheckpointStats::print_stats();
-  };
 
   sched.run();
 }
