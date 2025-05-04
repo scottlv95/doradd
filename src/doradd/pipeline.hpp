@@ -165,7 +165,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
     });
 
     // flush latency logs
-    std::this_thread::sleep_for(std::chrono::seconds(150));
+    std::this_thread::sleep_for(std::chrono::seconds(200));
 
 #ifdef CORE_PIPE
     pthread_cancel(spawner_thread.native_handle());
@@ -209,6 +209,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
 #  endif // LOG_SCHED_OHEAD
       }
     }
+    printf("Checkpoint done: %zu\n", checkpointer->checkpoint_done);
 #endif
 
     // sched.remove_external_event_source();
