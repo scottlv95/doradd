@@ -105,7 +105,7 @@ class Checkpointer {
   std::unordered_map<uint64_t,bool> bits;
   
   // Transaction count threshold for checkpoint (instead of time)
-  size_t tx_count_threshold = 10000; // Default to 10,000 transactions
+  size_t tx_count_threshold = 100000; // Default to 10,000 transactions
   
   // Counter for transactions since last checkpoint
   std::atomic<size_t> tx_count_since_last_checkpoint{0};
@@ -168,22 +168,19 @@ class Checkpointer {
     }
 
     void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
-      ring->pop();
       {
       std::lock_guard<std::mutex> lg(completion_mu);
       if (completion_thread.joinable())
           completion_thread.join();
     }
 
+      ring->pop();
+      checkpoint_in_flight = false;
     int idx = 1 - current_diff_idx.load();
     auto keys_ptr = std::make_shared<std::vector<uint64_t>>(diffs[idx].begin(), diffs[idx].end());
     diffs[idx].clear();
-    if (keys_ptr->empty()) {
-         checkpoint_in_flight = false;
-         return;
-       }
        
-    // Collect live cowns and prepare latch
+    // // Collect live cowns and prepare latch
     std::vector<cown_ptr<RowType>> cows;
     cows.reserve(keys_ptr->size());
     for (auto k : *keys_ptr) {
@@ -237,7 +234,6 @@ class Checkpointer {
         }
         // this ensure it is atomic
         storage.batch_put(batch_entries);
-          checkpoint_in_flight = false;
         });
       }
     }

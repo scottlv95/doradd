@@ -399,8 +399,8 @@ struct Prefetcher
 #endif
       int tag = *ring_indexer->front();
       if (tag == Checkpointer<RocksDBStore, T>::CHECKPOINT_MARKER) {
-        ring_indexer->pop();
         ring->push(tag);
+        ring_indexer->pop();
         continue;
       }
       batch_sz = tag;
@@ -428,7 +428,7 @@ struct Prefetcher
       ring->push(batch_sz);
       ring_indexer->pop();
 #else
-      ring->push(ret);
+      ring->push(batch_sz);
 #endif
     }
   }
@@ -592,15 +592,21 @@ struct Spawner
       }
 
       ring->pop();
-
       // announce throughput
       if (tx_count >= ANNOUNCE_THROUGHPUT_BATCH_SIZE)
       {
+        std::cout<<tx_count<<std::endl;
         auto time_now = std::chrono::system_clock::now();
         std::chrono::duration<double> duration = time_now - last_print;
         auto dur_cnt = duration.count();
         if (counter_registered)
           tx_exec_sum = calc_tx_exec_sum();
+        FILE* f = fopen("./results/spawn.txt", "a");
+        fprintf(f, "spawn - %lf tx/s\n", tx_count / dur_cnt);
+        fprintf(f, 
+          "exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);
+        fflush(f);
+        fclose(f);
         printf("spawn - %lf tx/s\n", tx_count / dur_cnt);
         printf(
           "exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);

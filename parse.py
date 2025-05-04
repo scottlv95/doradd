@@ -22,12 +22,53 @@ def parse_throughput(log_path, pattern):
         print(f"⚠️  Log not found: {log_path}")
     return None
 
+def parse_spawn_times(log_path):
+    """
+    Parse spawn.txt to extract spawn times.
+    Returns list of spawn times in milliseconds.
+    """
+    try:
+        with open(log_path, "r") as f:
+            spawn_times = []
+            for line in f:
+                if line.strip():
+                    try:
+                        spawn_times.append(float(line.strip()))
+                    except ValueError:
+                        continue
+            return spawn_times
+    except FileNotFoundError:
+        print(f"⚠️  Spawn log not found: {log_path}")
+    return None
+
 def extract_batch_size(dir_name):
     """Extract batch size from directory name like 'build_bs32'"""
     match = re.search(r'build_bs(\d+)', dir_name)
     if match:
         return int(match.group(1))
     return None
+
+def parse_spawn_txt(log_path):
+    """
+    Parse spawn.txt to extract spawn and exec throughput.
+    Returns (spawn_tx, exec_tx) as floats, or (None, None) if not found.
+    """
+    spawn_tx = None
+    exec_tx = None
+    try:
+        with open(log_path, "r") as f:
+            for line in f:
+                if line.startswith("spawn"):
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        spawn_tx = float(parts[2])
+                elif line.startswith("exec"):
+                    parts = line.split()
+                    if len(parts) >= 3:
+                        exec_tx = float(parts[2])
+    except FileNotFoundError:
+        print(f"⚠️  Spawn log not found: {log_path}")
+    return spawn_tx, exec_tx
 
 def main():
     p = argparse.ArgumentParser(
@@ -96,6 +137,10 @@ def main():
     batch_size_labels = []
     avg_latencies = []
     p99_latencies = []
+    avg_spawn_times = []
+    p99_spawn_times = []
+    spawn_throughputs = []
+    exec_throughputs = []
     
     # Process each batch size
     for bs in batch_sizes:
@@ -121,7 +166,23 @@ def main():
             throughputs.append(0)  # Use 0 for missing values
             print("No throughput information found in YCSB log")
         
-        # 2. Parse checkpoint statistics
+        # 2. Parse spawn.txt for spawn/exec throughput
+        spawn_txt_path = os.path.join(build_dir, args.results_dir, "spawn.txt")
+        spawn_tx, exec_tx = parse_spawn_txt(spawn_txt_path)
+        if spawn_tx is not None:
+            print(f"Spawn throughput: {spawn_tx:.2f} tx/s")
+        else:
+            print("No spawn throughput found in spawn.txt")
+        if exec_tx is not None:
+            print(f"Exec throughput: {exec_tx:.2f} tx/s")
+        else:
+            print("No exec throughput found in spawn.txt")
+        
+        # Store for summary
+        spawn_throughputs.append(spawn_tx if spawn_tx is not None else 0)
+        exec_throughputs.append(exec_tx if exec_tx is not None else 0)
+        
+        # 3. Parse checkpoint statistics
         checkpoint_summary_path = os.path.join(build_dir, args.checkpoint_dir, args.checkpoint_summary)
         checkpoint_latencies_path = os.path.join(build_dir, args.checkpoint_dir, args.checkpoint_latencies)
         
@@ -190,7 +251,7 @@ def main():
         return
         
     # Create side-by-side plots
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(18, 12))
     
     # Plot 1: Throughput vs Batch Size
     ax1.plot(batch_size_labels, throughputs, marker='o', linestyle='-', linewidth=2)
@@ -211,16 +272,27 @@ def main():
     else:
         ax2.text(0.5, 0.5, 'No latency data available', ha='center', va='center')
     
-    # Plot 3: P99 Latency vs Batch Size
-    if any(p99_latencies):  # Only plot if we have data
-        ax3.plot(batch_size_labels, p99_latencies, marker='o', linestyle='-', color='red', linewidth=2)
+    # Plot 3: Average Spawn Time vs Batch Size
+    if any(avg_spawn_times):  # Only plot if we have data
+        ax3.plot(batch_size_labels, avg_spawn_times, marker='o', linestyle='-', color='blue', linewidth=2)
         ax3.set_xlabel('Checkpoint Batch Size')
-        ax3.set_ylabel('P99 Latency (ms)')
-        ax3.set_title('P99 Checkpoint Latency vs Batch Size')
+        ax3.set_ylabel('Average Spawn Time (ms)')
+        ax3.set_title('Average Spawn Time vs Batch Size')
         ax3.set_xscale('log', base=2)
         ax3.grid(True, alpha=0.3)
     else:
-        ax3.text(0.5, 0.5, 'No p99 latency data available', ha='center', va='center')
+        ax3.text(0.5, 0.5, 'No spawn time data available', ha='center', va='center')
+    
+    # Plot 4: P99 Spawn Time vs Batch Size
+    if any(p99_spawn_times):  # Only plot if we have data
+        ax4.plot(batch_size_labels, p99_spawn_times, marker='o', linestyle='-', color='purple', linewidth=2)
+        ax4.set_xlabel('Checkpoint Batch Size')
+        ax4.set_ylabel('P99 Spawn Time (ms)')
+        ax4.set_title('P99 Spawn Time vs Batch Size')
+        ax4.set_xscale('log', base=2)
+        ax4.grid(True, alpha=0.3)
+    else:
+        ax4.text(0.5, 0.5, 'No spawn time data available', ha='center', va='center')
     
     plt.tight_layout()
     plt.savefig('checkpoint_batch_size_comparison.png')
@@ -229,7 +301,9 @@ def main():
     # Create a summary table
     summary_data = {
         'Batch Size': batch_size_labels,
-        'Throughput (rec/sec)': throughputs
+        'Throughput (rec/sec)': throughputs,
+        'Spawn Throughput (tx/s)': spawn_throughputs,
+        'Exec Throughput (tx/s)': exec_throughputs
     }
     
     if any(avg_latencies):
@@ -237,6 +311,12 @@ def main():
     
     if any(p99_latencies):
         summary_data['P99 Latency (ms)'] = p99_latencies
+        
+    if any(avg_spawn_times):
+        summary_data['Avg Spawn Time (ms)'] = avg_spawn_times
+        
+    if any(p99_spawn_times):
+        summary_data['P99 Spawn Time (ms)'] = p99_spawn_times
     
     summary_df = pd.DataFrame(summary_data)
     
