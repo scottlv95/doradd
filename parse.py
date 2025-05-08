@@ -29,6 +29,49 @@ def extract_batch_size(dir_name):
         return int(match.group(1))
     return None
 
+def parse_checkpoint_stats(log_path):
+    """
+    Parse checkpoint statistics from the log file.
+    Returns a dictionary with all checkpoint-related metrics.
+    """
+    stats = {
+        'num_checkpoints': None,
+        'avg_time_between_checkpoints': None,
+        'avg_tx_between_checkpoints': None,
+        'total_transactions': None,
+        'tx_during_last_checkpoint': None
+    }
+    
+    try:
+        with open(log_path, "r") as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Try to parse each line based on its content
+                if line.isdigit():  # Could be num_checkpoints or total_transactions
+                    if stats['num_checkpoints'] is None:
+                        stats['num_checkpoints'] = int(line)
+                    elif stats['avg_tx_between_checkpoints'] is None:
+                        stats['avg_tx_between_checkpoints'] = int(line)
+                    elif stats['total_transactions'] is None:
+                        stats['total_transactions'] = int(line)
+                elif re.match(r'^\d+\.\d+$', line):  # Average time between checkpoints
+                    stats['avg_time_between_checkpoints'] = float(line)
+                elif 'Transactions during last checkpoint:' in line:
+                    tx_count = re.search(r'(\d+)', line)
+                    if tx_count:
+                        stats['tx_during_last_checkpoint'] = int(tx_count.group(1))
+                        
+    except FileNotFoundError:
+        print(f"⚠️  Log not found: {log_path}")
+    except Exception as e:
+        print(f"Error parsing checkpoint stats: {e}")
+        
+    return stats
+
 def main():
     p = argparse.ArgumentParser(
         description="Parse checkpoint statistics across different batch sizes and plot comparisons"
@@ -96,6 +139,7 @@ def main():
     batch_size_labels = []
     avg_latencies = []
     p99_latencies = []
+    checkpoint_stats = []  # New list to store checkpoint statistics
     
     # Process each batch size
     for bs in batch_sizes:
@@ -108,6 +152,19 @@ def main():
             continue
             
         batch_size_labels.append(bs)
+        
+        # Parse checkpoint statistics from spawn.txt
+        spawn_log_path = os.path.join(build_dir, args.results_dir, "spawn.txt")
+        stats = parse_checkpoint_stats(spawn_log_path)
+        checkpoint_stats.append(stats)
+        
+        if stats['num_checkpoints'] is not None:
+            print("\nCheckpoint Statistics:")
+            print(f"  • Number of checkpoints: {stats['num_checkpoints']}")
+            print(f"  • Average time between checkpoints: {stats['avg_time_between_checkpoints']:.3f} seconds")
+            print(f"  • Average transactions between checkpoints: {stats['avg_tx_between_checkpoints']}")
+            print(f"  • Total transactions: {stats['total_transactions']}")
+            print(f"  • Transactions during last checkpoint: {stats['tx_during_last_checkpoint']}")
         
         # 1. Parse YCSB log for throughput
         ycsb_log = args.ycsb_log_pattern.format(bs)
@@ -190,7 +247,7 @@ def main():
         return
         
     # Create side-by-side plots
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(18, 12))
     
     # Plot 1: Throughput vs Batch Size
     ax1.plot(batch_size_labels, throughputs, marker='o', linestyle='-', linewidth=2)
@@ -200,27 +257,35 @@ def main():
     ax1.set_xscale('log', base=2)
     ax1.grid(True, alpha=0.3)
     
-    # Plot 2: Average Latency vs Batch Size
-    if any(avg_latencies):  # Only plot if we have data
-        ax2.plot(batch_size_labels, avg_latencies, marker='o', linestyle='-', color='green', linewidth=2)
+    # Plot 2: Average Time Between Checkpoints
+    avg_times = [s['avg_time_between_checkpoints'] for s in checkpoint_stats if s['avg_time_between_checkpoints'] is not None]
+    if avg_times:
+        ax2.plot(batch_size_labels[:len(avg_times)], avg_times, marker='o', linestyle='-', color='blue', linewidth=2)
         ax2.set_xlabel('Checkpoint Batch Size')
-        ax2.set_ylabel('Average Latency (ms)')
-        ax2.set_title('Average Checkpoint Latency vs Batch Size')
+        ax2.set_ylabel('Average Time (seconds)')
+        ax2.set_title('Average Time Between Checkpoints')
         ax2.set_xscale('log', base=2)
         ax2.grid(True, alpha=0.3)
-    else:
-        ax2.text(0.5, 0.5, 'No latency data available', ha='center', va='center')
     
-    # Plot 3: P99 Latency vs Batch Size
-    if any(p99_latencies):  # Only plot if we have data
-        ax3.plot(batch_size_labels, p99_latencies, marker='o', linestyle='-', color='red', linewidth=2)
+    # Plot 3: Average Transactions Between Checkpoints
+    avg_txs = [s['avg_tx_between_checkpoints'] for s in checkpoint_stats if s['avg_tx_between_checkpoints'] is not None]
+    if avg_txs:
+        ax3.plot(batch_size_labels[:len(avg_txs)], avg_txs, marker='o', linestyle='-', color='green', linewidth=2)
         ax3.set_xlabel('Checkpoint Batch Size')
-        ax3.set_ylabel('P99 Latency (ms)')
-        ax3.set_title('P99 Checkpoint Latency vs Batch Size')
+        ax3.set_ylabel('Average Transactions')
+        ax3.set_title('Average Transactions Between Checkpoints')
         ax3.set_xscale('log', base=2)
         ax3.grid(True, alpha=0.3)
-    else:
-        ax3.text(0.5, 0.5, 'No p99 latency data available', ha='center', va='center')
+    
+    # Plot 4: Transactions During Last Checkpoint
+    last_txs = [s['tx_during_last_checkpoint'] for s in checkpoint_stats if s['tx_during_last_checkpoint'] is not None]
+    if last_txs:
+        ax4.plot(batch_size_labels[:len(last_txs)], last_txs, marker='o', linestyle='-', color='red', linewidth=2)
+        ax4.set_xlabel('Checkpoint Batch Size')
+        ax4.set_ylabel('Transactions')
+        ax4.set_title('Transactions During Last Checkpoint')
+        ax4.set_xscale('log', base=2)
+        ax4.grid(True, alpha=0.3)
     
     plt.tight_layout()
     plt.savefig('checkpoint_batch_size_comparison.png')
@@ -229,7 +294,12 @@ def main():
     # Create a summary table
     summary_data = {
         'Batch Size': batch_size_labels,
-        'Throughput (rec/sec)': throughputs
+        'Throughput (rec/sec)': throughputs,
+        'Num Checkpoints': [s['num_checkpoints'] for s in checkpoint_stats],
+        'Avg Time Between CPs (s)': [s['avg_time_between_checkpoints'] for s in checkpoint_stats],
+        'Avg Tx Between CPs': [s['avg_tx_between_checkpoints'] for s in checkpoint_stats],
+        'Total Transactions': [s['total_transactions'] for s in checkpoint_stats],
+        'Tx During Last CP': [s['tx_during_last_checkpoint'] for s in checkpoint_stats]
     }
     
     if any(avg_latencies):

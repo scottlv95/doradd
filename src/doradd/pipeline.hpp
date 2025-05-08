@@ -139,7 +139,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
 #  endif // INDEXER
 
     std::thread spawner_thread([&]() mutable {
-      pin_thread(1);
+      pin_thread(0);
       std::this_thread::sleep_for(std::chrono::seconds(1));
       spawner.run();
     });
@@ -152,20 +152,20 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
 
 #ifdef INDEXER
     std::thread indexer_thread([&]() mutable {
-      pin_thread(3);
+      pin_thread(4);
       std::this_thread::sleep_for(std::chrono::seconds(4));
       indexer.run();
     });
 #endif
 
     std::thread rpc_handler_thread([&]() mutable {
-      pin_thread(0);
+      pin_thread(6);
       std::this_thread::sleep_for(std::chrono::seconds(6));
       rpc_handler.run();
     });
 
     // flush latency logs
-    std::this_thread::sleep_for(std::chrono::seconds(20));
+    std::this_thread::sleep_for(std::chrono::seconds(100));
 
 #ifdef CORE_PIPE
     pthread_cancel(spawner_thread.native_handle());

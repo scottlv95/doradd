@@ -19,10 +19,13 @@ CXX_FLAGS_BASE   = "-DRPC_LATENCY -DLOG_LATENCY"
 # Sweep these batch sizes:
 BATCH_SIZES = [1, 2, 4, 8, 16, 32]
 
+# Checkpoint settings
+CHECKPOINT_THRESHOLD = "100000"  # Number of transactions between checkpoints
+
 # ycsb run parameters
 YCSB_THREADS   = "8"
-TASKSET_CORES  = "4-11"
-ARRIVAL_PATTERN = "exp:4000"
+TASKSET_CORES  = "8,10,12,14,16,18,20,22"
+ARRIVAL_PATTERN = "exp:100"
 
 # ─── HELPERS ────────────────────────────────────────────────────────────────────
 
@@ -34,11 +37,12 @@ def run(cmd, **kwargs):
 def run_nofail(cmd, **kwargs):
     """
     Run cmd; on CalledProcessError, log and return False instead of raising.
+    Returns the process object on success.
     """
     print("  >", " ".join(cmd))
     try:
-        subprocess.run(cmd, check=True, **kwargs)
-        return True
+        result = subprocess.run(cmd, check=True, **kwargs)
+        return result
     except subprocess.CalledProcessError as e:
         print(f"!! Command failed (exit {e.returncode}): {' '.join(cmd)}")
         return False
@@ -74,7 +78,8 @@ def main():
             "cmake", "..",
             "-GNinja",
             f"-DCMAKE_BUILD_TYPE={CMAKE_BUILD_TYPE}",
-            f"-DCMAKE_CXX_FLAGS={CXX_FLAGS_BASE} -DCHECKPOINT_BATCH_SIZE={bs}"
+            f"-DCMAKE_CXX_FLAGS={CXX_FLAGS_BASE} -DCHECKPOINT_BATCH_SIZE={bs}",
+            f"-DCHECKPOINT_THRESHOLD={CHECKPOINT_THRESHOLD}"
         ], cwd=build_dir)
 
         # 3b) Build with Ninja
@@ -83,15 +88,33 @@ def main():
 
         # 3c) Run the benchmark, log stdout/stderr, but don't crash on failures
         log_file = os.path.join(results_dir, f"ycsb_bs{bs}.log")
-        print(f">> Running ycsb (logging to {log_file}) …")
-        with open(log_file, "w") as lf:
+        spawn_file = os.path.join(results_dir, "spawn.txt")
+        print(f">> Running ycsb (logging to {log_file} and {spawn_file}) …")
+        
+        # Create a temporary file for the output
+        temp_output = os.path.join(results_dir, "temp_output.txt")
+        
+        # Run the benchmark and capture output
+        with open(temp_output, "w") as tf:
             success = run_nofail([
                 "sudo", "taskset", "-c", TASKSET_CORES,
                 "./ycsb",
                 "-n", YCSB_THREADS,
                 os.path.relpath(gen_log, build_dir),
                 "-i", ARRIVAL_PATTERN
-            ], cwd=build_dir, stdout=lf, stderr=subprocess.STDOUT)
+            ], cwd=build_dir, stdout=tf, stderr=subprocess.STDOUT)
+        
+        if success:
+            # Read the output and write to both files
+            with open(temp_output, "r") as tf:
+                output = tf.read()
+                with open(log_file, "w") as lf:
+                    lf.write(output)
+                with open(spawn_file, "w") as sf:
+                    sf.write(output)
+            
+            # Clean up temporary file
+            os.remove(temp_output)
 
         if not success:
             print(f"!! Crash detected for batch size {bs}; see {log_file}")
