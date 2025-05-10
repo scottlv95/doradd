@@ -9,8 +9,8 @@
 #include <random>
 #include <vector>
 
-#define ROW_COUNT 1'000
-#define TX_COUNT 1'00 // 4M for Caracal
+#define ROW_COUNT 10'000'000
+#define TX_COUNT 1'000'000 // 4M for Caracal
 #define ROW_PER_TX 10
 
 #define NrMSBContentionKey 6
