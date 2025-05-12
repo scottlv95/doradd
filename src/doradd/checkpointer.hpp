@@ -15,24 +15,28 @@
 #include <filesystem>
 #include <fstream>
 #include <deque>
+#include <absl/container/flat_hash_set.h>
 
 #include "checkpoint_stats.hpp"
+
 
 #ifndef CHECKPOINT_BATCH_SIZE
 #  error "You must define CHECKPOINT_BATCH_SIZE"
 #endif
-
 #ifndef CHECKPOINT_THRESHOLD
 #  error "You must define CHECKPOINT_THRESHOLD"
 #endif
 
-constexpr size_t BatchSize = CHECKPOINT_BATCH_SIZE;
-constexpr size_t DefaultThreshold = CHECKPOINT_THRESHOLD;
 static_assert(
-    BatchSize == 1 || BatchSize == 2 || BatchSize == 4 || BatchSize == 8 ||
-    BatchSize == 16 || BatchSize == 32,
+    CHECKPOINT_BATCH_SIZE==1  || CHECKPOINT_BATCH_SIZE==2  ||
+    CHECKPOINT_BATCH_SIZE==4  || CHECKPOINT_BATCH_SIZE==8  ||
+    CHECKPOINT_BATCH_SIZE==16 || CHECKPOINT_BATCH_SIZE==32,
     "Unsupported CHECKPOINT_BATCH_SIZE"
 );
+
+constexpr size_t BatchSize           = CHECKPOINT_BATCH_SIZE;
+constexpr size_t DefaultThreshold    = CHECKPOINT_THRESHOLD;
+constexpr size_t MAX_STORED_INTERVALS = 1000;
 
 namespace batch_helpers {
   template<typename T, typename Tuple, typename F, size_t... Is>
@@ -89,118 +93,167 @@ template<typename StorageType, typename TxnType, typename RowType = TxnType>
 class Checkpointer {
 public:
   static constexpr int CHECKPOINT_MARKER = -1;
-  static constexpr size_t MAX_STORED_INTERVALS = 1000;  // Maximum number of intervals to store
+  using clock = std::chrono::steady_clock;
 
-  Checkpointer(const std::string& path = "checkpoint.db")
-    : tx_count_threshold(DefaultThreshold), last_finish(clock::now()) {
-    if (!storage.open(path)) throw std::runtime_error("Failed to open DB");
-    std::string meta_prefix = "_meta_bit";
-    for (auto& kv : storage.scan_prefix(meta_prefix)) {
-      uint64_t k = std::stoull(kv.first.substr(0, kv.first.size() - meta_prefix.size()));
-      bits[k] = (kv.second.size()>0 && kv.second[0]=='1');
+  explicit Checkpointer(const std::string& db_path = "checkpoint.db")
+    : tx_count_threshold(DefaultThreshold),
+      last_finish(clock::now())
+  {
+    if (!storage.open(db_path))
+      throw std::runtime_error("Failed to open DB");
+
+    // load existing meta-bit state
+    for (auto& kv : storage.scan_prefix("_meta_bit")) {
+      std::string s = kv.first;
+      s.resize(s.size() - strlen("_meta_bit"));
+      uint64_t k = std::stoull(s);
+      bits[k] = (!kv.second.empty() && kv.second[0]=='1');
     }
   }
 
   ~Checkpointer() {
     std::lock_guard<std::mutex> lg(completion_mu);
-    if (completion_thread.joinable()) completion_thread.join();
+    if (completion_thread.joinable())
+      completion_thread.join();
+    std::cout << "Checkpointer destroyed" << std::endl;
   }
 
-  void set_index(Index<RowType>* idx) { if (!index) index = idx; }
+  void set_index(Index<RowType>* idx) {
+    index = idx;
+  }
 
-  void increment_tx_count(int count) {
-    tx_count_since_last_checkpoint.fetch_add(count, std::memory_order_relaxed);
-    total_transactions.fetch_add(count, std::memory_order_relaxed);
+  void increment_tx_count(int cnt) {
+    tx_count_since_last_checkpoint.fetch_add(cnt, std::memory_order_relaxed);
+    total_transactions.fetch_add(cnt, std::memory_order_relaxed);
     if (checkpoint_in_flight.load(std::memory_order_relaxed))
-      tx_during_last_checkpoint.fetch_add(count, std::memory_order_relaxed);
+      tx_during_last_checkpoint.fetch_add(cnt, std::memory_order_relaxed);
   }
 
   bool should_checkpoint() const {
-    return tx_count_since_last_checkpoint.load(std::memory_order_relaxed) >= tx_count_threshold;
+    return tx_count_since_last_checkpoint.load(std::memory_order_relaxed)
+           >= tx_count_threshold;
   }
 
-  void add_to_difference_set(uint64_t txn_id) {
-    diffs[current_diff_idx].insert(txn_id);
-  }
-
-  void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring) {
+  // Called by Indexer: hand off its vector of dirty IDs
+  void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring,
+                           std::vector<uint64_t>&& dirty_keys)
+  {
+    // only one marker in flight at a time
     if (!checkpoint_in_flight.exchange(true, std::memory_order_acq_rel)) {
       ring->push(CHECKPOINT_MARKER);
-      current_diff_idx = 1 - current_diff_idx.load(std::memory_order_relaxed);
-      tx_counts.push_back(tx_count_since_last_checkpoint.load(std::memory_order_relaxed));
-      tx_count_since_last_checkpoint.store(0, std::memory_order_relaxed);
+
+      // flip buffers
+      int prev = current_diff_idx.exchange(
+                   1 - current_diff_idx.load(std::memory_order_relaxed),
+                   std::memory_order_acq_rel
+                 );
+
+      // O(1) swap in the new list
+      diffs[prev].swap(dirty_keys);
+
+      // reset transaction counters
+      tx_counts.push_back(
+        tx_count_since_last_checkpoint.exchange(0, std::memory_order_relaxed)
+      );
       tx_during_last_checkpoint.store(0, std::memory_order_relaxed);
     }
   }
 
+  // Called by your checkpoint thread when it sees the marker
   void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
-    {
-      std::lock_guard<std::mutex> lg(completion_mu);
-      if (completion_thread.joinable()) completion_thread.join();
-    }
     ring->pop();
-    checkpoint_in_flight.store(false, std::memory_order_relaxed);
+    // now we can schedule another marker
+    checkpoint_in_flight.store(false, std::memory_order_release);
 
-    int idx = 1 - current_diff_idx.load(std::memory_order_relaxed);
-    auto keys_ptr = std::make_shared<std::vector<uint64_t>>(diffs[idx].begin(), diffs[idx].end());
-    diffs[idx].clear();
+    // steal the dirty-key list
+    int old_idx = 1 - current_diff_idx.load(std::memory_order_acquire);
+    std::vector<uint64_t> keys;
+    diffs[old_idx].swap(keys);
 
+    // keep it alive across actor callbacks + meta-writes
+    auto keys_ptr = std::make_shared<std::vector<uint64_t>>(std::move(keys));
+
+    // gather cowns
     std::vector<cown_ptr<RowType>> cows;
     cows.reserve(keys_ptr->size());
-    for (uint64_t k : *keys_ptr)
-      if (auto p = index->get_row_addr(k)) cows.push_back(*p);
+    for (auto k : *keys_ptr) {
+      if (auto p = index->get_row_addr(k))
+        cows.push_back(*p);
+    }
 
     auto latch = std::make_shared<std::latch>(cows.size());
 
-    auto op = [this, latch](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+    // actor-style write of rows
+    auto op = [this, latch, keys_ptr](const uint64_t* key_ptr,
+                                      RowType** items,
+                                      size_t cnt) {
       for (size_t i = 0; i < cnt; ++i) {
-        RowType& obj = *items[i];
-        std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
+        uint64_t k = *key_ptr++;
+        auto& obj = *items[i];
+        std::string data(
+          reinterpret_cast<const char*>(&obj),
+          sizeof(RowType)
+        );
+
         bool bit;
         {
           std::lock_guard<std::mutex> lg(write_mu);
-          bit = bits[*key_ptr];
+          bit = bits[k];
+          bits[k] = !bit;
         }
-        std::string versioned = std::to_string(*key_ptr) + "_v" + (bit ? '1' : '0');
-        storage.put(versioned, data);
+        storage.put(std::to_string(k) + "_v" + (bit?'1':'0'), data);
       }
-      for (size_t i = 0; i < cnt; ++i) latch->count_down();
+      for (size_t i = 0; i < cnt; ++i)
+        latch->count_down();
     };
 
-    for (size_t i = 0; i < cows.size(); i += BatchSize) {
-      batch_helpers::process_n_cowns<BatchSize>(cows, *keys_ptr, i, op);
+    // dispatch in batches
+    for (size_t off = 0; off < cows.size(); off += BatchSize) {
+      batch_helpers::process_n_cowns<BatchSize>(
+        cows, *keys_ptr, off, op
+      );
     }
+    checkpoint_in_flight.store(false, std::memory_order_release);
 
+    // background thread writes the metadata and logs timing
     {
       std::lock_guard<std::mutex> lg(completion_mu);
-      completion_thread = std::thread([this, keys_ptr, latch]() {
+      if (completion_thread.joinable()) {
+        completion_thread.join();
+      }
+      completion_thread = std::thread([this, latch, keys_ptr]() {
         latch->wait();
-        std::vector<std::pair<std::string,std::string>> meta_entries;
-        meta_entries.reserve(keys_ptr->size());
+
+        std::vector<std::pair<std::string,std::string>> meta;
+        meta.reserve(keys_ptr->size());
         {
           std::lock_guard<std::mutex> lg(write_mu);
-          for (uint64_t k : *keys_ptr) {
-            bits[k] = !bits[k];
-            std::string metaKey = std::to_string(k) + "_meta_bit";
+          for (auto k : *keys_ptr) {
             char bc = bits[k] ? '1' : '0';
-            meta_entries.emplace_back(metaKey, std::string(&bc,1));
+            meta.emplace_back(
+              std::to_string(k) + "_meta_bit",
+              std::string(&bc,1)
+            );
           }
         }
-        storage.batch_put(meta_entries);
+        storage.batch_put(meta);
+
+        // record checkpoint interval
         auto now = clock::now();
-        auto interval = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_finish);
+        auto ns  = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                     now - last_finish
+                   ).count();
         last_finish = now;
-        uint64_t interval_ns = interval.count();
-        total_interval_ns.fetch_add(interval_ns, std::memory_order_relaxed);
+        total_interval_ns.fetch_add(ns, std::memory_order_relaxed);
         interval_count.fetch_add(1, std::memory_order_relaxed);
-        {
-          std::lock_guard<std::mutex> lg(intervals_mutex);
-          intervals.push_back(interval_ns);
-          if (intervals.size() > MAX_STORED_INTERVALS) {
-            intervals.pop_front();
-          }
+        
+        // Lock-free stats updates
+        intervals.push_back(ns);
+        if (intervals.size() > MAX_STORED_INTERVALS) {
+          intervals.pop_front();
         }
-        ++number_of_checkpoints_done;
+        number_of_checkpoints_done.fetch_add(1, std::memory_order_relaxed);
+        std::cout << "Number of checkpoints done: " << number_of_checkpoints_done.load(std::memory_order_relaxed) << std::endl;
       });
     }
   }
@@ -223,7 +276,7 @@ public:
   }
 
   size_t get_total_checkpoints() const {
-    return number_of_checkpoints_done;
+    return number_of_checkpoints_done.load(std::memory_order_relaxed);
   }
 
   size_t get_total_transactions() const {
@@ -240,7 +293,6 @@ public:
   }
 
   std::vector<double> get_all_intervals_ms() const {
-    std::lock_guard<std::mutex> lg(intervals_mutex);
     std::vector<double> result;
     result.reserve(intervals.size());
     for (uint64_t ns : intervals) {
@@ -250,7 +302,6 @@ public:
   }
 
   double get_interval_ms(size_t idx) const {
-    std::lock_guard<std::mutex> lg(intervals_mutex);
     return intervals[idx] * 1e-6;
   }
 
@@ -263,7 +314,6 @@ public:
   }
 
   std::vector<size_t> get_all_tx_counts() const {
-    std::lock_guard<std::mutex> lg(intervals_mutex);
     std::vector<size_t> result;
     result.reserve(tx_counts.size());
     for (size_t count : tx_counts) {
@@ -285,21 +335,30 @@ private:
   Index<RowType>* index = nullptr;
   std::atomic<bool> checkpoint_in_flight{false};
   std::atomic<int> current_diff_idx{0};
-  std::array<std::unordered_set<uint64_t>, 2> diffs;
-  std::thread completion_thread;
-  std::mutex completion_mu;
-  std::mutex write_mu;
-  mutable std::mutex intervals_mutex;
+
+  // Double-buffered dirty-ID lists:
+  std::array<std::vector<uint64_t>,2> diffs;
+
+  // Meta-bit state:
   std::unordered_map<uint64_t,bool> bits;
-  size_t tx_count_threshold;
-  std::atomic<size_t> tx_count_since_last_checkpoint{0};
-  std::atomic<size_t> total_transactions{0};
-  std::atomic<size_t> tx_during_last_checkpoint{0};
-  using clock = std::chrono::steady_clock;
-  std::atomic<uint64_t> total_interval_ns{0};
-  std::atomic<size_t> interval_count{0};
+
+  // Threading + synchronization:
+  std::thread      completion_thread;
+  std::mutex       completion_mu, write_mu;
+
+  // Txn counters:
+  size_t           tx_count_threshold;
+  std::atomic<size_t> tx_count_since_last_checkpoint{0},
+                      total_transactions{0},
+                      tx_during_last_checkpoint{0};
+
+  // Timing:
   clock::time_point last_finish;
-  int number_of_checkpoints_done{0};
-  std::deque<uint64_t> intervals;  // Store individual intervals in nanoseconds
-  std::deque<size_t> tx_counts;    // Store transaction counts between checkpoints
+  std::atomic<uint64_t> total_interval_ns{0};
+  std::atomic<size_t>   interval_count{0};
+  std::deque<uint64_t>  intervals;
+  std::atomic<size_t>   number_of_checkpoints_done{0};
+
+  // Txs-per-checkpoint history:
+  std::deque<size_t> tx_counts;
 };

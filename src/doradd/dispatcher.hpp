@@ -260,7 +260,8 @@ struct Indexer
   std::atomic<uint64_t>* recvd_req_cnt;
   uint64_t handled_req_cnt;
   Checkpointer<RocksDBStore, T, typename T::RowType>* checkpointer;
-
+  std::vector<bool> seen_keys;
+  std::vector<uint64_t> dirty_keys;
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
 
@@ -279,6 +280,7 @@ struct Indexer
     read_top += sizeof(uint32_t);
     handled_req_cnt = 0;
     checkpointer->set_index(T::index);
+    seen_keys.resize(10000, false);
   }
 
   size_t check_avail_cnts()
@@ -317,7 +319,7 @@ struct Indexer
     while (1)
     {
       if (checkpointer->should_checkpoint()) {
-        checkpointer->schedule_checkpoint(ring);
+        checkpointer->schedule_checkpoint(ring, std::move(dirty_keys));
         continue;
       }
 
@@ -335,14 +337,17 @@ struct Indexer
         auto txn = reinterpret_cast<T::Marshalled*>(read_head);
         auto indices_size = txn->indices_size;
         for (size_t i = 0; i < indices_size; i++) {
-          if (txn->indices[i] < DB_SIZE && txn->indices[i] != 0) {
-            checkpointer->add_to_difference_set(txn->indices[i]);
+          if (txn->indices[i] >= seen_keys.size()) {
+            seen_keys.resize(txn->indices[i] + 1, false);
+          }
+          if (!seen_keys[txn->indices[i]]) {
+            dirty_keys.push_back(txn->indices[i]);
+            seen_keys[txn->indices[i]] = true;
           }
         }
         read_head += ret;
         read_idx++;
       }
-
       ring->push(batch);
     }
   }
