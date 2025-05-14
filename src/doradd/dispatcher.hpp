@@ -624,7 +624,6 @@ struct Spawner
         // Print checkpoint intervals and transaction counts
         checkpointer->print_intervals();
         checkpointer->print_tx_counts();
-        
 #ifdef RPC_LATENCY
         fprintf(res_log_fd, "%lf\n", tx_count / dur_cnt);
 #endif

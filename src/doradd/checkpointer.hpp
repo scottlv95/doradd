@@ -16,6 +16,7 @@
 #include <fstream>
 #include <deque>
 #include <absl/container/flat_hash_set.h>
+#include <absl/container/flat_hash_map.h>
 
 #include "checkpoint_stats.hpp"
 
@@ -27,12 +28,6 @@
 #  error "You must define CHECKPOINT_THRESHOLD"
 #endif
 
-static_assert(
-    CHECKPOINT_BATCH_SIZE==1  || CHECKPOINT_BATCH_SIZE==2  ||
-    CHECKPOINT_BATCH_SIZE==4  || CHECKPOINT_BATCH_SIZE==8  ||
-    CHECKPOINT_BATCH_SIZE==16 || CHECKPOINT_BATCH_SIZE==32,
-    "Unsupported CHECKPOINT_BATCH_SIZE"
-);
 
 constexpr size_t BatchSize           = CHECKPOINT_BATCH_SIZE;
 constexpr size_t DefaultThreshold    = CHECKPOINT_THRESHOLD;
@@ -159,104 +154,48 @@ public:
     }
   }
 
-  // Called by your checkpoint thread when it sees the marker
-  void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
-    ring->pop();
-    // now we can schedule another marker
-    checkpoint_in_flight.store(false, std::memory_order_release);
+void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
+  // --- pop the marker and allow new ones ---
+  ring->pop();
+  checkpoint_in_flight.store(false, std::memory_order_release);
 
-    // steal the dirty-key list
-    int old_idx = 1 - current_diff_idx.load(std::memory_order_acquire);
-    std::vector<uint64_t> keys;
-    diffs[old_idx].swap(keys);
+  // --- steal the dirty-key list ---
+  int old_idx = 1 - current_diff_idx.load(std::memory_order_acquire);
+  std::vector<uint64_t> keys;
+  diffs[old_idx].swap(keys);
+  auto keys_ptr = std::make_shared<std::vector<uint64_t>>(std::move(keys));
 
-    // keep it alive across actor callbacks + meta-writes
-    auto keys_ptr = std::make_shared<std::vector<uint64_t>>(std::move(keys));
-
-    // gather cowns
-    std::vector<cown_ptr<RowType>> cows;
-    cows.reserve(keys_ptr->size());
-    for (auto k : *keys_ptr) {
-      if (auto p = index->get_row_addr(k))
-        cows.push_back(*p);
-    }
-
-    auto latch = std::make_shared<std::latch>(cows.size());
-
-    // actor-style write of rows
-    auto op = [this, latch, keys_ptr](const uint64_t* key_ptr,
-                                      RowType** items,
-                                      size_t cnt) {
-      for (size_t i = 0; i < cnt; ++i) {
-        uint64_t k = *key_ptr++;
-        auto& obj = *items[i];
-        std::string data(
-          reinterpret_cast<const char*>(&obj),
-          sizeof(RowType)
-        );
-
-        bool bit;
-        {
-          std::lock_guard<std::mutex> lg(write_mu);
-          bit = bits[k];
-          bits[k] = !bit;
-        }
-        storage.put(std::to_string(k) + "_v" + (bit?'1':'0'), data);
-      }
-      for (size_t i = 0; i < cnt; ++i)
-        latch->count_down();
-    };
-
-    // dispatch in batches
-    for (size_t off = 0; off < cows.size(); off += BatchSize) {
-      batch_helpers::process_n_cowns<BatchSize>(
-        cows, *keys_ptr, off, op
-      );
-    }
-    checkpoint_in_flight.store(false, std::memory_order_release);
-
-    // background thread writes the metadata and logs timing
-    {
-      std::lock_guard<std::mutex> lg(completion_mu);
-      if (completion_thread.joinable()) {
-        completion_thread.join();
-      }
-      completion_thread = std::thread([this, latch, keys_ptr]() {
-        latch->wait();
-
-        std::vector<std::pair<std::string,std::string>> meta;
-        meta.reserve(keys_ptr->size());
-        {
-          std::lock_guard<std::mutex> lg(write_mu);
-          for (auto k : *keys_ptr) {
-            char bc = bits[k] ? '1' : '0';
-            meta.emplace_back(
-              std::to_string(k) + "_meta_bit",
-              std::string(&bc,1)
-            );
-          }
-        }
-        storage.batch_put(meta);
-
-        // record checkpoint interval
-        auto now = clock::now();
-        auto ns  = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                     now - last_finish
-                   ).count();
-        last_finish = now;
-        total_interval_ns.fetch_add(ns, std::memory_order_relaxed);
-        interval_count.fetch_add(1, std::memory_order_relaxed);
-        
-        // Lock-free stats updates
-        intervals.push_back(ns);
-        if (intervals.size() > MAX_STORED_INTERVALS) {
-          intervals.pop_front();
-        }
-        number_of_checkpoints_done.fetch_add(1, std::memory_order_relaxed);
-        std::cout << "Number of checkpoints done: " << number_of_checkpoints_done.load(std::memory_order_relaxed) << std::endl;
-      });
-    }
+  // --- resolve cowns for each key ---
+  std::vector<cown_ptr<RowType>> cows;
+  cows.reserve(keys_ptr->size());
+  for (auto k : *keys_ptr) {
+    if (auto p = index->get_row_addr(k))
+      cows.push_back(*p);
   }
+
+  // each batch gets its own buffer + cown
+  using BufferType = absl::flat_hash_map<uint64_t, std::string>;
+
+  for (size_t i = 0; i < cows.size(); i += BatchSize) {
+    auto batch_buffer = std::make_shared<BufferType>();
+    auto buffer_cown = make_cown<BufferType>();
+
+    batch_helpers::process_n_cowns<BatchSize>(
+      cows, *keys_ptr, i,
+      [batch_buffer](const uint64_t* keys, RowType** objs, size_t n) {
+        for (size_t j = 0; j < n; ++j) {
+          if (!objs[j]) continue;
+          (*batch_buffer)[ keys[j] ] = std::string(
+            reinterpret_cast<const char*>(objs[j]),
+            sizeof(RowType)
+          );
+        }
+      }
+    );
+  }
+}
+
+
 
   double get_avg_interval_ms() const {
     size_t c = interval_count.load(std::memory_order_relaxed);

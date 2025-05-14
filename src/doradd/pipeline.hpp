@@ -7,6 +7,7 @@
 #include "rpc_handler.hpp"
 #include "../storage/rocksdb.hpp"
 #include "checkpointer.hpp"
+#include "checkpoint_stats.hpp"
 
 #include <thread>
 #include <unordered_map>
@@ -32,7 +33,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
   counter_map_mutex = new std::mutex();
 
   // Create storage instance and checkpointer
-  auto* checkpointer = new Checkpointer<RocksDBStore, T, typename T::RowType>("checkpoint.db");
+  auto* checkpointer = new Checkpointer<RocksDBStore, T, typename T::RowType>("/home/syl121/checkpoint.db");
   
   // Pass command line arguments to the checkpointer if available
   if (argc > 0 && argv != nullptr) {
