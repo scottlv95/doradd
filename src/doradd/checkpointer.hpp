@@ -129,24 +129,19 @@ public:
            >= tx_count_threshold;
   }
 
-  // Called by Indexer: hand off its vector of dirty IDs
   void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring,
                            std::vector<uint64_t>&& dirty_keys)
   {
-    // only one marker in flight at a time
     if (!checkpoint_in_flight.exchange(true, std::memory_order_acq_rel)) {
       ring->push(CHECKPOINT_MARKER);
 
-      // flip buffers
       int prev = current_diff_idx.exchange(
                    1 - current_diff_idx.load(std::memory_order_relaxed),
                    std::memory_order_acq_rel
                  );
 
-      // O(1) swap in the new list
       diffs[prev].swap(dirty_keys);
 
-      // reset transaction counters
       tx_counts.push_back(
         tx_count_since_last_checkpoint.exchange(0, std::memory_order_relaxed)
       );
@@ -154,48 +149,47 @@ public:
     }
   }
 
-void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
-  // --- pop the marker and allow new ones ---
-  ring->pop();
-  checkpoint_in_flight.store(false, std::memory_order_release);
+  void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
+    ring->pop();
+    checkpoint_in_flight.store(false);
 
-  // --- steal the dirty-key list ---
-  int old_idx = 1 - current_diff_idx.load(std::memory_order_acquire);
-  std::vector<uint64_t> keys;
-  diffs[old_idx].swap(keys);
-  auto keys_ptr = std::make_shared<std::vector<uint64_t>>(std::move(keys));
+    int idx;
+    std::vector<uint64_t> keys;
+    {
+      std::lock_guard<std::mutex> lg(diff_mu);
+      idx = 1 - current_diff_idx.load();
+      keys = std::move(diffs[idx]);
+      diffs[idx].clear();
+    }
+    auto keys_ptr = std::make_shared<std::vector<uint64_t>>(std::move(keys));
 
-  // --- resolve cowns for each key ---
-  std::vector<cown_ptr<RowType>> cows;
-  cows.reserve(keys_ptr->size());
-  for (auto k : *keys_ptr) {
-    if (auto p = index->get_row_addr(k))
-      cows.push_back(*p);
-  }
-
-  // each batch gets its own buffer + cown
-  using BufferType = absl::flat_hash_map<uint64_t, std::string>;
-
-  for (size_t i = 0; i < cows.size(); i += BatchSize) {
-    auto batch_buffer = std::make_shared<BufferType>();
-    auto buffer_cown = make_cown<BufferType>();
-
-    batch_helpers::process_n_cowns<BatchSize>(
-      cows, *keys_ptr, i,
-      [batch_buffer](const uint64_t* keys, RowType** objs, size_t n) {
-        for (size_t j = 0; j < n; ++j) {
-          if (!objs[j]) continue;
-          (*batch_buffer)[ keys[j] ] = std::string(
-            reinterpret_cast<const char*>(objs[j]),
-            sizeof(RowType)
-          );
+    std::vector<cown_ptr<RowType>> cows;
+    cows.reserve(keys_ptr->size());
+    {
+      std::lock_guard<std::mutex> lg(write_mu);
+      for (uint64_t k : *keys_ptr) {
+        if (auto p = index->get_row_addr(k)) {
+          cows.push_back(*p);
         }
       }
-    );
+    }
+
+    auto op = [this](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+      for (size_t i = 0; i < cnt; ++i) {
+        if (!items[i]) continue;
+        RowType& obj = *items[i];
+        std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
+        {
+          std::lock_guard<std::mutex> lg(write_mu);
+          storage.put(std::to_string(key_ptr[i]), data);
+        }
+      }
+    };
+
+    for (size_t i = 0; i < cows.size(); i += BatchSize) {
+      batch_helpers::process_n_cowns<BatchSize>(cows, *keys_ptr, i, op);
+    }
   }
-}
-
-
 
   double get_avg_interval_ms() const {
     size_t c = interval_count.load(std::memory_order_relaxed);
@@ -284,6 +278,7 @@ private:
   // Threading + synchronization:
   std::thread      completion_thread;
   std::mutex       completion_mu, write_mu;
+  std::mutex       diff_mu;
 
   // Txn counters:
   size_t           tx_count_threshold;

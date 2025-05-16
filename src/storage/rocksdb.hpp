@@ -37,6 +37,20 @@ public:
         return true;
     }
 
+    rocksdb::WriteBatch create_batch() {
+        return rocksdb::WriteBatch();
+    }
+
+    void put_in_batch(rocksdb::WriteBatch& batch, const std::string& key, const std::string& value) {
+        batch.Put(key, value);
+    }
+
+    void write_batch(rocksdb::WriteBatch& batch) {
+        db_->Write(rocksdb::WriteOptions(), &batch);
+    }
+
+
+
     void close() {
         if (db_) {
             delete db_;
@@ -76,36 +90,6 @@ public:
         return true;
     }
 
-    bool batch_put(const std::vector<std::pair<std::string, std::string>>& entries) {
-        if (!db_) {
-            std::cerr << "RocksDB: DB not open." << std::endl;
-            return false;
-        }
-        rocksdb::WriteBatch batch;
-        for (const auto& e : entries) {
-            batch.Put(e.first, e.second);
-        }
-        rocksdb::Status status = db_->Write(rocksdb::WriteOptions(), &batch);
-        if (!status.ok()) {
-            std::cerr << "RocksDB: Failed to batch write: " << status.ToString() << std::endl;
-            return false;
-        }
-        return true;
-    }
-
-    // Atomic batch API used by Checkpointer
-    rocksdb::WriteBatch create_batch() {
-        return rocksdb::WriteBatch();
-    }
-    bool write_batch(rocksdb::WriteBatch&& batch) {
-        if (!db_) return false;
-        rocksdb::Status status = db_->Write(rocksdb::WriteOptions(), &batch);
-        if (!status.ok()) {
-            std::cerr << "RocksDB: Failed to write batch: " << status.ToString() << std::endl;
-            return false;
-        }
-        return true;
-    }
 
     // Scan prefix for metadata keys
     std::vector<std::pair<std::string, std::string>> scan_prefix(const std::string& prefix) {
