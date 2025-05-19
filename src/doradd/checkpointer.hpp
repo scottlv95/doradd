@@ -174,16 +174,15 @@ public:
       }
     }
 
-    auto op = [this](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+    auto op = [this, keys_ptr](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+      auto batch = storage.create_batch();
       for (size_t i = 0; i < cnt; ++i) {
         if (!items[i]) continue;
         RowType& obj = *items[i];
         std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
-        {
-          std::lock_guard<std::mutex> lg(write_mu);
-          storage.put(std::to_string(key_ptr[i]), data);
-        }
+        storage.put_in_batch(batch, std::to_string(key_ptr[i]), data);
       }
+      storage.write_batch(batch);
     };
 
     for (size_t i = 0; i < cows.size(); i += BatchSize) {
