@@ -95,6 +95,19 @@ public:
     rocksdb::WriteBatch create_batch() {
         return rocksdb::WriteBatch();
     }
+
+    void add_to_batch(rocksdb::WriteBatch& batch, const std::string& key, const std::string& value) {
+        batch.Put(key, value);
+    }
+
+    void commit_batch(rocksdb::WriteBatch& batch) {
+        if (!db_) return;
+        rocksdb::Status status = db_->Write(rocksdb::WriteOptions(), &batch);
+        if (!status.ok()) {
+            std::cerr << "RocksDB: Failed to write batch: " << status.ToString() << std::endl;
+        }
+    }
+
     bool write_batch(rocksdb::WriteBatch&& batch) {
         if (!db_) return false;
         rocksdb::Status status = db_->Write(rocksdb::WriteOptions(), &batch);
@@ -116,6 +129,14 @@ public:
             result.emplace_back(it->key().ToString(), it->value().ToString());
         }
         return result;
+    }
+
+    void flush() {
+        if (!db_) return;
+        rocksdb::Status status = db_->Flush(rocksdb::FlushOptions());
+        if (!status.ok()) {
+            std::cerr << "RocksDB: Failed to flush: " << status.ToString() << std::endl;
+        }
     }
 };
 

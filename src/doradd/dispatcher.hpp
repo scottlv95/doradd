@@ -261,6 +261,9 @@ struct Indexer
   uint64_t handled_req_cnt;
   Checkpointer<RocksDBStore, T, typename T::RowType>* checkpointer;
 
+  std::vector<bool> seen_keys;
+  std::vector<uint64_t> dirty_keys;
+
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
 
@@ -317,7 +320,7 @@ struct Indexer
     while (1)
     {
       if (checkpointer->should_checkpoint()) {
-        checkpointer->schedule_checkpoint(ring);
+        checkpointer->schedule_checkpoint(ring, std::move(dirty_keys));
         continue;
       }
 
@@ -335,8 +338,12 @@ struct Indexer
         auto txn = reinterpret_cast<T::Marshalled*>(read_head);
         auto indices_size = txn->indices_size;
         for (size_t i = 0; i < indices_size; i++) {
-          if (txn->indices[i] < DB_SIZE && txn->indices[i] != 0) {
-            checkpointer->add_to_difference_set(txn->indices[i]);
+          if (seen_keys.size() <= txn->indices[i]) {
+            seen_keys.resize(2 * txn->indices[i] + 1, false);
+          }
+          if (!seen_keys[txn->indices[i]]) {
+            seen_keys[txn->indices[i]] = true;
+            dirty_keys.push_back(txn->indices[i]);
           }
         }
         read_head += ret;
@@ -606,6 +613,7 @@ struct Spawner
         printf("spawn - %lf tx/s\n", tx_count / dur_cnt);
         printf(
           "exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);
+        printf("dur in seconds: %lf\n", dur_cnt);
         fprintf(res_throughput_fd, "spawn - %lf tx/s\n", tx_count / dur_cnt);
         fprintf(res_throughput_fd, 
           "exec  - %lf tx/s\n", (tx_exec_sum - last_tx_exec_sum) / dur_cnt);

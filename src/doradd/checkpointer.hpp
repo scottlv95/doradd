@@ -28,11 +28,6 @@
 
 constexpr size_t BatchSize = CHECKPOINT_BATCH_SIZE;
 constexpr size_t DefaultThreshold = CHECKPOINT_THRESHOLD;
-static_assert(
-    BatchSize == 1 || BatchSize == 2 || BatchSize == 4 || BatchSize == 8 ||
-    BatchSize == 16 || BatchSize == 32,
-    "Unsupported CHECKPOINT_BATCH_SIZE"
-);
 
 namespace batch_helpers {
   template<typename T, typename Tuple, typename F, size_t... Is>
@@ -95,6 +90,7 @@ public:
     : tx_count_threshold(DefaultThreshold), last_finish(clock::now()) {
     if (!storage.open(path)) throw std::runtime_error("Failed to open DB");
     std::string meta_prefix = "_meta_bit";
+    bits.resize(10'000'000);
     for (auto& kv : storage.scan_prefix(meta_prefix)) {
       uint64_t k = std::stoull(kv.first.substr(0, kv.first.size() - meta_prefix.size()));
       bits[k] = (kv.second.size()>0 && kv.second[0]=='1');
@@ -119,14 +115,11 @@ public:
     return tx_count_since_last_checkpoint.load(std::memory_order_relaxed) >= tx_count_threshold;
   }
 
-  void add_to_difference_set(uint64_t txn_id) {
-    diffs[current_diff_idx].insert(txn_id);
-  }
-
-  void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring) {
+  void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring, std::vector<uint64_t>&& dirty_keys) {
     if (!checkpoint_in_flight.exchange(true, std::memory_order_acq_rel)) {
       ring->push(CHECKPOINT_MARKER);
-      current_diff_idx = 1 - current_diff_idx.load(std::memory_order_relaxed);
+      int prev = current_diff_idx.exchange(1 - current_diff_idx.load(std::memory_order_relaxed), std::memory_order_relaxed);
+      diffs[prev].swap(dirty_keys);
       tx_counts.push_back(tx_count_since_last_checkpoint.load(std::memory_order_relaxed));
       tx_count_since_last_checkpoint.store(0, std::memory_order_relaxed);
       tx_during_last_checkpoint.store(0, std::memory_order_relaxed);
@@ -142,29 +135,32 @@ public:
     checkpoint_in_flight.store(false, std::memory_order_relaxed);
 
     int idx = 1 - current_diff_idx.load(std::memory_order_relaxed);
-    auto keys_ptr = std::make_shared<std::vector<uint64_t>>(diffs[idx].begin(), diffs[idx].end());
+    auto keys_ptr = std::make_shared<std::vector<uint64_t>>(std::move(diffs[idx]));
     diffs[idx].clear();
 
     std::vector<cown_ptr<RowType>> cows;
     cows.reserve(keys_ptr->size());
     for (uint64_t k : *keys_ptr)
       if (auto p = index->get_row_addr(k)) cows.push_back(*p);
+    
+    auto num_batches = (cows.size() + BatchSize - 1) / BatchSize;
 
-    auto latch = std::make_shared<std::latch>(cows.size());
+    auto latch = std::make_shared<std::latch>(num_batches);
 
-    auto op = [this, latch](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+    auto op = [this, latch, keys_ptr](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+      auto batch = storage.create_batch();
       for (size_t i = 0; i < cnt; ++i) {
         RowType& obj = *items[i];
         std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
-        bool bit;
-        {
-          std::lock_guard<std::mutex> lg(write_mu);
-          bit = bits[*key_ptr];
+        if (bits.size() <= *key_ptr) {
+          bits.resize(2 * (*key_ptr) + 1);
         }
-        std::string versioned = std::to_string(*key_ptr) + "_v" + (bit ? '1' : '0');
-        storage.put(versioned, data);
+        bool bit = bits[*key_ptr];
+        auto versioned = std::to_string(*key_ptr) + "_v" + (bit ? '1' : '0');
+        storage.add_to_batch(batch, versioned, data);
       }
-      for (size_t i = 0; i < cnt; ++i) latch->count_down();
+      storage.commit_batch(batch);
+      latch->count_down();
     };
 
     for (size_t i = 0; i < cows.size(); i += BatchSize) {
@@ -175,32 +171,14 @@ public:
       std::lock_guard<std::mutex> lg(completion_mu);
       completion_thread = std::thread([this, keys_ptr, latch]() {
         latch->wait();
-        std::vector<std::pair<std::string,std::string>> meta_entries;
-        meta_entries.reserve(keys_ptr->size());
-        {
-          std::lock_guard<std::mutex> lg(write_mu);
-          for (uint64_t k : *keys_ptr) {
-            bits[k] = !bits[k];
-            std::string metaKey = std::to_string(k) + "_meta_bit";
-            char bc = bits[k] ? '1' : '0';
-            meta_entries.emplace_back(metaKey, std::string(&bc,1));
-          }
+        auto batch = storage.create_batch();
+        for (uint64_t k : *keys_ptr) {
+          bits[k] = !bits[k];
+          std::string metaKey = std::to_string(k) + "_meta_bit";
+          char bc = bits[k] ? '1' : '0';
+          storage.add_to_batch(batch, metaKey, std::string(&bc,1));
         }
-        storage.batch_put(meta_entries);
-        auto now = clock::now();
-        auto interval = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_finish);
-        last_finish = now;
-        uint64_t interval_ns = interval.count();
-        total_interval_ns.fetch_add(interval_ns, std::memory_order_relaxed);
-        interval_count.fetch_add(1, std::memory_order_relaxed);
-        {
-          std::lock_guard<std::mutex> lg(intervals_mutex);
-          intervals.push_back(interval_ns);
-          if (intervals.size() > MAX_STORED_INTERVALS) {
-            intervals.pop_front();
-          }
-        }
-        ++number_of_checkpoints_done;
+        storage.commit_batch(batch);
       });
     }
   }
@@ -285,12 +263,12 @@ private:
   Index<RowType>* index = nullptr;
   std::atomic<bool> checkpoint_in_flight{false};
   std::atomic<int> current_diff_idx{0};
-  std::array<std::unordered_set<uint64_t>, 2> diffs;
+  std::array<std::vector<uint64_t>, 2> diffs;
   std::thread completion_thread;
   std::mutex completion_mu;
   std::mutex write_mu;
   mutable std::mutex intervals_mutex;
-  std::unordered_map<uint64_t,bool> bits;
+  std::vector<bool> bits;
   size_t tx_count_threshold;
   std::atomic<size_t> tx_count_since_last_checkpoint{0};
   std::atomic<size_t> total_transactions{0};
@@ -303,3 +281,5 @@ private:
   std::deque<uint64_t> intervals;  // Store individual intervals in nanoseconds
   std::deque<size_t> tx_counts;    // Store transaction counts between checkpoints
 };
+
+
