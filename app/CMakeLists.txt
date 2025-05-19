@@ -31,6 +31,11 @@ if(NOT DEFINED CHECKPOINT_BATCH_SIZE)
   set(CHECKPOINT_BATCH_SIZE 1)
 endif()
 
+# Set default checkpoint threshold if not defined
+if(NOT DEFINED CHECKPOINT_THRESHOLD)
+  set(CHECKPOINT_THRESHOLD 100000)
+endif()
+
 # YCSB
 add_executable(ycsb ycsb.cc)
 add_compile_definitions(PREFETCH)
@@ -42,8 +47,9 @@ add_compile_definitions(INDEXER)
 #add_compile_definitions(ZERO_SERV_TIME)
 #add_compile_definitions(TEST_TWO)
 
-# Add CHECKPOINT_BATCH_SIZE as a compile definition
+# Add CHECKPOINT_BATCH_SIZE and CHECKPOINT_THRESHOLD as compile definitions
 target_compile_definitions(ycsb PRIVATE CHECKPOINT_BATCH_SIZE=${CHECKPOINT_BATCH_SIZE})
+target_compile_definitions(ycsb PRIVATE CHECKPOINT_THRESHOLD=${CHECKPOINT_THRESHOLD})
 
 target_include_directories(ycsb PRIVATE ../src/misc)
 target_include_directories(ycsb PRIVATE ../src/doradd)
@@ -68,6 +74,7 @@ endif()
 target_include_directories(ycsb PRIVATE ${ROCKSDB_INCLUDE_DIR})
 target_link_libraries(ycsb PRIVATE ${ROCKSDB_LIBRARY})
 target_link_libraries(ycsb PRIVATE -lgflags -lsnappy -lz -lbz2 -llz4 -lzstd)
+target_link_libraries(ycsb PRIVATE -labsl_hash -labsl_raw_hash_set)
 
 # Commenting out all TPCC-related sections
 #add_custom_command(
