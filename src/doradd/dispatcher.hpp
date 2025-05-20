@@ -321,6 +321,8 @@ struct Indexer
     {
       if (checkpointer->should_checkpoint()) {
         checkpointer->schedule_checkpoint(ring, std::move(dirty_keys));
+        seen_keys.assign(seen_keys.size(), false);
+        dirty_keys.clear();
         continue;
       }
 
@@ -600,7 +602,9 @@ struct Spawner
       checkpointer->increment_tx_count(batch_sz);
 
       ring->pop();
-
+      if (tx_count % 100000 == 0) {
+        std::cout<<tx_count<<std::endl;
+      }
       // announce throughput
       if (tx_count >= ANNOUNCE_THROUGHPUT_BATCH_SIZE)
       {

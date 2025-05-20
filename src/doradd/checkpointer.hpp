@@ -15,7 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <deque>
-
+#include "pin-thread.hpp"
 #include "checkpoint_stats.hpp"
 
 #ifndef CHECKPOINT_BATCH_SIZE
@@ -86,7 +86,7 @@ public:
   static constexpr int CHECKPOINT_MARKER = -1;
   static constexpr size_t MAX_STORED_INTERVALS = 1000;  // Maximum number of intervals to store
 
-  Checkpointer(const std::string& path = "checkpoint.db")
+  Checkpointer(const std::string& path = "/home/syl121/database/checkpoint.db")
     : tx_count_threshold(DefaultThreshold), last_finish(clock::now()) {
     if (!storage.open(path)) throw std::runtime_error("Failed to open DB");
     std::string meta_prefix = "_meta_bit";
@@ -142,8 +142,8 @@ public:
     cows.reserve(keys_ptr->size());
     for (uint64_t k : *keys_ptr)
       if (auto p = index->get_row_addr(k)) cows.push_back(*p);
-    
-    auto num_batches = (cows.size() + BatchSize - 1) / BatchSize;
+
+    auto num_batches = (cows.size()) / BatchSize + cows.size() % BatchSize;
 
     auto latch = std::make_shared<std::latch>(num_batches);
 
@@ -152,9 +152,6 @@ public:
       for (size_t i = 0; i < cnt; ++i) {
         RowType& obj = *items[i];
         std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
-        if (bits.size() <= *key_ptr) {
-          bits.resize(2 * (*key_ptr) + 1);
-        }
         bool bit = bits[*key_ptr];
         auto versioned = std::to_string(*key_ptr) + "_v" + (bit ? '1' : '0');
         storage.add_to_batch(batch, versioned, data);
@@ -171,6 +168,8 @@ public:
       std::lock_guard<std::mutex> lg(completion_mu);
       completion_thread = std::thread([this, keys_ptr, latch]() {
         latch->wait();
+        // in seconds
+        // auto start = std::chrono::steady_clock::now();
         auto batch = storage.create_batch();
         for (uint64_t k : *keys_ptr) {
           bits[k] = !bits[k];
@@ -179,6 +178,9 @@ public:
           storage.add_to_batch(batch, metaKey, std::string(&bc,1));
         }
         storage.commit_batch(batch);
+        storage.flush();
+        // auto write_time = std::chrono::steady_clock::now() - start;
+        // std::cout << "Write time: " << write_time.count() * 1e-9 << " s" << std::endl;
       });
     }
   }
