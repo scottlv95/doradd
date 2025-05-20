@@ -17,7 +17,6 @@
 #include <deque>
 #include "pin-thread.hpp"
 #include "checkpoint_stats.hpp"
-
 #ifndef CHECKPOINT_BATCH_SIZE
 #  error "You must define CHECKPOINT_BATCH_SIZE"
 #endif
@@ -177,13 +176,87 @@ public:
           char bc = bits[k] ? '1' : '0';
           storage.add_to_batch(batch, metaKey, std::string(&bc,1));
         }
+        std::cout<<"Total transactions: "<<total_transactions.load(std::memory_order_relaxed)<<std::endl;
+        storage.add_to_batch(batch, "total_txns", std::to_string(total_transactions.load(std::memory_order_relaxed)));
         storage.commit_batch(batch);
         storage.flush();
+        std::cout<<"Checkpoint completed"<<std::endl;
         // auto write_time = std::chrono::steady_clock::now() - start;
         // std::cout << "Write time: " << write_time.count() * 1e-9 << " s" << std::endl;
       });
     }
   }
+
+size_t try_recovery()
+{
+  // 1) Recover the total‐transactions counter
+  std::string txs_str;
+  if (storage.get("total_txns", txs_str))
+  {
+    uint64_t txs = std::stoull(txs_str);
+    total_transactions.store(txs, std::memory_order_relaxed);
+    std::cout << "Recovered total_transactions = " << txs << "\n";
+  }
+  else
+  {
+    std::cout << "No total_txns key found; starting from zero\n";
+  }
+
+  // 2) Rebuild the in‐memory index
+  if (index)
+  {
+    uint64_t max_seen_key = 0;
+
+    // iterate everything in RocksDB
+    for (auto& kv : storage.scan_prefix("")) 
+    {
+      auto const& key = kv.first;
+      // skip our counters & meta-bits
+      if (key == "total_txns") continue;
+      if (key.size() > 9 && key.compare(key.size()-9, 9, "_meta_bit") == 0)
+        continue;
+
+      // expect "<id>_v0" or "<id>_v1"
+      auto pos = key.rfind("_v");
+      if (pos == std::string::npos) continue;
+
+      uint64_t id = std::stoull(key.substr(0, pos));
+      char ver = key[pos+2];                // '0' or '1'
+      bool current_bit = bits[id];          // what our meta-bit array says
+
+      // only load the version matching the meta-bit
+      if (ver == (current_bit ? '1' : '0'))
+      {
+        auto const& data = kv.second;
+        if (data.size() < sizeof(RowType))
+        {
+          std::cerr << "Corrupted row data for id=" << id << "\n";
+          continue;
+        }
+
+        // deserialize into a stack object
+        RowType obj;
+        std::memcpy(&obj, data.data(), sizeof(RowType));
+
+        // wrap in a Verona cown and plant it into the index
+        auto cp = make_cown<RowType>(std::move(obj));
+        *index->get_row_addr(id) = std::move(cp);
+
+        max_seen_key = std::max(max_seen_key, id + 1);
+      }
+    }
+
+    // Make sure future insert_row()’s don’t overwrite recovered slots
+    index->set_count(max_seen_key);
+
+    std::cout << "Rebuilt index; highest key = " << (max_seen_key ? max_seen_key - 1 : 0)
+              << "\n";
+  }
+
+  // 3) Return how many txns we recovered
+  return total_transactions.load(std::memory_order_relaxed);
+}
+
 
   double get_avg_interval_ms() const {
     size_t c = interval_count.load(std::memory_order_relaxed);
