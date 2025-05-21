@@ -267,6 +267,8 @@ struct Indexer
   // inter-thread comm w/ the prefetcher
   rigtorp::SPSCQueue<int>* ring;
 
+  size_t recovered_txns;
+
   Indexer(
     void* mmap_ret,
     rigtorp::SPSCQueue<int>* ring_,
@@ -282,6 +284,7 @@ struct Indexer
     read_top += sizeof(uint32_t);
     handled_req_cnt = 0;
     checkpointer->set_index(T::index);
+    recovered_txns = checkpointer->try_recovery();
   }
 
   size_t check_avail_cnts()
@@ -316,7 +319,6 @@ struct Indexer
     int i, ret = 0;
     int batch; // = MAX_BATCH;
 
-
     while (1)
     {
       if (checkpointer->should_checkpoint()) {
@@ -334,6 +336,42 @@ struct Indexer
 
       batch = check_avail_cnts();
 
+      // Skip transactions if we still have recovered transactions
+      if (recovered_txns > 0) {
+        // Calculate how many transactions to skip in this batch
+        size_t skip_count = std::min(static_cast<size_t>(batch), recovered_txns);
+        recovered_txns -= skip_count;
+        
+        // Skip the transactions but still prepare their cowns
+        for (i = 0; i < skip_count; i++) {
+          ret = T::prepare_cowns(read_head);
+          read_head += ret;
+          read_idx++;
+        }
+        
+        // If we still have transactions in this batch after skipping, process them
+        if (skip_count < static_cast<size_t>(batch)) {
+          for (i = skip_count; i < batch; i++) {
+            ret = T::prepare_cowns(read_head);
+            auto txn = reinterpret_cast<T::Marshalled*>(read_head);
+            auto indices_size = txn->indices_size;
+            for (size_t i = 0; i < indices_size; i++) {
+              if (seen_keys.size() <= txn->indices[i]) {
+                seen_keys.resize(2 * txn->indices[i] + 1, false);
+              }
+              if (!seen_keys[txn->indices[i]]) {
+                seen_keys[txn->indices[i]] = true;
+                dirty_keys.push_back(txn->indices[i]);
+              }
+            }
+            read_head += ret;
+            read_idx++;
+          }
+          ring->push(batch - skip_count);
+        }
+        continue;
+      }
+      
       for (i = 0; i < batch; i++)
       {
         ret = T::prepare_cowns(read_head);
@@ -462,6 +500,7 @@ struct Spawner
   uint64_t tx_exec_sum;
   uint64_t last_tx_exec_sum;
   uint64_t tx_spawn_sum;
+  size_t recovered_txns;
 
 #ifdef RPC_LATENCY
   uint64_t txn_log_id = 0;
@@ -503,6 +542,7 @@ struct Spawner
     prepare_read_head = read_top;
     last_tx_exec_sum = 0;
     tx_spawn_sum = 0;
+    recovered_txns = checkpointer->try_recovery();
   }
 
   void track_worker_counter()
@@ -540,7 +580,7 @@ struct Spawner
   {
     uint32_t idx = 0;
     int ret;
-    uint64_t tx_count = 0;
+    uint64_t tx_count = recovered_txns;
     size_t i;
     size_t batch_sz;
     rnd = 1;
@@ -549,6 +589,7 @@ struct Spawner
     prepare_run();
 
     std::cout<<"Spawner running"<<std::endl;
+    std::cout<<"Recovered transactions: "<<recovered_txns<<std::endl;
     // run
     while (1)
     {
@@ -602,9 +643,6 @@ struct Spawner
       checkpointer->increment_tx_count(batch_sz);
 
       ring->pop();
-      if (tx_count % 100000 == 0) {
-        std::cout<<tx_count<<std::endl;
-      }
       // announce throughput
       if (tx_count >= ANNOUNCE_THROUGHPUT_BATCH_SIZE)
       {

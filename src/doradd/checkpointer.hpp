@@ -189,6 +189,8 @@ public:
 
 size_t try_recovery()
 {
+  std::lock_guard<std::mutex> lg(recovery_mutex);
+  if (recovery_done) return recovered_txns;
   // 1) Recover the total‐transactions counter
   std::string txs_str;
   if (storage.get("total_txns", txs_str))
@@ -196,6 +198,7 @@ size_t try_recovery()
     uint64_t txs = std::stoull(txs_str);
     total_transactions.store(txs, std::memory_order_relaxed);
     std::cout << "Recovered total_transactions = " << txs << "\n";
+    recovered_txns = txs;
   }
   else
   {
@@ -254,6 +257,7 @@ size_t try_recovery()
   }
 
   // 3) Return how many txns we recovered
+  recovery_done = true;
   return total_transactions.load(std::memory_order_relaxed);
 }
 
@@ -355,6 +359,9 @@ private:
   int number_of_checkpoints_done{0};
   std::deque<uint64_t> intervals;  // Store individual intervals in nanoseconds
   std::deque<size_t> tx_counts;    // Store transaction counts between checkpoints
+  bool recovery_done{false};
+  size_t recovered_txns{0};
+  std::mutex recovery_mutex;
 };
 
 

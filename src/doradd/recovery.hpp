@@ -5,7 +5,6 @@
 #include <unordered_map>
 #include <memory>
 #include "checkpoint_stats.hpp"
-
 template<typename StorageType, typename RowType>
 class Recovery {
 public:
@@ -65,11 +64,11 @@ public:
 
     // Get the total number of transactions from the database
     uint64_t get_total_transactions() {
-        auto data = storage.get("total_transactions");
-        if (!data) {
+        std::string value;
+        if (!storage.get("total_txns", value)) {
             return 0;
         }
-        return std::stoull(*data);
+        return std::stoull(value);
     }
 
 private:

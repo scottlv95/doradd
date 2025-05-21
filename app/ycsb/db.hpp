@@ -39,4 +39,8 @@ public:
       throw std::out_of_range("Index is full");
     }
   }
+  void set_count(uint64_t n)
+    {
+      if (n > cnt) cnt = n;
+    }
 };
