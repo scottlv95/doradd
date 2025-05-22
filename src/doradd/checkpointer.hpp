@@ -126,66 +126,75 @@ public:
   }
 
   void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
+       // 1) Wait for any previous checkpoint to finish
     {
-      std::lock_guard<std::mutex> lg(completion_mu);
-      if (completion_thread.joinable()) completion_thread.join();
+        std::lock_guard<std::mutex> lg(completion_mu);
+        if (completion_thread.joinable())
+            completion_thread.join();
     }
+
+    // 2) Pop the marker and clear the in‐flight flag
     ring->pop();
     checkpoint_in_flight.store(false, std::memory_order_relaxed);
 
+    // 3) Grab the current dirty‐keys list and reset it
     int idx = 1 - current_diff_idx.load(std::memory_order_relaxed);
     auto keys_ptr = std::make_shared<std::vector<uint64_t>>(std::move(diffs[idx]));
     diffs[idx].clear();
 
+    // 4) Collect the corresponding cowns
     std::vector<cown_ptr<RowType>> cows;
     cows.reserve(keys_ptr->size());
-    for (uint64_t k : *keys_ptr)
-      if (auto p = index->get_row_addr(k)) cows.push_back(*p);
+    for (uint64_t k : *keys_ptr) {
+        if (auto p = index->get_row_addr(k))
+            cows.push_back(*p);
+    }
 
-    auto num_batches = (cows.size()) / BatchSize + cows.size() % BatchSize;
-
+    // 5) Calculate number of batches and create a latch
+    size_t num_batches = (cows.size() + BatchSize - 1) / BatchSize;
     auto latch = std::make_shared<std::latch>(num_batches);
 
-    auto op = [this, latch, keys_ptr](const uint64_t* key_ptr, RowType** items, size_t cnt) {
-      auto batch = storage.create_batch();
-      for (size_t i = 0; i < cnt; ++i) {
-        RowType& obj = *items[i];
-        std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
-        bool bit = bits[*key_ptr];
-        auto versioned = std::to_string(*key_ptr) + "_v" + (bit ? '1' : '0');
-        storage.add_to_batch(batch, versioned, data);
-      }
-      storage.commit_batch(batch);
-      latch->count_down();
+    // 6) Allocate a new snapshot ID for this checkpoint
+    uint64_t snap = current_snapshot.fetch_add(1, std::memory_order_relaxed) + 1;
+
+    // 7) Define the per‐batch write operation
+    auto op = [this, latch, keys_ptr, snap](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+        auto batch = storage.create_batch();
+        for (size_t i = 0; i < cnt; ++i) {
+            RowType& obj = *items[i];
+            // serialize the row
+            std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
+            // write under "<id>_v<snap>"
+            std::string versioned_key = std::to_string(*key_ptr) + "_v" + std::to_string(snap);
+            storage.add_to_batch(batch, versioned_key, data);
+        }
+        storage.commit_batch(batch);
+        latch->count_down();
     };
 
+    // 8) Dispatch all the batches
     for (size_t i = 0; i < cows.size(); i += BatchSize) {
-      batch_helpers::process_n_cowns<BatchSize>(cows, *keys_ptr, i, op);
+        batch_helpers::process_n_cowns<BatchSize>(cows, *keys_ptr, i, op);
     }
 
+    // 9) Once every batch has finished, write the global snapshot pointer and total_txns
     {
-      std::lock_guard<std::mutex> lg(completion_mu);
-      completion_thread = std::thread([this, keys_ptr, latch]() {
-        latch->wait();
-        // in seconds
-        // auto start = std::chrono::steady_clock::now();
-        auto batch = storage.create_batch();
-        for (uint64_t k : *keys_ptr) {
-          bits[k] = !bits[k];
-          std::string metaKey = std::to_string(k) + "_meta_bit";
-          char bc = bits[k] ? '1' : '0';
-          storage.add_to_batch(batch, metaKey, std::string(&bc,1));
-        }
-        std::cout<<"Total transactions: "<<total_transactions.load(std::memory_order_relaxed)<<std::endl;
-        storage.add_to_batch(batch, "total_txns", std::to_string(total_transactions.load(std::memory_order_relaxed)));
-        storage.commit_batch(batch);
-        storage.flush();
-        std::cout<<"Checkpoint completed"<<std::endl;
-        // auto write_time = std::chrono::steady_clock::now() - start;
-        // std::cout << "Write time: " << write_time.count() * 1e-9 << " s" << std::endl;
-      });
+        std::lock_guard<std::mutex> lg(completion_mu);
+        completion_thread = std::thread([this, snap, latch]() {
+            latch->wait();
+            auto batch = storage.create_batch();
+            // bump the global snapshot in the DB
+            storage.add_to_batch(batch, GLOBAL_SNAPSHOT_KEY, std::to_string(snap));
+            // persist the total‐transactions counter as before
+            storage.add_to_batch(batch,
+                                 "total_txns",
+                                 std::to_string(total_transactions.load(std::memory_order_relaxed)));
+            storage.commit_batch(batch);
+            storage.flush();
+            std::cout << "Checkpoint " << snap << " completed\n";
+        });
     }
-  }
+}
 
 size_t try_recovery()
 {
@@ -354,7 +363,9 @@ private:
   clock::time_point last_finish;
   int number_of_checkpoints_done{0};
   std::deque<uint64_t> intervals;  // Store individual intervals in nanoseconds
-  std::deque<size_t> tx_counts;    // Store transaction counts between checkpoints
+  std::deque<size_t> tx_counts;    // Store transaction counts between checkpoints  
+  std::atomic<uint64_t> current_snapshot{0}; // Store the current snapshot ID
+  static constexpr const char* GLOBAL_SNAPSHOT_KEY = "global_snapshot";
 };
 
 

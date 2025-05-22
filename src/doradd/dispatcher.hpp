@@ -548,7 +548,6 @@ struct Spawner
     // warm-up
     prepare_run();
 
-    std::cout<<"Spawner running"<<std::endl;
     // run
     while (1)
     {
@@ -602,9 +601,6 @@ struct Spawner
       checkpointer->increment_tx_count(batch_sz);
 
       ring->pop();
-      if (tx_count % 100000 == 0) {
-        std::cout<<tx_count<<std::endl;
-      }
       // announce throughput
       if (tx_count >= ANNOUNCE_THROUGHPUT_BATCH_SIZE)
       {
