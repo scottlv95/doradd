@@ -98,16 +98,17 @@ public:
 
   void track_worker_counter()
   {
-    if (counter_map->size() == worker_cnt)
+    if (counter_map->size() == worker_cnt) {
       counter_registered = true;
+    }
   }
 
   uint64_t calc_tx_exec_sum()
   {
     uint64_t sum = 0;
-    for (const auto& counter_pair : *counter_map)
+    for (const auto& counter_pair : *counter_map) {
       sum += *(counter_pair.second);
-
+    }
     return sum;
   }
 
@@ -320,9 +321,7 @@ struct Indexer
     while (1)
     {
       if (checkpointer->should_checkpoint()) {
-        checkpointer->schedule_checkpoint(ring, std::move(dirty_keys));
-        seen_keys.assign(seen_keys.size(), false);
-        dirty_keys.clear();
+        checkpointer->schedule_checkpoint(ring);
         continue;
       }
 
@@ -337,17 +336,6 @@ struct Indexer
       for (i = 0; i < batch; i++)
       {
         ret = T::prepare_cowns(read_head);
-        auto txn = reinterpret_cast<T::Marshalled*>(read_head);
-        auto indices_size = txn->indices_size;
-        for (size_t i = 0; i < indices_size; i++) {
-          if (seen_keys.size() <= txn->indices[i]) {
-            seen_keys.resize(2 * txn->indices[i] + 1, false);
-          }
-          if (!seen_keys[txn->indices[i]]) {
-            seen_keys[txn->indices[i]] = true;
-            dirty_keys.push_back(txn->indices[i]);
-          }
-        }
         read_head += ret;
         read_idx++;
       }
@@ -507,16 +495,17 @@ struct Spawner
 
   void track_worker_counter()
   {
-    if (counter_map->size() == worker_cnt)
+    if (counter_map->size() == worker_cnt) {
       counter_registered = true;
+    }
   }
 
   uint64_t calc_tx_exec_sum()
   {
     uint64_t sum = 0;
-    for (const auto& counter_pair : *counter_map)
+    for (const auto& counter_pair : *counter_map) {
       sum += *(counter_pair.second);
-
+    }
     return sum;
   }
 
@@ -564,7 +553,13 @@ struct Spawner
       }
 
       if (*ring->front() == Checkpointer<RocksDBStore, T>::CHECKPOINT_MARKER) {
+        while (tx_exec_sum < tx_spawn_sum) {
+          tx_exec_sum = calc_tx_exec_sum();
+          _mm_pause();
+        }
+        
         checkpointer->process_checkpoint_request(ring);
+        
         continue;
       }
 
@@ -629,7 +624,7 @@ struct Spawner
         checkpointer->print_tx_counts();
         
 #ifdef RPC_LATENCY
-        // fprintf(res_log_fd, "%lf\n", tx_count / dur_cnt);
+        fprintf(res_log_fd, "%lf\n", tx_count / dur_cnt);
 #endif
         tx_count = 0;
         last_tx_exec_sum = tx_exec_sum;

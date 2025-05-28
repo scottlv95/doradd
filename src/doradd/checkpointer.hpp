@@ -111,14 +111,12 @@ public:
   }
 
   bool should_checkpoint() const {
-    return tx_count_since_last_checkpoint.load(std::memory_order_relaxed) >= tx_count_threshold;
+    return tx_count_since_last_checkpoint.load(std::memory_order_relaxed) >= tx_count_threshold && !checkpoint_in_flight.load(std::memory_order_relaxed);
   }
 
-  void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring, std::vector<uint64_t>&& dirty_keys) {
+  void schedule_checkpoint(rigtorp::SPSCQueue<int>* ring) {
     if (!checkpoint_in_flight.exchange(true, std::memory_order_acq_rel)) {
       ring->push(CHECKPOINT_MARKER);
-      int prev = current_diff_idx.exchange(1 - current_diff_idx.load(std::memory_order_relaxed), std::memory_order_relaxed);
-      diffs[prev].swap(dirty_keys);
       tx_counts.push_back(tx_count_since_last_checkpoint.load(std::memory_order_relaxed));
       tx_count_since_last_checkpoint.store(0, std::memory_order_relaxed);
       tx_during_last_checkpoint.store(0, std::memory_order_relaxed);
@@ -126,146 +124,115 @@ public:
   }
 
   void process_checkpoint_request(rigtorp::SPSCQueue<int>* ring) {
-       // 1) Wait for any previous checkpoint to finish
-    {
-        std::lock_guard<std::mutex> lg(completion_mu);
-        if (completion_thread.joinable())
-            completion_thread.join();
-    }
-
-    // 2) Pop the marker and clear the in‐flight flag
+    // 1) Pop the marker and clear the in-flight flag
     ring->pop();
-    checkpoint_in_flight.store(false, std::memory_order_relaxed);
 
-    // 3) Grab the current dirty‐keys list and reset it
-    int idx = 1 - current_diff_idx.load(std::memory_order_relaxed);
-    auto keys_ptr = std::make_shared<std::vector<uint64_t>>(std::move(diffs[idx]));
-    diffs[idx].clear();
-
-    // 4) Collect the corresponding cowns
-    std::vector<cown_ptr<RowType>> cows;
-    cows.reserve(keys_ptr->size());
-    for (uint64_t k : *keys_ptr) {
-        if (auto p = index->get_row_addr(k))
-            cows.push_back(*p);
-    }
-
-    // 5) Calculate number of batches and create a latch
-    size_t num_batches = cows.size() / BatchSize + cows.size() % BatchSize;
-    auto latch = std::make_shared<std::latch>(num_batches);
-
-    // 6) Allocate a new snapshot ID for this checkpoint
+    // 2) Allocate a new snapshot ID for this checkpoint
     uint64_t snap = current_snapshot.fetch_add(1, std::memory_order_relaxed) + 1;
     int prune = snap - MAX_STORED_VERSIONS;
 
-    // 7) Define the per‐batch write operation
-    auto op = [this, latch, keys_ptr, snap, prune](const uint64_t* key_ptr, RowType** items, size_t cnt) {
-        auto batch = storage.create_batch();
-        for (size_t i = 0; i < cnt; ++i) {
-            RowType& obj = *items[i];
-            // serialize the row
-            std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
-            // write under "<id>_v<snap>"
-            std::string versioned_key = std::to_string(*key_ptr) + "_v" + std::to_string(snap);
-            storage.add_to_batch(batch, versioned_key, data);
-            // prune the old version for this key
-            if (prune >= 0) {
-                std::string old_versioned_key = std::to_string(*key_ptr) + "_v" + std::to_string(prune);
-                storage.delete_key(old_versioned_key);
-            }
-        }
-        storage.commit_batch(batch);
-        latch->count_down();
-    };
-
-    // 8) Dispatch all the batches
-    for (size_t i = 0; i < cows.size(); i += BatchSize) {
-        batch_helpers::process_n_cowns<BatchSize>(cows, *keys_ptr, i, op);
-    }
-
-    // 9) Once every batch has finished, write the global snapshot pointer and total_txns
-    {
-        std::lock_guard<std::mutex> lg(completion_mu);
-        completion_thread = std::thread([this, snap, latch]() {
-            latch->wait();
-            auto batch = storage.create_batch();
-            // bump the global snapshot in the DB
-            storage.add_to_batch(batch, GLOBAL_SNAPSHOT_KEY, std::to_string(snap));
-            // persist the total‐transactions counter as before
-            storage.add_to_batch(batch,
-                                 "total_txns",
-                                 std::to_string(total_transactions.load(std::memory_order_relaxed)));
-            storage.commit_batch(batch);
-            storage.flush();
-            std::cout << "Checkpoint " << snap << " completed\n";
-        });
-      completion_thread.detach();
-    }
-
-}
-
-size_t try_recovery()
-{
- // 1) Recover the total‐transactions counter
-    std::string txs_str;
-    if (storage.get("total_txns", txs_str)) {
-        uint64_t txs = std::stoull(txs_str);
-        total_transactions.store(txs, std::memory_order_relaxed);
-        std::cout << "Recovered total_transactions = " << txs << "\n";
-    } else {
-        std::cout << "No total_txns key found; starting from zero\n";
-    }
-
-    // 2) Load the last fully‐committed snapshot ID
-    uint64_t valid_snap = 0;
-    std::string snap_str;
-    if (storage.get(GLOBAL_SNAPSHOT_KEY, snap_str)) {
-        valid_snap = std::stoull(snap_str);
-    }
-    std::cout << "Recovering using snapshot " << valid_snap << "\n";
-
-    // 3) Scan all "<id>_v<ver>" entries and pick, for each id, the highest ver ≤ valid_snap
+    // 3) Get all rows and checkpoint them in one atomic operation
     if (index) {
-        std::unordered_map<uint64_t, std::pair<uint64_t,std::string>> best;
-        for (auto& kv : storage.scan_prefix("")) {
-            const std::string& key = kv.first;
-            // skip our special keys
-            if (key == "total_txns" || key == GLOBAL_SNAPSHOT_KEY) continue;
-            auto pos = key.rfind("_v");
-            if (pos == std::string::npos) continue;
+        auto sz = index->size();
+        std::vector<std::pair<uint64_t, std::string>> checkpoint_data;
+        checkpoint_data.reserve(sz);
+        
+        // Create a single batch for all writes
+        auto batch = storage.create_batch();
 
-            uint64_t id  = std::stoull(key.substr(0, pos));
-            uint64_t ver = std::stoull(key.substr(pos + 2));
-            if (ver > valid_snap) continue;
-
-            auto it = best.find(id);
-            if (it == best.end() || it->second.first < ver) {
-                best[id] = {ver, kv.second};
-            }
-        }
-
-        // 4) Deserialize and reinsert into the in-memory index
-        uint64_t max_seen = 0;
-        for (auto& [id, entry] : best) {
-            const std::string& data = entry.second;
-            if (data.size() < sizeof(RowType)) {
-                std::cerr << "Corrupted row data for id=" << id << "\n";
+        // Write all rows
+        for (size_t i = 0; i < sz; i++) {
+            auto* row_ptr = index->get_row_addr(i);
+            if (!row_ptr || !*row_ptr) {
                 continue;
             }
-            RowType obj;
-            std::memcpy(&obj, data.data(), sizeof(RowType));
-            auto cp = make_cown<RowType>(std::move(obj));
-            *index->get_row_addr(id) = std::move(cp);
-            max_seen = std::max(max_seen, id + 1);
+
+            // Serialize the row
+            std::string data(reinterpret_cast<const char*>(row_ptr), sizeof(RowType));
+            
+            // Write under "<id>_v<snap>"
+            std::string key = std::to_string(i);
+            storage.add_to_batch(batch, key, data);
         }
-        index->set_count(max_seen);
-        std::cout << "Rebuilt index; highest key = "
-                  << (max_seen ? max_seen - 1 : 0) << "\n";
+
+        // Write global state
+        storage.add_to_batch(batch, GLOBAL_SNAPSHOT_KEY, std::to_string(snap));
+        storage.add_to_batch(batch, "total_txns", 
+                           std::to_string(total_transactions.load(std::memory_order_relaxed)));
+
+        // Commit everything in one atomic operation
+        storage.commit_batch(batch);
+        storage.flush();
+
+        // Update checkpoint statistics
+        auto now = clock::now();
+        auto interval = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_finish).count();
+        total_interval_ns.fetch_add(interval, std::memory_order_relaxed);
+        interval_count.fetch_add(1, std::memory_order_relaxed);
+        last_finish = now;
+        number_of_checkpoints_done++;
+        std::cout<<"CHECKPOINT DONE "<<snap<<std::endl;
     }
 
-    // 5) Return how many transactions we recovered
-    return total_transactions.load(std::memory_order_relaxed);
-}
+    // Only clear the in-flight flag after everything is done
+    checkpoint_in_flight.store(false, std::memory_order_release);
+  }
+
+  size_t try_recovery()
+  {
+   // 1) Recover the total-transactions counter
+      std::string txs_str;
+      if (storage.get("total_txns", txs_str)) {
+          uint64_t txs = std::stoull(txs_str);
+          total_transactions.store(txs, std::memory_order_relaxed);
+      }
+
+      // 2) Load the last fully-committed snapshot ID
+      uint64_t valid_snap = 0;
+      std::string snap_str;
+      if (storage.get(GLOBAL_SNAPSHOT_KEY, snap_str)) {
+          valid_snap = std::stoull(snap_str);
+      }
+
+      // 3) Scan all "<id>_v<ver>" entries and pick, for each id, the highest ver ≤ valid_snap
+      if (index) {
+          std::unordered_map<uint64_t, std::pair<uint64_t,std::string>> best;
+          for (auto& kv : storage.scan_prefix("")) {
+              const std::string& key = kv.first;
+              // skip our special keys
+              if (key == "total_txns" || key == GLOBAL_SNAPSHOT_KEY) continue;
+              auto pos = key.rfind("_v");
+              if (pos == std::string::npos) continue;
+
+              uint64_t id  = std::stoull(key.substr(0, pos));
+              uint64_t ver = std::stoull(key.substr(pos + 2));
+              if (ver > valid_snap) continue;
+
+              auto it = best.find(id);
+              if (it == best.end() || it->second.first < ver) {
+                  best[id] = {ver, kv.second};
+              }
+          }
+
+          // 4) Deserialize and reinsert into the in-memory index
+          uint64_t max_seen = 0;
+          for (auto& [id, entry] : best) {
+              const std::string& data = entry.second;
+              if (data.size() < sizeof(RowType)) {
+                  continue;
+              }
+              RowType obj;
+              std::memcpy(&obj, data.data(), sizeof(RowType));
+              auto cp = make_cown<RowType>(std::move(obj));
+              *index->get_row_addr(id) = std::move(cp);
+              max_seen = std::max(max_seen, id + 1);
+          }
+          index->set_count(max_seen);
+      }
+
+      // 5) Return how many transactions we recovered
+      return total_transactions.load(std::memory_order_relaxed);
+  }
 
   double get_avg_interval_ms() const {
     size_t c = interval_count.load(std::memory_order_relaxed);
