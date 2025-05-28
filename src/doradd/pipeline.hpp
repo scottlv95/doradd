@@ -32,7 +32,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
   counter_map_mutex = new std::mutex();
 
   // Create storage instance and checkpointer
-  auto* checkpointer = new Checkpointer<RocksDBStore, T, typename T::RowType>("checkpoint.db");
+  auto* checkpointer = new Checkpointer<RocksDBStore, T, typename T::RowType>("/home/syl121/database/checkpoint.db");
   
   // Pass command line arguments to the checkpointer if available
   if (argc > 0 && argv != nullptr) {
@@ -165,7 +165,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
     });
 
     // flush latency logs
-    std::this_thread::sleep_for(std::chrono::seconds(500));
+    std::this_thread::sleep_for(std::chrono::seconds(400));
 
 #ifdef CORE_PIPE
     pthread_cancel(spawner_thread.native_handle());

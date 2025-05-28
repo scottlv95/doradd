@@ -151,14 +151,15 @@ public:
     }
 
     // 5) Calculate number of batches and create a latch
-    size_t num_batches = (cows.size() + BatchSize - 1) / BatchSize;
+    size_t num_batches = cows.size() / BatchSize + cows.size() % BatchSize;
     auto latch = std::make_shared<std::latch>(num_batches);
 
     // 6) Allocate a new snapshot ID for this checkpoint
     uint64_t snap = current_snapshot.fetch_add(1, std::memory_order_relaxed) + 1;
+    int prune = snap - MAX_STORED_VERSIONS;
 
     // 7) Define the per‐batch write operation
-    auto op = [this, latch, keys_ptr, snap](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+    auto op = [this, latch, keys_ptr, snap, prune](const uint64_t* key_ptr, RowType** items, size_t cnt) {
         auto batch = storage.create_batch();
         for (size_t i = 0; i < cnt; ++i) {
             RowType& obj = *items[i];
@@ -167,6 +168,11 @@ public:
             // write under "<id>_v<snap>"
             std::string versioned_key = std::to_string(*key_ptr) + "_v" + std::to_string(snap);
             storage.add_to_batch(batch, versioned_key, data);
+            // prune the old version for this key
+            if (prune >= 0) {
+                std::string old_versioned_key = std::to_string(*key_ptr) + "_v" + std::to_string(prune);
+                storage.delete_key(old_versioned_key);
+            }
         }
         storage.commit_batch(batch);
         latch->count_down();
@@ -193,79 +199,73 @@ public:
             storage.flush();
             std::cout << "Checkpoint " << snap << " completed\n";
         });
+      completion_thread.detach();
     }
+
 }
 
 size_t try_recovery()
 {
-  // 1) Recover the total‐transactions counter
-  std::string txs_str;
-  if (storage.get("total_txns", txs_str))
-  {
-    uint64_t txs = std::stoull(txs_str);
-    total_transactions.store(txs, std::memory_order_relaxed);
-    std::cout << "Recovered total_transactions = " << txs << "\n";
-  }
-  else
-  {
-    std::cout << "No total_txns key found; starting from zero\n";
-  }
-
-  // 2) Rebuild the in‐memory index
-  if (index)
-  {
-    uint64_t max_seen_key = 0;
-
-    // iterate everything in RocksDB
-    for (auto& kv : storage.scan_prefix("")) 
-    {
-      auto const& key = kv.first;
-      // skip our counters & meta-bits
-      if (key == "total_txns") continue;
-      if (key.size() > 9 && key.compare(key.size()-9, 9, "_meta_bit") == 0)
-        continue;
-
-      // expect "<id>_v0" or "<id>_v1"
-      auto pos = key.rfind("_v");
-      if (pos == std::string::npos) continue;
-
-      uint64_t id = std::stoull(key.substr(0, pos));
-      char ver = key[pos+2];                // '0' or '1'
-      bool current_bit = bits[id];          // what our meta-bit array says
-
-      // only load the version matching the meta-bit
-      if (ver == (current_bit ? '1' : '0'))
-      {
-        auto const& data = kv.second;
-        if (data.size() < sizeof(RowType))
-        {
-          std::cerr << "Corrupted row data for id=" << id << "\n";
-          continue;
-        }
-
-        // deserialize into a stack object
-        RowType obj;
-        std::memcpy(&obj, data.data(), sizeof(RowType));
-
-        // wrap in a Verona cown and plant it into the index
-        auto cp = make_cown<RowType>(std::move(obj));
-        *index->get_row_addr(id) = std::move(cp);
-
-        max_seen_key = std::max(max_seen_key, id + 1);
-      }
+ // 1) Recover the total‐transactions counter
+    std::string txs_str;
+    if (storage.get("total_txns", txs_str)) {
+        uint64_t txs = std::stoull(txs_str);
+        total_transactions.store(txs, std::memory_order_relaxed);
+        std::cout << "Recovered total_transactions = " << txs << "\n";
+    } else {
+        std::cout << "No total_txns key found; starting from zero\n";
     }
 
-    // Make sure future insert_row()’s don’t overwrite recovered slots
-    index->set_count(max_seen_key);
+    // 2) Load the last fully‐committed snapshot ID
+    uint64_t valid_snap = 0;
+    std::string snap_str;
+    if (storage.get(GLOBAL_SNAPSHOT_KEY, snap_str)) {
+        valid_snap = std::stoull(snap_str);
+    }
+    std::cout << "Recovering using snapshot " << valid_snap << "\n";
 
-    std::cout << "Rebuilt index; highest key = " << (max_seen_key ? max_seen_key - 1 : 0)
-              << "\n";
-  }
+    // 3) Scan all "<id>_v<ver>" entries and pick, for each id, the highest ver ≤ valid_snap
+    if (index) {
+        std::unordered_map<uint64_t, std::pair<uint64_t,std::string>> best;
+        for (auto& kv : storage.scan_prefix("")) {
+            const std::string& key = kv.first;
+            // skip our special keys
+            if (key == "total_txns" || key == GLOBAL_SNAPSHOT_KEY) continue;
+            auto pos = key.rfind("_v");
+            if (pos == std::string::npos) continue;
 
-  // 3) Return how many txns we recovered
-  return total_transactions.load(std::memory_order_relaxed);
+            uint64_t id  = std::stoull(key.substr(0, pos));
+            uint64_t ver = std::stoull(key.substr(pos + 2));
+            if (ver > valid_snap) continue;
+
+            auto it = best.find(id);
+            if (it == best.end() || it->second.first < ver) {
+                best[id] = {ver, kv.second};
+            }
+        }
+
+        // 4) Deserialize and reinsert into the in-memory index
+        uint64_t max_seen = 0;
+        for (auto& [id, entry] : best) {
+            const std::string& data = entry.second;
+            if (data.size() < sizeof(RowType)) {
+                std::cerr << "Corrupted row data for id=" << id << "\n";
+                continue;
+            }
+            RowType obj;
+            std::memcpy(&obj, data.data(), sizeof(RowType));
+            auto cp = make_cown<RowType>(std::move(obj));
+            *index->get_row_addr(id) = std::move(cp);
+            max_seen = std::max(max_seen, id + 1);
+        }
+        index->set_count(max_seen);
+        std::cout << "Rebuilt index; highest key = "
+                  << (max_seen ? max_seen - 1 : 0) << "\n";
+    }
+
+    // 5) Return how many transactions we recovered
+    return total_transactions.load(std::memory_order_relaxed);
 }
-
 
   double get_avg_interval_ms() const {
     size_t c = interval_count.load(std::memory_order_relaxed);
@@ -366,6 +366,7 @@ private:
   std::deque<size_t> tx_counts;    // Store transaction counts between checkpoints  
   std::atomic<uint64_t> current_snapshot{0}; // Store the current snapshot ID
   static constexpr const char* GLOBAL_SNAPSHOT_KEY = "global_snapshot";
+  uint64_t MAX_STORED_VERSIONS = 2;
 };
 
 

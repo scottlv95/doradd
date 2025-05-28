@@ -629,7 +629,7 @@ struct Spawner
         checkpointer->print_tx_counts();
         
 #ifdef RPC_LATENCY
-        fprintf(res_log_fd, "%lf\n", tx_count / dur_cnt);
+        // fprintf(res_log_fd, "%lf\n", tx_count / dur_cnt);
 #endif
         tx_count = 0;
         last_tx_exec_sum = tx_exec_sum;

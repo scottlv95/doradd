@@ -131,6 +131,14 @@ public:
         return result;
     }
 
+    void delete_key(const std::string& key) {
+        if (!db_) return;
+        rocksdb::Status status = db_->Delete(rocksdb::WriteOptions(), key);
+        if (!status.ok()) {
+            std::cerr << "RocksDB: Failed to delete key: " << status.ToString() << std::endl;
+        }
+    }
+
     void flush() {
         if (!db_) return;
         rocksdb::Status status = db_->Flush(rocksdb::FlushOptions());
