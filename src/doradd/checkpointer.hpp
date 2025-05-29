@@ -164,17 +164,8 @@ public:
         storage.commit_batch(batch);
         storage.flush();
 
-        // Update checkpoint statistics
-        auto now = clock::now();
-        auto interval = std::chrono::duration_cast<std::chrono::nanoseconds>(now - last_finish).count();
-        total_interval_ns.fetch_add(interval, std::memory_order_relaxed);
-        interval_count.fetch_add(1, std::memory_order_relaxed);
-        last_finish = now;
-        number_of_checkpoints_done++;
-        std::cout<<"CHECKPOINT DONE "<<snap<<std::endl;
     }
 
-    // Only clear the in-flight flag after everything is done
     checkpoint_in_flight.store(false, std::memory_order_release);
   }
 
