@@ -166,13 +166,9 @@ public:
             // serialize the row
             std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
             // write under "<id>_v<snap>"
-            std::string versioned_key = std::to_string(*key_ptr) + "_v" + std::to_string(snap);
+            // std::string versioned_key = std::to_string(*key_ptr) + "_v" + std::to_string(snap);
+            std::string versioned_key = std::to_string(snap) + "_v" + std::to_string(*key_ptr);
             storage.add_to_batch(batch, versioned_key, data);
-            // prune the old version for this key
-            if (prune >= 0) {
-                std::string old_versioned_key = std::to_string(*key_ptr) + "_v" + std::to_string(prune);
-                storage.delete_key(old_versioned_key);
-            }
         }
         storage.commit_batch(batch);
         latch->count_down();
@@ -186,7 +182,7 @@ public:
     // 9) Once every batch has finished, write the global snapshot pointer and total_txns
     {
         std::lock_guard<std::mutex> lg(completion_mu);
-        completion_thread = std::thread([this, snap, latch]() {
+        completion_thread = std::thread([this, snap, latch, prune]() {
             latch->wait();
             auto batch = storage.create_batch();
             // bump the global snapshot in the DB
@@ -195,6 +191,10 @@ public:
             storage.add_to_batch(batch,
                                  "total_txns",
                                  std::to_string(total_transactions.load(std::memory_order_relaxed)));
+
+            if (prune >= 0) {
+                storage.delete_prefix(std::to_string(prune) + "_v");
+            }
             storage.commit_batch(batch);
             storage.flush();
             std::cout << "Checkpoint " << snap << " completed\n";

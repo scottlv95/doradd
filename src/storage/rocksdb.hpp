@@ -139,6 +139,14 @@ public:
         }
     }
 
+    void delete_prefix(const std::string& prefix) {
+        if (!db_) return;
+        rocksdb::Status status = db_->DeleteRange(rocksdb::WriteOptions(), db_->DefaultColumnFamily(), prefix, prefix + "\xff");
+        if (!status.ok()) {
+            std::cerr << "RocksDB: Failed to delete prefix: " << status.ToString() << std::endl;
+        }
+    }
+
     void flush() {
         if (!db_) return;
         rocksdb::Status status = db_->Flush(rocksdb::FlushOptions());
