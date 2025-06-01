@@ -7,6 +7,7 @@
 #include "rpc_handler.hpp"
 #include "../storage/rocksdb.hpp"
 #include "checkpointer.hpp"
+#include "txcounter.hpp"
 
 #include <thread>
 #include <unordered_map>
@@ -15,6 +16,9 @@
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 std::unordered_map<std::thread::id, log_arr_type*>* log_map;
 std::mutex* counter_map_mutex;
+
+// Global benchmark start time
+ts_type benchmark_start_time;
 
 template<typename T>
 void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 0, char** argv = nullptr)
@@ -43,6 +47,10 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
   // init and run dispatcher pipelines
   when() << [&]() {
     printf("Init and Run - Dispatcher Pipelines\n");
+    
+    // Initialize benchmark start time
+    benchmark_start_time = std::chrono::system_clock::now();
+    
     // sched.add_external_event_source();
 
     std::atomic<uint64_t> req_cnt(0);
@@ -165,7 +173,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
     });
 
     // flush latency logs
-    std::this_thread::sleep_for(std::chrono::seconds(400));
+    std::this_thread::sleep_for(std::chrono::seconds(500));
 
 #ifdef CORE_PIPE
     pthread_cancel(spawner_thread.native_handle());
@@ -205,7 +213,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
             std::get<1>(value_tuple));
 #  else
         for (auto value : *(entry.second))
-          fprintf(res_log_fd, "%u\n", value);
+          fprintf(res_log_fd, "%lu\n", value);
 #  endif // LOG_SCHED_OHEAD
       }
     }

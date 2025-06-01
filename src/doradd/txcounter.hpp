@@ -11,6 +11,9 @@ extern std::unordered_map<std::thread::id, log_arr_type*>* log_map;
 extern std::mutex* counter_map_mutex;
 const int SAMPLE_RATE = 10;
 
+// Global start time for timestamp logging
+extern ts_type benchmark_start_time;
+
 /* Thread-local singleton TxCounter */
 struct TxCounter
 {
@@ -37,11 +40,11 @@ struct TxCounter
     if (tx_cnt % SAMPLE_RATE == 0)
     {
       auto time_now = std::chrono::system_clock::now();
-      std::chrono::duration<double> duration = time_now - init_time;
-      uint32_t log_duration =
-        static_cast<uint32_t>(duration.count() * 1'000'000);
+      std::chrono::duration<double> duration = time_now - benchmark_start_time;
+      uint64_t timestamp_us =
+        static_cast<uint64_t>(duration.count() * 1'000'000);
 
-      log_arr->push_back(log_duration);
+      log_arr->push_back(timestamp_us);
     }
   }
 #  endif

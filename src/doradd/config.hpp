@@ -23,5 +23,5 @@ using ts_type = std::chrono::time_point<std::chrono::system_clock>;
 #ifdef LOG_SCHED_OHEAD
 using log_arr_type = std::vector<std::tuple<uint32_t, uint32_t>>;
 #else
-using log_arr_type = std::vector<uint32_t>;
+using log_arr_type = std::vector<uint64_t>;
 #endif
