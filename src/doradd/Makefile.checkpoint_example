@@ -1,0 +1,24 @@
+CXX = g++
+CXXFLAGS = -std=c++20 -O2 -Wall -Wextra -pthread
+TARGET = versioned_checkpoint_example
+SOURCE = versioned_checkpoint_example.cpp
+
+.PHONY: all clean run
+
+all: $(TARGET)
+
+$(TARGET): $(SOURCE)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+run: $(TARGET)
+	./$(TARGET)
+
+clean:
+	rm -f $(TARGET)
+
+# Optional: Create a more comprehensive demo with timing
+demo: $(TARGET)
+	@echo "Running versioned checkpoint demonstration..."
+	@echo "This shows how concurrent checkpoints work with background GC"
+	@echo "==============================================="
+	./$(TARGET) 

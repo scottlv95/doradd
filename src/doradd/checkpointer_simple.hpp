@@ -85,7 +85,7 @@ template<typename StorageType, typename TxnType, typename RowType = TxnType>
 class Checkpointer {
 public:
   static constexpr int CHECKPOINT_MARKER = -1;
-  static constexpr size_t MAX_STORED_INTERVALS = 1000;  // Maximum number of intervals to store
+  static constexpr size_t MAX_STORED_INTERVALS = 1000;  
 
   Checkpointer(const std::string& path = "/home/syl121/database/checkpoint.db")
     : tx_count_threshold(DefaultThreshold), last_finish(clock::now()) {
@@ -202,9 +202,8 @@ public:
     }
   }
 
-size_t try_recovery()
-{
- // 1) Recover the total‐transactions counter
+  size_t try_recovery() {
+    // 1) Recover the total‐transactions counter
     std::string txs_str;
     if (storage.get("total_txns", txs_str)) {
         uint64_t txs = std::stoull(txs_str);
@@ -266,184 +265,9 @@ size_t try_recovery()
 
     // 6) Return how many transactions we recovered
     return total_transactions.load(std::memory_order_relaxed);
-}
-
-  // Background garbage collection methods
-  void start_gc_thread() {
-    std::lock_guard<std::mutex> lg(gc_mutex);
-    if (!gc_running.load()) {
-      gc_running.store(true);
-      gc_thread = std::thread(&Checkpointer::gc_worker, this);
-    }
   }
 
-  void shutdown_gc_thread() {
-    {
-      std::lock_guard<std::mutex> lg(gc_mutex);
-      gc_shutdown.store(true);
-    }
-    gc_cv.notify_all();
-    
-    if (gc_thread.joinable()) {
-      gc_thread.join();
-    }
-    gc_running.store(false);
-  }
-
-  void notify_gc() {
-    // Only notify if we have enough completed checkpoints to potentially clean up
-    std::lock_guard<std::mutex> lg(gc_mutex);
-    if (completed_checkpoints.size() > MAX_STORED_VERSIONS) {
-      gc_cv.notify_one();
-    }
-  }
-
-  void register_inflight_checkpoint(uint64_t snap) {
-    std::lock_guard<std::mutex> lg(gc_mutex);
-    inflight_checkpoints.insert(snap);
-    all_snapshots.insert(snap);  // Track all snapshots we've seen
-  }
-
-  void complete_checkpoint(uint64_t snap) {
-    std::lock_guard<std::mutex> lg(gc_mutex);
-    inflight_checkpoints.erase(snap);
-    completed_checkpoints.insert(snap);
-    last_committed_snapshot.store(snap, std::memory_order_relaxed);
-  }
-
-  uint64_t get_safe_gc_threshold() const {
-    std::lock_guard<std::mutex> lg(gc_mutex);
-    
-    // Find the oldest in-flight checkpoint
-    uint64_t oldest_inflight = std::numeric_limits<uint64_t>::max();
-    for (uint64_t snap : inflight_checkpoints) {
-      oldest_inflight = std::min(oldest_inflight, snap);
-    }
-    
-    // We can safely delete versions older than:
-    // min(oldest_inflight, last_committed - MAX_STORED_VERSIONS)
-    uint64_t last_committed = last_committed_snapshot.load(std::memory_order_relaxed);
-    uint64_t threshold = last_committed > MAX_STORED_VERSIONS ? 
-                        last_committed - MAX_STORED_VERSIONS : 0;
-    
-    if (oldest_inflight != std::numeric_limits<uint64_t>::max()) {
-      threshold = std::min(threshold, oldest_inflight - 1);
-    }
-    
-    return threshold;
-  }
-
-  void gc_worker() {
-    std::unique_lock<std::mutex> lock(gc_mutex);
-    
-    while (!gc_shutdown.load()) {
-      // Wait for notification - no periodic scanning
-      gc_cv.wait(lock, [this] {
-        return gc_shutdown.load() || completed_checkpoints.size() > MAX_STORED_VERSIONS;
-      });
-      
-      if (gc_shutdown.load()) break;
-      
-      // Perform lazy garbage collection
-      try {
-        perform_lazy_gc();
-      } catch (const std::exception& e) {
-        std::cerr << "GC error: " << e.what() << std::endl;
-      }
-    }
-  }
-
-  void perform_lazy_gc() {
-    // Get the safe deletion threshold
-    uint64_t threshold = get_safe_gc_threshold();
-    if (threshold == 0) return;
-    
-    // Instead of scanning the entire DB, only delete specific snapshots we know about
-    std::vector<uint64_t> snapshots_to_delete;
-    {
-      std::lock_guard<std::mutex> lg(gc_mutex);
-      for (uint64_t snap : all_snapshots) {
-        if (snap < threshold) {
-          snapshots_to_delete.push_back(snap);
-        }
-      }
-      
-      // Remove deleted snapshots from tracking
-      for (uint64_t snap : snapshots_to_delete) {
-        all_snapshots.erase(snap);
-      }
-    }
-    
-    if (snapshots_to_delete.empty()) return;
-    
-    std::cout << "GC: Deleting " << snapshots_to_delete.size() 
-              << " obsolete snapshots < " << threshold << std::endl;
-    
-    // Delete using RocksDB's delete_prefix for efficiency
-    size_t total_deleted = 0;
-    for (uint64_t snap : snapshots_to_delete) {
-      std::string prefix = std::to_string(snap) + "_v";
-      storage.delete_prefix(prefix);
-      total_deleted++;
-    }
-    
-    std::cout << "GC completed: deleted " << total_deleted << " snapshots" << std::endl;
-    
-    // Update metrics
-    gc_runs_completed++;
-    total_keys_deleted += total_deleted;
-    
-    // Clean up completed checkpoints tracking
-    std::lock_guard<std::mutex> lg(gc_mutex);
-    while (completed_checkpoints.size() > MAX_COMPLETED_TRACKING) {
-      completed_checkpoints.erase(completed_checkpoints.begin());
-    }
-  }
-
-  // Statistics and monitoring
-  size_t get_inflight_checkpoint_count() const {
-    std::lock_guard<std::mutex> lg(gc_mutex);
-    return inflight_checkpoints.size();
-  }
-
-  std::vector<uint64_t> get_inflight_checkpoints() const {
-    std::lock_guard<std::mutex> lg(gc_mutex);
-    return std::vector<uint64_t>(inflight_checkpoints.begin(), inflight_checkpoints.end());
-  }
-
-  uint64_t get_last_committed_snapshot() const {
-    return last_committed_snapshot.load(std::memory_order_relaxed);
-  }
-
-  size_t get_gc_runs_completed() const {
-    return gc_runs_completed.load(std::memory_order_relaxed);
-  }
-
-  size_t get_total_keys_deleted() const {
-    return total_keys_deleted.load(std::memory_order_relaxed);
-  }
-
-  double get_avg_interval_ms() const {
-    size_t c = interval_count.load(std::memory_order_relaxed);
-    if (!c) return 0.0;
-    double avg_ns = double(total_interval_ns.load(std::memory_order_relaxed)) / double(c);
-    return avg_ns * 1e-6;
-  }
-
-  double get_avg_time_between_checkpoints() const {
-    return get_avg_interval_ms();
-  }
-
-  double get_avg_tx_between_checkpoints() const {
-    return number_of_checkpoints_done
-      ? double(total_transactions.load(std::memory_order_relaxed)) / double(number_of_checkpoints_done)
-      : 0.0;
-  }
-
-  size_t get_total_checkpoints() const {
-    return number_of_checkpoints_done;
-  }
-
+  // Core statistics methods
   size_t get_total_transactions() const {
     return total_transactions.load(std::memory_order_relaxed);
   }
@@ -454,47 +278,6 @@ size_t try_recovery()
         try { tx_count_threshold = std::stoul(argv[++i]); }
         catch (...) { fprintf(stderr, "Invalid threshold: %s\n", argv[i]); }
       }
-    }
-  }
-
-  std::vector<double> get_all_intervals_ms() const {
-    std::lock_guard<std::mutex> lg(intervals_mutex);
-    std::vector<double> result;
-    result.reserve(intervals.size());
-    for (uint64_t ns : intervals) {
-      result.push_back(ns * 1e-6);  // Convert to milliseconds
-    }
-    return result;
-  }
-
-  double get_interval_ms(size_t idx) const {
-    std::lock_guard<std::mutex> lg(intervals_mutex);
-    return intervals[idx] * 1e-6;
-  }
-
-  void print_intervals() const {
-    auto intervals_ms = get_all_intervals_ms();
-    printf("Checkpoint intervals (ms):\n");
-    for (size_t i = 0; i < intervals_ms.size(); ++i) {
-      printf("  %zu: %.3f\n", i, intervals_ms[i]);
-    }
-  }
-
-  std::vector<size_t> get_all_tx_counts() const {
-    std::lock_guard<std::mutex> lg(intervals_mutex);
-    std::vector<size_t> result;
-    result.reserve(tx_counts.size());
-    for (size_t count : tx_counts) {
-      result.push_back(count);
-    }
-    return result;
-  }
-
-  void print_tx_counts() const {
-    auto counts = get_all_tx_counts();
-    printf("Transactions between checkpoints:\n");
-    for (size_t i = 0; i < counts.size(); ++i) {
-      printf("  %zu: %zu\n", i, counts[i]);
     }
   }
 
@@ -522,28 +305,4 @@ private:
   std::deque<size_t> tx_counts;    // Store transaction counts between checkpoints  
   std::atomic<uint64_t> current_snapshot{0}; // Store the current snapshot ID
   static constexpr const char* GLOBAL_SNAPSHOT_KEY = "global_snapshot";
-  uint64_t MAX_STORED_VERSIONS = 5;  // Used by external GC tool
-
-  // Background garbage collection state
-  std::thread gc_thread;
-  mutable std::mutex gc_mutex;
-  std::condition_variable gc_cv;
-  std::atomic<bool> gc_running{false};
-  std::atomic<bool> gc_shutdown{false};
-  
-  // Track in-flight and completed checkpoints
-  std::unordered_set<uint64_t> inflight_checkpoints;
-  std::set<uint64_t> completed_checkpoints;
-  std::atomic<uint64_t> last_committed_snapshot{0};
-  std::unordered_set<uint64_t> all_snapshots;  // Track all snapshots for efficient GC
-  
-  // GC configuration
-  static constexpr int GC_INTERVAL_SECONDS = 30;  // Run GC every 30 seconds
-  static constexpr size_t MAX_COMPLETED_TRACKING = 100;  // Keep track of last 100 completed checkpoints
-  
-  // GC metrics
-  std::atomic<size_t> gc_runs_completed{0};
-  std::atomic<size_t> total_keys_deleted{0};
-};
-
-
+}; 

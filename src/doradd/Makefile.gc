@@ -1,0 +1,35 @@
+CXX = g++
+CXXFLAGS = -std=c++20 -O2 -Wall -Wextra -pthread
+LDFLAGS = -lrocksdb -lpthread -lz -lbz2 -llz4 -lzstd -ldl
+
+TARGET = checkpoint_gc
+SOURCE = gc_standalone.cpp
+BUILD_DIR = ../../build
+
+.PHONY: all clean install
+
+all: $(BUILD_DIR)/$(TARGET)
+
+$(BUILD_DIR)/$(TARGET): $(SOURCE)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -o $@ $< $(LDFLAGS)
+
+install: $(BUILD_DIR)/$(TARGET)
+	@echo "Installing checkpoint_gc to /usr/local/bin (requires sudo)"
+	sudo cp $(BUILD_DIR)/$(TARGET) /usr/local/bin/
+	sudo chmod +x /usr/local/bin/$(TARGET)
+
+clean:
+	rm -f $(BUILD_DIR)/$(TARGET)
+
+# Development targets
+test: $(BUILD_DIR)/$(TARGET)
+	@echo "Testing garbage collector..."
+	$(BUILD_DIR)/$(TARGET) --help
+
+demo: $(BUILD_DIR)/$(TARGET)
+	@echo "Running GC demo (requires existing checkpoint database)"
+	@echo "Usage examples:"
+	@echo "  $(BUILD_DIR)/$(TARGET) --stats /path/to/checkpoint.db"
+	@echo "  $(BUILD_DIR)/$(TARGET) --dry-run --verbose /path/to/checkpoint.db"
+	@echo "  $(BUILD_DIR)/$(TARGET) --keep-versions 10 /path/to/checkpoint.db" 
