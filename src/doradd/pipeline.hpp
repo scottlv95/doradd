@@ -173,7 +173,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 
     });
 
     // flush latency logs
-    std::this_thread::sleep_for(std::chrono::seconds(250));
+    std::this_thread::sleep_for(std::chrono::seconds(300));
 
 #ifdef CORE_PIPE
     pthread_cancel(spawner_thread.native_handle());

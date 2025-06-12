@@ -17,6 +17,7 @@
 #include <deque>
 #include "pin-thread.hpp"
 #include "checkpoint_stats.hpp"
+#include "../storage/garbage_collector.hpp"
 #ifndef CHECKPOINT_BATCH_SIZE
 #  error "You must define CHECKPOINT_BATCH_SIZE"
 #endif
@@ -99,6 +100,9 @@ public:
       uint64_t k = std::stoull(kv.first.substr(0, kv.first.size() - meta_prefix.size()));
       bits[k] = (kv.second.size()>0 && kv.second[0]=='1');
     }
+
+    // Initialize garbage collector
+    gc = std::make_unique<GarbageCollector>(storage);
   }
 
   ~Checkpointer() {
@@ -364,6 +368,7 @@ private:
   std::deque<size_t> tx_counts;    // Store transaction counts between checkpoints  
   std::atomic<uint64_t> current_snapshot{0}; // Store the current snapshot ID
   static constexpr const char* GLOBAL_SNAPSHOT_KEY = "global_snapshot";
+  std::unique_ptr<GarbageCollector> gc;
 };
 
 
