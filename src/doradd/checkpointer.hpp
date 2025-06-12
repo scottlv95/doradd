@@ -25,8 +25,13 @@
 #  error "You must define CHECKPOINT_THRESHOLD"
 #endif
 
+#ifndef CHECKPOINT_DB_PATH
+#  error "You must define CHECKPOINT_DB_PATH"
+#endif
+
 constexpr size_t BatchSize = CHECKPOINT_BATCH_SIZE;
 constexpr size_t DefaultThreshold = CHECKPOINT_THRESHOLD;
+constexpr const char* DefaultDBPath = CHECKPOINT_DB_PATH;
 
 namespace batch_helpers {
   template<typename T, typename Tuple, typename F, size_t... Is>
@@ -85,7 +90,7 @@ public:
   static constexpr int CHECKPOINT_MARKER = -1;
   static constexpr size_t MAX_STORED_INTERVALS = 1000;  // Maximum number of intervals to store
 
-  Checkpointer(const std::string& path = "/home/syl121/database/checkpoint.db")
+  Checkpointer(const std::string& path = DefaultDBPath)
     : tx_count_threshold(DefaultThreshold), last_finish(clock::now()) {
     if (!storage.open(path)) throw std::runtime_error("Failed to open DB");
     std::string meta_prefix = "_meta_bit";
@@ -156,18 +161,16 @@ public:
 
     // 6) Allocate a new snapshot ID for this checkpoint
     uint64_t snap = current_snapshot.fetch_add(1, std::memory_order_relaxed) + 1;
-    int prune = snap - MAX_STORED_VERSIONS;
 
     // 7) Define the per‐batch write operation
-    auto op = [this, latch, keys_ptr, snap, prune](const uint64_t* key_ptr, RowType** items, size_t cnt) {
+    auto op = [this, latch, keys_ptr, snap](const uint64_t* key_ptr, RowType** items, size_t cnt) {
         auto batch = storage.create_batch();
         for (size_t i = 0; i < cnt; ++i) {
             RowType& obj = *items[i];
             // serialize the row
             std::string data(reinterpret_cast<const char*>(&obj), sizeof(RowType));
-            // write under "<id>_v<snap>"
-            // std::string versioned_key = std::to_string(*key_ptr) + "_v" + std::to_string(snap);
-            std::string versioned_key = std::to_string(snap) + "_v" + std::to_string(*key_ptr);
+            // write under "<row_id>_v<version_id>"
+            std::string versioned_key = std::to_string(*key_ptr) + "_v" + std::to_string(snap);
             storage.add_to_batch(batch, versioned_key, data);
         }
         storage.commit_batch(batch);
@@ -182,7 +185,7 @@ public:
     // 9) Once every batch has finished, write the global snapshot pointer and total_txns
     {
         std::lock_guard<std::mutex> lg(completion_mu);
-        completion_thread = std::thread([this, snap, latch, prune]() {
+        completion_thread = std::thread([this, snap, latch]() {
             latch->wait();
             auto batch = storage.create_batch();
             // bump the global snapshot in the DB
@@ -191,17 +194,12 @@ public:
             storage.add_to_batch(batch,
                                  "total_txns",
                                  std::to_string(total_transactions.load(std::memory_order_relaxed)));
-
-            if (prune >= 0) {
-                storage.delete_prefix(std::to_string(prune) + "_v");
-            }
             storage.commit_batch(batch);
             storage.flush();
             std::cout << "Checkpoint " << snap << " completed\n";
         });
-      completion_thread.detach();
+        completion_thread.detach();
     }
-
 }
 
 size_t try_recovery()
@@ -224,7 +222,7 @@ size_t try_recovery()
     }
     std::cout << "Recovering using snapshot " << valid_snap << "\n";
 
-    // 3) Scan all "<id>_v<ver>" entries and pick, for each id, the highest ver ≤ valid_snap
+    // 3) Scan all "<row_id>_v<version_id>" entries and pick, for each row_id, the highest version_id ≤ valid_snap
     if (index) {
         std::unordered_map<uint64_t, std::pair<uint64_t,std::string>> best;
         for (auto& kv : storage.scan_prefix("")) {
@@ -234,13 +232,13 @@ size_t try_recovery()
             auto pos = key.rfind("_v");
             if (pos == std::string::npos) continue;
 
-            uint64_t id  = std::stoull(key.substr(0, pos));
-            uint64_t ver = std::stoull(key.substr(pos + 2));
-            if (ver > valid_snap) continue;
+            uint64_t row_id = std::stoull(key.substr(0, pos));
+            uint64_t version_id = std::stoull(key.substr(pos + 2));
+            if (version_id > valid_snap) continue;
 
-            auto it = best.find(id);
-            if (it == best.end() || it->second.first < ver) {
-                best[id] = {ver, kv.second};
+            auto it = best.find(row_id);
+            if (it == best.end() || it->second.first < version_id) {
+                best[row_id] = {version_id, kv.second};
             }
         }
 
@@ -366,7 +364,6 @@ private:
   std::deque<size_t> tx_counts;    // Store transaction counts between checkpoints  
   std::atomic<uint64_t> current_snapshot{0}; // Store the current snapshot ID
   static constexpr const char* GLOBAL_SNAPSHOT_KEY = "global_snapshot";
-  uint64_t MAX_STORED_VERSIONS = 2;
 };
 
 

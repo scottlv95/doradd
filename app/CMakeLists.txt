@@ -150,3 +150,5 @@ target_link_libraries(rocksdb_test PRIVATE GTest::GTest GTest::Main)
 # target_link_libraries(pipeline_test PRIVATE -lgflags -lsnappy -lz -lbz2 -llz4 -lzstd)
 # target_link_libraries(pipeline_test PRIVATE GTest::GTest GTest::Main)
 # target_include_directories(pipeline_test PRIVATE ../external/SPSCQueue/include/rigtorp)
+
+add_definitions(-DCHECKPOINT_DB_PATH="/path/to/your/database/checkpoint.db")
