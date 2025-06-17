@@ -12,6 +12,7 @@
 #define ROW_COUNT 10'000'000
 #define TX_COUNT 1'000'000 // 4M for Caracal
 #define ROW_PER_TX 10
+
 #define NrMSBContentionKey 6
 
 using Rand = foedus::assorted::ZipfianRandom;

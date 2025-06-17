@@ -39,42 +39,50 @@ struct YCSBRow
   char payload[ROW_SIZE];
 };
 
-struct __attribute__((packed)) YCSBTransactionMarshalled
-{
-  uint32_t indices[ROWS_PER_TX];
-  uint16_t write_set;
-  uint64_t cown_ptrs[ROWS_PER_TX];
-  uint8_t pad[6];
-};
-static_assert(sizeof(YCSBTransactionMarshalled) == 128);
 
 struct YCSBTransaction
 {
 public:
+  using RowType = YCSBRow;
   static Index<YCSBRow>* index;
+  typedef struct __attribute__((packed))
+  {
+    uint32_t indices[ROWS_PER_TX];
+    uint16_t write_set;
+    uint64_t cown_ptrs[ROWS_PER_TX];
+    uint32_t indices_size;
+    uint8_t pad[2];
+  } Marshalled;
+  // static_assert(sizeof(YCSBTransactionMarshalled) == 128);
 
   static int prepare_cowns(char* input)
   {
-    auto txm = reinterpret_cast<YCSBTransactionMarshalled*>(input);
+    auto txm = reinterpret_cast<Marshalled*>(input);
 
     for (int i = 0; i < ROWS_PER_TX; i++)
     {
+      if (txm->indices[i] >= DB_SIZE)
+      {
+        std::cout << "Index out of bounds: " << txm->indices[i] << std::endl;
+        exit(1);
+      }
       auto&& cown = index->get_row(txm->indices[i]);
       txm->cown_ptrs[i] = cown.get_base_addr();
     }
 
-    return sizeof(YCSBTransactionMarshalled);
+    txm->indices_size = ROWS_PER_TX;
+    return sizeof(Marshalled);
   }
 
   static int prefetch_cowns(const char* input)
   {
-    auto txm = reinterpret_cast<const YCSBTransactionMarshalled*>(input);
+    auto txm = reinterpret_cast<const Marshalled*>(input);
 
     for (int i = 0; i < ROWS_PER_TX; i++)
       __builtin_prefetch(
         reinterpret_cast<const void*>(txm->cown_ptrs[i]), 1, 3);
 
-    return sizeof(YCSBTransactionMarshalled);
+    return sizeof(Marshalled);
   }
 
 #ifdef RPC_LATENCY
@@ -83,8 +91,8 @@ public:
   static int parse_and_process(const char* input)
 #endif // RPC_LATENCY
   {
-    const YCSBTransactionMarshalled* txm =
-      reinterpret_cast<const YCSBTransactionMarshalled*>(input);
+    const Marshalled* txm =
+      reinterpret_cast<const Marshalled*>(input);
 
     auto ws_cap = txm->write_set;
 
@@ -144,7 +152,7 @@ public:
         TXN(9);
         M_LOG_LATENCY();
       };
-    return sizeof(YCSBTransactionMarshalled);
+    return sizeof(Marshalled);
   }
   YCSBTransaction(const YCSBTransaction&) = delete;
   YCSBTransaction& operator=(const YCSBTransaction&) = delete;
@@ -184,6 +192,8 @@ int main(int argc, char** argv)
 
     YCSBTransaction::index->insert_row(cown_r);
   }
+
+  
 
   build_pipelines<YCSBTransaction>(core_cnt - 1, argv[3], argv[5]);
 }

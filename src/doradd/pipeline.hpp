@@ -1,20 +1,27 @@
 #pragma once
 
+#include "SPSCQueue.h"
 #include "config.hpp"
 #include "dispatcher.hpp"
 #include "pin-thread.hpp"
 #include "rpc_handler.hpp"
-#include "SPSCQueue.h"
+#include "../storage/rocksdb.hpp"
+#include "checkpointer.hpp"
+#include "txcounter.hpp"
 
 #include <thread>
 #include <unordered_map>
+#include <filesystem>
 
 std::unordered_map<std::thread::id, uint64_t*>* counter_map;
 std::unordered_map<std::thread::id, log_arr_type*>* log_map;
 std::mutex* counter_map_mutex;
 
+// Global benchmark start time
+ts_type benchmark_start_time;
+
 template<typename T>
-void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
+void build_pipelines(int worker_cnt, char* log_name, char* gen_type, int argc = 0, char** argv = nullptr)
 {
   // init verona-rt scheduler
   auto& sched = Scheduler::get();
@@ -28,9 +35,22 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
   log_map->reserve(worker_cnt);
   counter_map_mutex = new std::mutex();
 
+  // Create storage instance and checkpointer
+  auto* checkpointer = new Checkpointer<RocksDBStore, T, typename T::RowType>("/home/syl121/database/checkpoint.db");
+  
+  // Pass command line arguments to the checkpointer if available
+  if (argc > 0 && argv != nullptr) {
+    checkpointer->parse_args(argc, argv);
+    CheckpointStats::parse_args(argc, argv);
+  }
+
   // init and run dispatcher pipelines
   when() << [&]() {
     printf("Init and Run - Dispatcher Pipelines\n");
+    
+    // Initialize benchmark start time
+    benchmark_start_time = std::chrono::system_clock::now();
+    
     // sched.add_external_event_source();
 
     std::atomic<uint64_t> req_cnt(0);
@@ -93,7 +113,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
 #  ifdef INDEXER
     rigtorp::SPSCQueue<int> ring_idx_pref(CHANNEL_SIZE_IDX_PREF);
-    Indexer<T> indexer(ret, &ring_idx_pref, &req_cnt);
+    Indexer<T> indexer(ret, &ring_idx_pref, &req_cnt, checkpointer);
 #  endif
 
     rigtorp::SPSCQueue<int> ring_pref_disp(CHANNEL_SIZE);
@@ -108,11 +128,17 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
       counter_map,
       counter_map_mutex,
       &ring_pref_disp,
+      checkpointer,
       log_arr_addr,
       res_log_fd);
 #    else
     Spawner<T> spawner(
-      ret, worker_cnt, counter_map, counter_map_mutex, &ring_pref_disp);
+      ret, 
+      worker_cnt, 
+      counter_map, 
+      counter_map_mutex, 
+      &ring_pref_disp,
+      checkpointer);
 #    endif // RPC_LATENCY
 #  else
     Prefetcher<T> prefetcher(ret, &ring_pref_disp);
@@ -121,7 +147,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 #  endif // INDEXER
 
     std::thread spawner_thread([&]() mutable {
-      pin_thread(1);
+      pin_thread(0);
       std::this_thread::sleep_for(std::chrono::seconds(1));
       spawner.run();
     });
@@ -134,20 +160,21 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
 #ifdef INDEXER
     std::thread indexer_thread([&]() mutable {
-      pin_thread(3);
+      pin_thread(4);
       std::this_thread::sleep_for(std::chrono::seconds(4));
       indexer.run();
     });
 #endif
 
     std::thread rpc_handler_thread([&]() mutable {
-      pin_thread(0);
+      pin_thread(6);
       std::this_thread::sleep_for(std::chrono::seconds(6));
       rpc_handler.run();
     });
 
     // flush latency logs
-    std::this_thread::sleep_for(std::chrono::seconds(20));
+    std::this_thread::sleep_for(std::chrono::seconds(300));
+
 #ifdef CORE_PIPE
     pthread_cancel(spawner_thread.native_handle());
     pthread_cancel(prefetcher_thread.native_handle());
@@ -160,8 +187,19 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
 
     pthread_cancel(rpc_handler_thread.native_handle());
 
+    // Print checkpoint statistics before continuing
+    printf("Printing Checkpoint Statistics\n");
+    CheckpointStats::print_stats();
+
 #ifdef LOG_LATENCY
     printf("flush latency stats\n");
+    
+    // Create results directory if it doesn't exist
+    std::filesystem::create_directories("results");
+    
+    // Write raw data to the specified file
+    CheckpointStats::write_raw_data("results/checkpoint_latency.csv");
+
     for (const auto& entry : *log_map)
     {
       if (entry.second)
@@ -175,7 +213,7 @@ void build_pipelines(int worker_cnt, char* log_name, char* gen_type)
             std::get<1>(value_tuple));
 #  else
         for (auto value : *(entry.second))
-          fprintf(res_log_fd, "%u\n", value);
+          fprintf(res_log_fd, "%lu\n", value);
 #  endif // LOG_SCHED_OHEAD
       }
     }
